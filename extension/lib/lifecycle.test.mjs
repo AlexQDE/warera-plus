@@ -404,6 +404,77 @@ describe("SPA lifecycle and DOM work", () => {
     expect(ledgerCalls()).toBe(2);
     expect(salesCalls(runtime, "boots5")).toBe(1);
   });
+  it("marks the inventory's Quick dismantle window off the market, with the history read there too", async () => {
+    window.history.replaceState({}, "", `/user/${ME}/inventory`);
+    document.body.innerHTML = "<main></main>";
+    const runtime = marketRuntime({ userId: ME });
+    const base = runtime.sendMessage.getMockImplementation();
+    runtime.sendMessage.mockImplementation(async (msg) => {
+      const r = await base(msg);
+      if (msg.type === "ledger")
+        r.ledger.heldPieces = [
+          {
+            code: "boots5",
+            skills: { dodge: 32 },
+            source: "crafted",
+            cost: 150,
+          },
+        ];
+      return r;
+    });
+    app = await startLens(runtime);
+    const win = document.createElement("div");
+    win.setAttribute("role", "dialog");
+    win.innerHTML = `<div class="card"><div class="title">Quick dismantle</div><div class="cell"><div class="tile" style="background-image: linear-gradient(45deg, red, black)"><div><img alt="dieselBoots" src="x.png"></div><div>32<b>%</b></div><div>88<b>%</b></div></div></div></div>`;
+    document.body.appendChild(win);
+    document.body.click();
+    await settle(3000);
+    const bar = document.querySelector(".ss-pick-bar");
+    expect(bar).not.toBeNull();
+    expect(bar.previousElementSibling.textContent).toBe("Quick dismantle");
+    // the view was asked for here, off the market, so the tiles can be marked
+    expect(
+      runtime.sendMessage.mock.calls.some(([m]) => m.type === "ledger"),
+    ).toBe(true);
+    expect(document.querySelector(".ss-src-badge")).not.toBeNull();
+  });
+  it("suggests a price in the sell form from the sales of the picked piece's stats, and Use fills the game's input", async () => {
+    window.history.replaceState({}, "", "/market/equipments");
+    marketFixture();
+    const at = (h) => new Date(Date.now() - h * 3600e3).toISOString();
+    const runtime = marketRuntime({ userId: ME }, (msg) => ({
+      sales: {
+        code: msg.itemCode,
+        at: new Date().toISOString(),
+        complete: true,
+        fills: [185, 184, 186].map((price, i) => ({
+          price,
+          at: at(i + 1),
+          state: 100,
+          code: msg.itemCode,
+          skills: { dodge: 32 },
+        })),
+      },
+    }));
+    app = await startLens(runtime);
+    await settle(500);
+    const form = document.createElement("div");
+    form.setAttribute("role", "dialog");
+    form.innerHTML = `<div class="card"><div>Sell an item</div><div class="tile" style="background-image: linear-gradient(45deg, red, black)"><img alt="dieselBoots" src="x.png"><div>32<b>%</b></div><div>100<b>%</b></div></div><div>Market average <span>181.3</span></div><div><label><span>PRICE</span><input name="price" value="190"></label><div>Suggested price <span>190</span></div><div><span>133</span><span>304</span></div></div><div>You receive <span>190</span></div><button>Put on sale</button></div>`;
+    document.body.appendChild(form);
+    document.body.click();
+    await settle(3000);
+    expect(
+      runtime.sendMessage.mock.calls.some(
+        ([m]) => m.type === "sales" && m.itemCode === "boots5",
+      ),
+    ).toBe(true);
+    const hint = document.querySelector(".ss-sell");
+    expect(hint).not.toBeNull();
+    expect(hint.textContent).toContain("185");
+    hint.querySelector("[data-sell-use]").click();
+    expect(form.querySelector('input[name="price"]').value).toBe("185");
+  });
   it("marks the inventory picker a moment after the click that opened it, not on the next tick", async () => {
     window.history.replaceState({}, "", "/market/equipments");
     marketFixture();

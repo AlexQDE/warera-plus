@@ -2,7 +2,16 @@ import * as dom from "./dom.mjs";
 import { DEFAULTS } from "./settings.mjs";
 import { TTL, freshness, quote } from "./quality.mjs";
 import { snapshotSummary } from "./cases.mjs";
-import { createEquipment } from "./equipment.mjs";
+import { createEquipment, heldOf } from "./equipment.mjs";
+import {
+  findSellForm,
+  readSellForm,
+  renderSellHint,
+  sellHintHtml,
+} from "./sellform.mjs";
+import { suggestPrice } from "./pricing.mjs";
+import { comparableFills } from "./resale.mjs";
+import { WINDOW_HOURS } from "./similar.mjs";
 import { createCraftDesk } from "./craftdesk.mjs";
 import { createDialogs } from "./dialogs.mjs";
 import { casesStripHtml, tripLineHtml } from "./casesview.mjs";
@@ -298,7 +307,10 @@ export async function startLens(runtime = chrome.runtime) {
     if (!userId || !state.history || state.setup || disposed) return;
     const window = desk.window;
     const wanted =
-      state.settings.panel === "ledger" || !!context.dialog || context.craft;
+      state.settings.panel === "ledger" ||
+      !!context.dialog ||
+      context.craft ||
+      context.picker; // the picker marks its tiles with the history
     if (
       !wanted ||
       (!force &&
@@ -445,8 +457,6 @@ export async function startLens(runtime = chrome.runtime) {
         scanned?.code ??
         dom.selectedItemCode() ??
         dom.filteredItemCode(location.search);
-      const dialog = context.equipment ? dom.pickerDialog() : null;
-      if (dialog) nextRoots.push(dialog);
       if (context.craft) {
         state.taxOnPage = dom.taxRateFromText(dom.taxNotice()?.textContent);
       }
@@ -614,6 +624,58 @@ export async function startLens(runtime = chrome.runtime) {
       for (const [c, forced] of [...first, ...rest])
         salesPending.set(c, forced);
     }
+    // The inventory picker and the inventory's Quick dismantle window, on any page (on the equipment market the
+    // market's render marks them with its grid item too): how each piece came, Flip and Scrap candidates.
+    const pickDialog =
+      state.settings.picker && !state.setup ? dom.pickerDialog() : null;
+    // just opened: read the history and the scrap bids now, not on the next tick
+    if (pickDialog && !context.picker) {
+      context.picker = true;
+      void fetchVisible();
+    }
+    context.picker = !!pickDialog;
+    if (!context.equipment)
+      equipment.picker(null, !!pickDialog, heldOf(state), {
+        bids: state.book?.bids ?? null,
+        flipPct: state.settings.flipPct,
+      });
+    if (pickDialog) nextRoots.push(pickDialog);
+    // The sell form: a price for the picked pieces, from the sales of their stats and the asks on the page.
+    const sell =
+      state.settings.equipment && !state.setup ? findSellForm() : null;
+    if (sell) {
+      const read = readSellForm(sell);
+      const now = Date.now();
+      for (const it of read.items) requestSales(it.code);
+      if (read.items.length)
+        renderSellHint(
+          read,
+          sellHintHtml(
+            read.items.map((it) => {
+              const sales = state.salesByCode[it.code];
+              return {
+                code: it.code,
+                s: sales
+                  ? suggestPrice({
+                      code: it.code,
+                      skills: it.skills,
+                      fills: comparableFills(sales.fills, {
+                        code: it.code,
+                        hours: WINDOW_HOURS,
+                        now,
+                        state: null,
+                      }),
+                      asks: equipment.asks(it.code),
+                      now,
+                      game: read.game,
+                    })
+                  : null,
+              };
+            }),
+          ),
+        );
+      nextRoots.push(sell);
+    }
     observe(nextRoots);
     freshSignature = signature();
     metrics.scans++;
@@ -630,7 +692,12 @@ export async function startLens(runtime = chrome.runtime) {
     const jobs = [];
     const open = state.settings.panel;
     const craftOpen = (context.craft && open === "craft") || !!context.dialog;
-    if (context.equipment || craftOpen || (context.craft && open === "market"))
+    if (
+      context.equipment ||
+      craftOpen ||
+      (context.craft && open === "market") ||
+      context.picker // the Scrap filter of the picker and the dismantle window prices scraps at the bids
+    )
       jobs.push(read("book"));
     if (context.cases || context.travel || craftOpen) jobs.push(read("cases"));
     // Every row is valued at the game's average until its item's fills are read; the craft board is built from them.

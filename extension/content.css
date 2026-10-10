@@ -740,3 +740,25 @@
 [data-lens] .lens-chips > small {
   margin-right: 4px;
 }
+
+/* Our line under the sell form's PRICE: the suggested price, why, and Use */
+.ss-sell[data-lens] {
+  display: grid;
+  gap: 2px;
+  margin: 6px 0;
+  padding: 6px 8px;
+  background: var(--lens-bg);
+  border: 1px solid var(--lens-line);
+  border-radius: 8px;
+  font-size: 12px;
+  text-align: left;
+}
+.ss-sell[data-lens] b {
+  font-size: 14px;
+}
+.ss-sell[data-lens] button {
+  min-height: 20px;
+  padding: 0 9px;
+  font-size: 11px;
+  margin-left: 4px;
+}

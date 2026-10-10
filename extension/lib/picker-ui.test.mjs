@@ -164,3 +164,57 @@ describe("the inventory picker", () => {
     expect(document.querySelector("[data-picker-source]")).toBeNull();
   });
 });
+
+describe("flip and scrap candidates in the picker", () => {
+  // the guns were bought at 4 and sell at 6 now (+50%); the chest sells at 300
+  // while its 1,458 scraps fetch 364.5 at a 0.25 bid
+  const valued = [
+    held[0],
+    ...held.slice(1).map((p) => ({ ...p, value: { value: 6, level: "same" } })),
+    {
+      code: "chest6",
+      skills: { armor: 70 },
+      source: "looted",
+      cost: 0,
+      value: { value: 300, level: "same" },
+    },
+  ];
+  beforeEach(() => {
+    state.ledger = { heldPieces: valued };
+    state.book = {
+      at: new Date().toISOString(),
+      bids: [{ price: 0.25, quantity: 1e6 }],
+    };
+  });
+  it("offers Flip for what was bought and now sells above the FLIP threshold, Scrap for what its scraps beat", () => {
+    equipment.render(state);
+    const bar = document.querySelector(".ss-pick-bar").textContent;
+    expect(bar.replace(/\s+/g, " ")).toContain("↗ Flip 2");
+    expect(bar.replace(/\s+/g, " ")).toContain("♻ Scrap 1");
+    document.querySelector('[data-picker-source="flip"]').click();
+    expect(cells().map((c) => c.dataset.ssPick)).toEqual([
+      "hide",
+      "show",
+      "show",
+      "hide",
+    ]);
+    document.querySelector('[data-picker-source="scrap"]').click();
+    expect(cells().map((c) => c.dataset.ssPick)).toEqual([
+      "hide",
+      "hide",
+      "hide",
+      "show",
+    ]);
+    expect(badge(3).title).toContain("scraps 365 > sells 300");
+  });
+  it("works the same in the game's Quick dismantle window", () => {
+    document.body.innerHTML = PICKER.replace(
+      '<div class="title"><span>Items</span></div>',
+      '<div class="title">Quick dismantle</div>',
+    ).replace("0/5", "Equipped items are left out of select all.");
+    equipment.render(state);
+    const bar = document.querySelector(".ss-pick-bar");
+    expect(bar.previousElementSibling.textContent).toBe("Quick dismantle");
+    expect(badge(0).textContent).toBe("⚒");
+  });
+});

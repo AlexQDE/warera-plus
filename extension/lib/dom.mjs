@@ -496,7 +496,7 @@ export function pickerTitle(dialog) {
     const title = [...n.children].find(
       (c) =>
         !c.classList.contains("ss-pick-bar") &&
-        /^\s*items?\s*$/i.test(c.textContent ?? ""),
+        /^\s*(items?|quick dismantle)\s*$/i.test(c.textContent ?? ""),
     );
     if (title) return { card: n, title };
   }
@@ -522,8 +522,13 @@ export function pickerDecision(tile, target) {
  */
 export function isPickerText(text) {
   const t = String(text ?? "").trim();
-  // v0.27: "Items" and the selection counter ("Items0/5…"); "Items for sale" is something else
-  return /^Item(?![A-Za-z])/.test(t) || /^Items\d+\/\d+/.test(t);
+  // v0.27: "Items" and the selection counter ("Items0/5…"), and the inventory's "Quick dismantle"
+  // window of the same tiles; "Items for sale" is something else
+  return (
+    /^Item(?![A-Za-z])/.test(t) ||
+    /^Items\d+\/\d+/.test(t) ||
+    /^Quick dismantle/i.test(t)
+  );
 }
 
 /**

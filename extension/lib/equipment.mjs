@@ -5,7 +5,8 @@
 // live in quality.mjs (depth quotes), dom.mjs (verdict), resale.mjs (the
 // window) and similar.mjs (the stat-matched value).
 import * as dom from "./dom.mjs";
-import { SCRAP_LADDER } from "./ladder.mjs";
+import { SCRAP_LADDER, scrapYield } from "./ladder.mjs";
+import { DEFAULTS } from "./settings.mjs";
 import { quote, freshness, TTL, positive } from "./quality.mjs";
 import { fmt, signed, gold, signedGold, escapeHtml, ago } from "./format.mjs";
 import { setHtml, helpMark, SOURCE_TAGS } from "./ui.mjs";
@@ -16,6 +17,7 @@ import {
   heldIndex,
   tileSource,
 } from "./picker.mjs";
+import { ageMinutes } from "./pricing.mjs";
 import { salesStats } from "./sales.mjs";
 import { readStats, codeFor, summarizeOffers, statRanks } from "./offers.mjs";
 import { comparableFills, percentileRank, liquidity } from "./resale.mjs";
@@ -26,6 +28,27 @@ import {
   spanWords,
   WINDOW_HOURS,
 } from "./similar.mjs";
+
+/**
+ * The pieces the player holds, for the picker: false with no account to read
+ * a history for, null while the view is on its way, "stale" when the view
+ * has none (its worker is older than the page).
+ */
+export const heldOf = (state) =>
+  !state.craftsUserId
+    ? false
+    : !state.ledger
+      ? null
+      : (state.ledger.heldPieces ?? "stale");
+
+/** A row's listing age in minutes, off its "7m" / "3h47m" line; null when none. */
+const rowAge = (lines) => {
+  for (const l of lines ?? []) {
+    const m = ageMinutes(l);
+    if (m != null) return m;
+  }
+  return null;
+};
 
 export const TAGS = {
   hit: "SNIPE",
@@ -124,6 +147,7 @@ export function createEquipment({
   };
   let pickerSource = "all"; // the picker's source filter: all, crafted, bought, opened or looted
   let pickerHeld = null; // the pieces the player holds by their history, for the picker's marks
+  let lastAsks = []; // the asks of the last scan: code, price, stats, age
   const removePicker = () => {
     document.querySelector(".ss-pick-bar")?.remove();
     for (const el of document.querySelectorAll(".ss-src-badge")) el.remove();
@@ -145,16 +169,44 @@ export function createEquipment({
     opened: "case",
     looted: "loot",
   };
+  let pickerCtx = { bids: null, flipPct: DEFAULTS.flipPct }; // the scrap bids and FLIP threshold the picker judges with
+  /** Bought, and now sells at least the FLIP threshold above what was paid. */
+  const flipOf = (p) =>
+    p.source === "bought" &&
+    p.cost > 0 &&
+    p.value?.value != null &&
+    p.value.value >= p.cost * (1 + pickerCtx.flipPct / 100);
+  /** What a piece's scraps fetch at the bids, at its durability; null without bids. */
+  const scrapsOf = (code, durability = 100) => {
+    const rarity = dom.rarityFromItemCode(code);
+    if (!rarity || !pickerCtx.bids) return null;
+    return quote(scrapYield(rarity, durability), pickerCtx.bids).value;
+  };
+  /** Its scraps fetch more than it sells for. */
+  const scrapOf = (p, durability = 100) => {
+    const s = scrapsOf(p.code, durability);
+    return s != null && p.value?.value != null && s > p.value.value;
+  };
   /** A tile's mark: the glyph of every way its identical pieces came, and what the tooltip says. */
-  function badgeFor(found) {
+  function badgeFor(found, durability = 100) {
     if (!found?.pieces.length)
       return {
         text: "?",
         title: "not in your history: got another way, or before it",
         sources: [],
+        flip: false,
+        scrap: false,
       };
     const sources = SOURCE_ORDER.filter((s) => found.sources.includes(s));
     const text = sources.map((s) => SOURCE_TAGS[s].glyph).join("/");
+    const flip = found.pieces.some(flipOf);
+    const scrap = found.pieces.some((p) => scrapOf(p, durability));
+    const value = found.pieces.find((p) => p.value?.value != null)?.value.value;
+    const scraps = scrap ? scrapsOf(found.pieces[0].code, durability) : null;
+    const notes = [
+      flip ? "↗ flip" : "",
+      scrap ? `♻ scraps ${gold(scraps)} > sells ${gold(value)}` : "",
+    ].filter(Boolean);
     if (found.pieces.length === 1) {
       const p = found.pieces[0];
       const day = p.at
@@ -166,11 +218,12 @@ export function createEquipment({
       const title = [
         `${SOURCE_TAGS[p.source]?.name ?? p.source}${day ? ` ${day}` : ""}`,
         p.cost != null && p.source !== "looted" ? `cost ${gold(p.cost)}` : "",
-        p.value?.value != null ? `sells ${gold(p.value.value)}` : "",
+        p.value?.value != null && !scrap ? `sells ${gold(p.value.value)}` : "",
+        ...notes,
       ]
         .filter(Boolean)
         .join(" · ");
-      return { text, title, sources };
+      return { text, title, sources, flip, scrap };
     }
     const counts = sources
       .map(
@@ -180,8 +233,12 @@ export function createEquipment({
       .join(" · ");
     return {
       text,
-      title: `${found.pieces.length} identical: ${counts}`,
+      title: [`${found.pieces.length} identical: ${counts}`, ...notes].join(
+        " · ",
+      ),
       sources,
+      flip,
+      scrap,
     };
   }
   /**
@@ -190,8 +247,9 @@ export function createEquipment({
    * market's item as a removable filter. Dimmed, never hidden: the picker is
    * a virtual list, and a hidden tile would leave a hole in its row.
    */
-  function picker(code, enabled, held = pickerHeld) {
+  function picker(code, enabled, held = pickerHeld, ctx = pickerCtx) {
     pickerHeld = held;
+    pickerCtx = ctx;
     const dialog = dom.pickerDialog();
     if (!dialog || !enabled) {
       removePicker();
@@ -215,8 +273,13 @@ export function createEquipment({
         const itemCode = read ? tileCode(t.slot, read.stats) : null;
         const b = badgeFor(
           itemCode ? tileSource(index, itemCode, read.stats) : null,
+          read?.durability ?? 100,
         );
-        sources = b.sources;
+        sources = [
+          ...b.sources,
+          ...(b.flip ? ["flip"] : []),
+          ...(b.scrap ? ["scrap"] : []),
+        ];
         let el = t.tile.querySelector(":scope > .ss-src-badge");
         if (!el) {
           el = document.createElement("span");
@@ -226,7 +289,7 @@ export function createEquipment({
         }
         if (el.textContent !== b.text) el.textContent = b.text;
         if (el.title !== b.title) el.title = b.title;
-        const src = sources.join(" ") || "unknown";
+        const src = b.sources.join(" ") || "unknown";
         if (t.tile.dataset.ssSrc !== src) t.tile.dataset.ssSrc = src;
       }
       const itemDim =
@@ -283,6 +346,8 @@ export function createEquipment({
             `${SOURCE_TAGS[s].glyph} ${SOURCE_TAGS[s].name}`,
             counts[s],
           ]),
+          ["flip", "↗ Flip", held.filter(flipOf).length],
+          ["scrap", "♻ Scrap", held.filter((p) => scrapOf(p)).length],
         ]
           .filter(([k, , n]) => k === "all" || n > 0)
           .map(
@@ -514,6 +579,7 @@ export function createEquipment({
         code: rowCode,
         stats,
         skills: rowSkills(rowCode, stats.stats),
+        ageMin: rowAge(r.lines),
         q,
         v,
         sales,
@@ -521,6 +587,15 @@ export function createEquipment({
         flip,
       };
     });
+    // the asks on the page, for the sell form's suggestion
+    lastAsks = valuations
+      .filter((r) => r.code && r.price > 0)
+      .map((r) => ({
+        code: r.code,
+        price: r.price,
+        skills: r.skills,
+        ageMin: r.ageMin,
+      }));
     // Every item on the page gets its sales read, the grid's item first.
     const codes = [...new Set(valuations.map((r) => r.code).filter(Boolean))];
     if (code || codes.length) requestSales(code, codes);
@@ -654,15 +729,10 @@ export function createEquipment({
     previousRows = current;
     // no account to read a history for: say so in the picker (false), else the pieces once the view arrives
     if (!setup)
-      picker(
-        code,
-        s.picker,
-        !state.craftsUserId
-          ? false
-          : !state.ledger
-            ? null
-            : (state.ledger.heldPieces ?? "stale"), // a view without them comes from an older worker
-      );
+      picker(code, s.picker, heldOf(state), {
+        bids: state.book?.bids ?? null,
+        flipPct: s.flipPct,
+      });
     else removePicker();
     const summary = summarizeOffers(valuations);
     last = {
@@ -734,5 +804,16 @@ export function createEquipment({
       `${state.error ? `<p class="lens-notice" role="status">${escapeHtml(state.error)}${book ? " · showing the last quote" : ""}</p>` : ""}<div class="lens-floors" data-fresh="${fresh}">${floors}</div>${salesLine}`,
     );
   }
-  return { render, renderMarket, pulse, clear, metrics };
+  return {
+    render,
+    renderMarket,
+    pulse,
+    clear,
+    metrics,
+    /** The inventory picker and the Quick dismantle window, on any page. */
+    picker,
+    /** The asks the market showed on its last scan for `code`, with their age. */
+    asks: (/** @type {string} */ code) =>
+      lastAsks.filter((a) => a.code === code),
+  };
 }

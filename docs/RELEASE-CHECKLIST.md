@@ -1,4 +1,11 @@
-# 3.2.0 release checklist
+# 3.3.0 release checklist
+
+## 3.3.0 on the live page
+
+The sell form, the picker and Quick dismantle were read live on 2026-10-10 (one piece picked, nothing listed); the new code ran only in tests (the MCP tab stayed hidden). Reload the extension itself first: a page reload alone keeps the old background.
+
+- **Sell form:** pick one piece. Under PRICE: "◈ price · why · use" and "sold … · ask … · rising". With the same item selected on the market, the ask and its age appear; **use** fills the price; PUT ON SALE untouched. Pick two different pieces: "list apart", no use.
+- **Quick dismantle (inventory):** the bar sits under "Quick dismantle"; marks on tiles; ↗ Flip and ♻ Scrap dim the rest; SELECT ALL and QUICK DISMANTLE are the game's and untouched.
 
 ## 3.2.0 on the live page
 
@@ -8,8 +15,6 @@ Checked on the tests and the synthetic page; the picker's DOM was read live on 2
 - **The market item in the picker:** with an item selected on the market, "◎ legendary boots N ×" dims the other items; × lifts it.
 - **Sales windows:** rows read "N same · 24 h" for busy items and widen to "· 3 d" or "· 7 d" only for rare stats; a value never rests on more than 50 sales.
 - **Tables:** the Ledger and Craft tab tables keep their own dark rows, without the game's grey stripes.
-
-## 3.1.0 on the live page
 
 ## 3.1.0 on the live page
 

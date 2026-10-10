@@ -4,6 +4,11 @@ Read-only decision support inside [WarEra](https://app.warera.io): what an offer
 
 The extension compares offers and estimates. It never buys, crafts, lists, opens a case or travels for you. It uses your own API key and has no runtime dependencies or build step.
 
+## What changed in 3.3.0
+
+- **A price in the sell form.** Pick pieces in "+ NEW ITEM OFFER": a line under PRICE suggests a price and **use** writes it into the form (nothing is listed until you press PUT ON SALE). The price comes from the newest sales of the same stats (24 hours first), the cheapest ask of the same stats on the market now and its age, and today's sales against the week's. When fresh asks sit above what sold, or today sells above the week, prices are rising: list one thousandth under the cheapest ask, first in line (the book is ordered by price, then by time). When the cheapest ask is well under what sells, keep to what sells and the quick price is named beside it. Always inside the 0.7-1.6x range the game allows around its own estimate. Several pieces close in value get one price, the lowest; pieces far apart are told to list apart, with no Use. The asks are read off the market rows (with their "7m" / "3h" age), so they count when that item is selected on the market; the API key cannot read open offers.
+- **↗ Flip and ♻ Scrap, in the sell picker and in Quick dismantle.** The marks and the source filter now work in the inventory's Quick dismantle window too, on any page. Two more filters: **Flip**, pieces you bought that now sell at least your FLIP threshold above what you paid, and **Scrap**, pieces whose scraps at the bids fetch more than they sell for (at the tile's own durability). Hover a tile for the numbers.
+
 ## What changed in 3.2.2
 
 - **The picker's bar sits in the picker.** The v0.27 dialog opens with a full-screen backdrop as its first child; the bar went there (the top of the page) and looked missing. It now goes under the card's title and stays in view while the list scrolls.
