@@ -73,6 +73,7 @@ beforeEach(() => {
     salesByCode: {},
     avg: null,
     ledger: { heldPieces: held },
+    craftsUserId: "697b55e4bcecf3b37667e0d1",
   };
 });
 afterEach(() => {
@@ -123,6 +124,15 @@ describe("the inventory picker", () => {
     ]);
     document.querySelector('[data-picker-source="all"]').click();
     expect(cells().every((c) => c.dataset.ssPick === "show")).toBe(true);
+  });
+  it("says what is missing when no history can be read, instead of waiting for ever", () => {
+    state.craftsUserId = null;
+    state.ledger = null;
+    equipment.render(state);
+    expect(document.querySelector(".ss-pick-bar").textContent).toContain(
+      "turn on Craft",
+    );
+    expect(document.querySelector(".ss-src-badge")).toBeNull();
   });
   it("waits for the history before it offers the filter", () => {
     state.ledger = null;

@@ -667,6 +667,14 @@ export async function startLens(runtime = chrome.runtime) {
     }
   };
   document.addEventListener("visibilitychange", visible);
+  // The game opens its dialogs (the inventory picker, the craft and case windows) as portals our roots do not
+  // watch: a scan shortly after any click finds them now instead of on the next tick. Clicks are user-rate.
+  let clickTimer;
+  const afterClick = () => {
+    clearTimeout(clickTimer);
+    clickTimer = setTimeout(() => sched.schedule(), 300);
+  };
+  document.addEventListener("click", afterClick, true);
   const dispose = () => {
     disposed = true;
     clearTimeout(timer);
@@ -677,6 +685,8 @@ export async function startLens(runtime = chrome.runtime) {
     document.getElementById("scrap-sniper-cases")?.remove();
     for (const el of document.querySelectorAll(".ss-trip")) el.remove();
     document.removeEventListener("visibilitychange", visible);
+    document.removeEventListener("click", afterClick, true);
+    clearTimeout(clickTimer);
   };
   await tick();
   metrics.equipment = equipment.metrics;

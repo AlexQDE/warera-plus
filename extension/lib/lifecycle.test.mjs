@@ -404,6 +404,21 @@ describe("SPA lifecycle and DOM work", () => {
     expect(ledgerCalls()).toBe(2);
     expect(salesCalls(runtime, "boots5")).toBe(1);
   });
+  it("marks the inventory picker a moment after the click that opened it, not on the next tick", async () => {
+    window.history.replaceState({}, "", "/market/equipments");
+    marketFixture();
+    const runtime = marketRuntime({ userId: ME });
+    app = await startLens(runtime);
+    await settle(1000);
+    // the game opens the picker as a portal on body: our roots do not see it arrive
+    const picker = document.createElement("div");
+    picker.setAttribute("role", "dialog");
+    picker.innerHTML = `<div><div>Items</div><div>0/5</div><div class="cell"><div class="tile" style="background-image: linear-gradient(45deg, red, black)"><div><img alt="winterJet" src="x.png"></div><div>270</div><div>50<b>%</b></div><div>100<b>%</b></div></div></div></div>`;
+    document.body.appendChild(picker);
+    document.body.click();
+    await settle(500);
+    expect(document.querySelector(".ss-pick-bar")).not.toBeNull();
+  });
   it("saves the Eco / War switch from the page and asks for the view again in the new mode", async () => {
     window.history.replaceState({}, "", "/market/equipments");
     marketFixture();

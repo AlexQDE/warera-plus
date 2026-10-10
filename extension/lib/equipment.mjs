@@ -267,7 +267,7 @@ export function createEquipment({
     const counts = Object.fromEntries(
       SOURCE_ORDER.map((s) => [
         s,
-        (held ?? []).filter((p) => p.source === s).length,
+        (held || []).filter((p) => p.source === s).length,
       ]),
     );
     const filter = held
@@ -285,7 +285,9 @@ export function createEquipment({
               `<button type="button" data-picker-source="${k}" aria-pressed="${pickerSource === k}">${name} <small>${n}</small></button>`,
           )
           .join("")}</span>`
-      : `<span class="lens-muted">reading your history…</span>`;
+      : held === false
+        ? `<span class="lens-muted">sources need your history: turn on Craft in settings</span>`
+        : `<span class="lens-muted">reading your history…</span>`;
     setHtml(
       bar,
       `${item ? `<div class="lens-pick-item">${item}</div>` : ""}${filter}`,
@@ -643,7 +645,13 @@ export function createEquipment({
       );
     }
     previousRows = current;
-    if (!setup) picker(code, s.picker, state.ledger?.heldPieces ?? null);
+    // no account to read a history for: say so in the picker (false), else the pieces once the view arrives
+    if (!setup)
+      picker(
+        code,
+        s.picker,
+        state.craftsUserId ? (state.ledger?.heldPieces ?? null) : false,
+      );
     else removePicker();
     const summary = summarizeOffers(valuations);
     last = {
