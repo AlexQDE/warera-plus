@@ -654,11 +654,25 @@ export function createController({
           });
           fillsOf.set(p.code, fills);
         }
-        const v = similarValue(p.code, p.skills, fills);
-        if (v.value != null) return { value: v.value, label: v.label };
+        const v = similarValue(p.code, p.skills, fills, { now: now() });
+        if (v.value != null)
+          return {
+            value: v.value,
+            label: v.label,
+            detail: v.detail,
+            hours: v.hours,
+            level: v.level,
+          };
       }
       const a = positive(avgValues[p.code]);
-      return a != null ? { value: a, label: "game avg, any stats" } : null;
+      return a != null
+        ? {
+            value: a,
+            label: "game avg",
+            detail: "the game's average, any stats",
+            level: "avg",
+          }
+        : null;
     };
     const valueOf = (p) => valueDetail(p)?.value ?? null;
     const back = (days) => day(new Date(now() - days * 86400e3).toISOString());
@@ -711,6 +725,18 @@ export function createController({
         lastCrafted: describe(lastCrafted),
         lastOpened: describe(lastOpened),
         held: { n: [...heldCount.values()].reduce((a, b) => a + b, 0) },
+        // every piece still held, how it came and what it sells for: the inventory picker marks its tiles with it
+        heldPieces: history.pieces
+          .filter((p) => p.fate === "held" && p.source !== "unknown")
+          .map((p) => ({
+            code: p.code,
+            skills: p.skills,
+            source: p.source,
+            via: p.via,
+            at: p.at,
+            cost: p.cost,
+            value: valueDetail(p),
+          })),
         salesWanted: codes.slice(0, 8),
         trades: history.trades,
         approxBefore:

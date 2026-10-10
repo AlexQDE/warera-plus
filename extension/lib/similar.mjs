@@ -2,10 +2,13 @@
 // What a piece with THESE stats sells for: the median of recent sales of
 // the same item whose stats sit next to the piece's, each stat measured
 // against its own roll range (docs/GAME-FACTS.md §4) so a sniper's crit
-// (16–20) weighs as much as its attack (101–130). Three levels, tightest
-// first, each needing enough sales; a piece that reaches none of them has
-// no stat-matched value, only the item's any-stats median, and that never
-// earns a tag. Pure; equipment.mjs and craftdesk.mjs render the result.
+// (16–20) weighs as much as its attack (101–130). Prices move fast, so the
+// last 24 hours are asked first and the window widens a day at a time up to
+// 7 days only while it holds too few sales alike; in each window the same
+// stats come before similar ones, and a value rests on the 50 newest sales
+// alike at most. A piece that reaches none has no stat-matched value, only
+// the item's any-stats median (widened the same way), and that never earns
+// a tag. Pure; equipment.mjs, craftdesk.mjs and the worker render the result.
 import { STAT_RANGES } from "./stats.mjs";
 import { WEAPONS } from "./items.mjs";
 import { positive } from "./quality.mjs";
@@ -19,6 +22,13 @@ export const MIN_SIMILAR = 5;
 export const MIN_ITEM = 5;
 /** The window the fills are read over, in hours (the worker reads 7 days). */
 export const WINDOW_HOURS = 168;
+/** The windows a value is asked over, narrowest first: 24 hours, then a day more at a time. */
+export const WINDOWS = Object.freeze([24, 48, 72, 96, 120, 144, 168]);
+/** The most sales alike a value rests on: the newest ones. */
+export const MAX_SALES = 50;
+/** "24 h", "3 d": a window in the words a row prints. @param {number} hours */
+export const windowWords = (hours) =>
+  hours <= 24 ? `${hours} h` : `${Math.round(hours / 24)} d`;
 
 /** Short words for the stats on a row or a ledger line. @type {Readonly<Record<string, string>>} */
 export const STAT_SHORT = Object.freeze({
@@ -38,7 +48,7 @@ const PERCENT = new Set([
 ]);
 
 /** @typedef {{ price: number, at: string, skills?: Record<string, number> | null, listedAt?: string | null }} Fill */
-/** @typedef {{ value: number | null, level: "same" | "similar" | "item" | null, n: number, matched: boolean, span: Record<string, [number, number]>, low: number | null, high: number | null, sellsHours: number | null, label: string, fills: Fill[] }} SimilarValue */
+/** @typedef {{ value: number | null, level: "same" | "similar" | "item" | null, n: number, matched: boolean, span: Record<string, [number, number]>, low: number | null, high: number | null, sellsHours: number | null, hours: number | null, label: string, detail: string, fills: Fill[] }} SimilarValue */
 
 /** @param {ReadonlyArray<number>} xs */
 const median = (xs) => {
@@ -97,17 +107,26 @@ export function statDistance(ranges, a, b) {
 }
 
 /**
- * The value of a piece of `code` with `skills` over `fills` (already cut to
- * the window): the median of the sales within SAME_DISTANCE of its stats
- * when there are MIN_SAME of them, else within SIMILAR_DISTANCE when there
- * are MIN_SIMILAR, else of the item when there are MIN_ITEM ("any stats",
- * not matched). Every answer names the sales it rests on.
+ * The value of a piece of `code` with `skills` over `fills` (the 7 days the
+ * worker reads). For each window of WINDOWS, narrowest first: the median of
+ * the newest MAX_SALES sales within SAME_DISTANCE of its stats when there
+ * are MIN_SAME of them, else within SIMILAR_DISTANCE when there are
+ * MIN_SIMILAR; no window has enough: the item's newest sales in the
+ * narrowest window holding MIN_ITEM ("any stats", not matched). Every
+ * answer names the sales it rests on and the window.
  * @param {string} code @param {Record<string, number> | null | undefined} skills @param {ReadonlyArray<Fill> | null | undefined} fills
+ * @param {{ now?: number }} [options]
  * @returns {SimilarValue}
  */
-export function similarValue(code, skills, fills) {
+export function similarValue(code, skills, fills, { now = Date.now() } = {}) {
   const ranges = STAT_RANGES[code] ?? null;
-  const priced = (fills ?? []).filter((f) => positive(f?.price) != null);
+  const last = WINDOWS[WINDOWS.length - 1];
+  // newest first, each with its age in hours; older than the widest window never counts
+  const priced = (fills ?? [])
+    .filter((f) => positive(f?.price) != null)
+    .map((f) => ({ f, age: (now - Date.parse(f.at)) / 3600e3 }))
+    .filter((x) => Number.isFinite(x.age) && x.age <= last)
+    .sort((a, b) => a.age - b.age);
   const none = /** @type {SimilarValue} */ ({
     value: null,
     level: null,
@@ -117,13 +136,17 @@ export function similarValue(code, skills, fills) {
     low: null,
     high: null,
     sellsHours: null,
+    hours: null,
     label: priced.length
-      ? `${priced.length} sales in 7 d, too few with these stats`
+      ? `${priced.length} sales · too few alike`
       : "no sales in 7 d",
+    detail: priced.length
+      ? `${priced.length} sales of this item in 7 d, too few with these stats`
+      : "no sales of this item in 7 d",
     fills: [],
   });
-  /** @param {Fill[]} list @param {"same" | "similar" | "item"} level */
-  const answer = (list, level) => {
+  /** @param {Fill[]} list @param {"same" | "similar" | "item"} level @param {number} hours */
+  const answer = (list, level, hours) => {
     const prices = list.map((f) => f.price);
     /** @type {Record<string, [number, number]>} */
     const span = {};
@@ -137,7 +160,7 @@ export function similarValue(code, skills, fills) {
         f.listedAt ? (Date.parse(f.at) - Date.parse(f.listedAt)) / 3600e3 : NaN,
       )
       .filter((h) => Number.isFinite(h) && h >= 0);
-    const words = level === "item" ? "any stats" : `${spanWords(span)}`;
+    const when = windowWords(hours);
     return /** @type {SimilarValue} */ ({
       value: median(prices),
       level,
@@ -147,27 +170,39 @@ export function similarValue(code, skills, fills) {
       low: Math.min(...prices),
       high: Math.max(...prices),
       sellsHours: median(waits),
-      label: `${list.length} sales · ${words} · 7 d`,
+      hours,
+      label: `${list.length} ${level === "item" ? "any" : level} · ${when}`,
+      detail: `${list.length} sales · ${level === "item" ? "any stats" : spanWords(span)} · ${when}`,
       fills: list,
     });
   };
+  /** @param {Array<{ f: Fill, age: number }>} list @param {number} hours */
+  const newest = (list, hours) =>
+    list
+      .filter((x) => x.age <= hours)
+      .slice(0, MAX_SALES)
+      .map((x) => x.f);
   if (ranges && skills) {
     const scored = priced
-      .map((f) => ({ f, d: statDistance(ranges, skills, f.skills) }))
-      .filter((x) => x.d != null)
-      .sort(
-        (a, b) => /** @type {number} */ (a.d) - /** @type {number} */ (b.d),
-      );
-    const same = scored
-      .filter((x) => /** @type {number} */ (x.d) <= SAME_DISTANCE)
-      .map((x) => x.f);
-    if (same.length >= MIN_SAME) return answer(same, "same");
-    const similar = scored
-      .filter((x) => /** @type {number} */ (x.d) <= SIMILAR_DISTANCE)
-      .map((x) => x.f);
-    if (similar.length >= MIN_SIMILAR) return answer(similar, "similar");
+      .map((x) => ({ ...x, d: statDistance(ranges, skills, x.f.skills) }))
+      .filter((x) => x.d != null);
+    const same = scored.filter(
+      (x) => /** @type {number} */ (x.d) <= SAME_DISTANCE,
+    );
+    const similar = scored.filter(
+      (x) => /** @type {number} */ (x.d) <= SIMILAR_DISTANCE,
+    );
+    for (const hours of WINDOWS) {
+      const s = newest(same, hours);
+      if (s.length >= MIN_SAME) return answer(s, "same", hours);
+      const m = newest(similar, hours);
+      if (m.length >= MIN_SIMILAR) return answer(m, "similar", hours);
+    }
   }
-  if (priced.length >= MIN_ITEM) return answer([...priced], "item");
+  for (const hours of WINDOWS) {
+    const all = newest(priced, hours);
+    if (all.length >= MIN_ITEM) return answer(all, "item", hours);
+  }
   return none;
 }
 

@@ -306,7 +306,7 @@ describe("SPA lifecycle and DOM work", () => {
         .querySelector('[data-action="tab"][data-tab="craft"]')
         .getAttribute("aria-pressed"),
     ).toBe("true");
-    expect(bodyText()).toContain("Best slot");
+    expect(bodyText()).toContain("Chosen");
     expect(
       runtime.sendMessage.mock.calls.filter(([m]) => m.type === "avg"),
     ).toHaveLength(1); // the rows and the board are valued at the game's averages
@@ -352,7 +352,7 @@ describe("SPA lifecycle and DOM work", () => {
     expect(
       bar().querySelector('[data-action="tab"][data-tab="market"]'),
     ).toBeNull();
-    expect(bodyText()).toContain("Best slot");
+    expect(bodyText()).toContain("Chosen");
     for (let i = 0; i < 20; i++)
       document
         .getElementById("offers")

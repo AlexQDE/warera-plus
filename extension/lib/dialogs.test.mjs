@@ -153,7 +153,13 @@ const ledger = {
       cost: 2.86,
       approx: false,
       worn: false,
-      value: { value: 3.5, label: "4 sales · crit dmg 8–10% · 7 d" },
+      value: {
+        value: 3.5,
+        label: "4 same · 24 h",
+        detail: "4 sales · crit dmg 8–10% · 24 h",
+        level: "same",
+        hours: 24,
+      },
     },
     {
       code: "knife",
@@ -245,9 +251,10 @@ describe("annotating them", () => {
     expect(text).toContain("Today −24.5 g · 10 opened");
     expect(text).toContain("All −5,302 g · 8,780 opened");
     // valued at the game's average, not at sales of its stats: marked rough
-    expect(text).toContain("Last knife atk 37 · crit 4% ≈1.43 −2.44");
+    expect(text).toContain("Last knife atk 37 · crit 4% ≈1.43 avg −2.44");
     expect(words(panel)).toBeLessThanOrEqual(40);
-    expect(panel.querySelector('[data-action="ledger-mode"]')).not.toBeNull();
+    // no piece of this case was worn in battle in what the panel shows: no Eco / War switch
+    expect(panel.querySelector('[data-action="ledger-mode"]')).toBeNull();
     // a second render reuses the panel; the dialog closing removes it
     d.render({ cases, avg: null, settings: {}, ledger });
     expect(document.querySelectorAll(`.${PANEL_CLASS}`)).toHaveLength(1);
@@ -277,14 +284,17 @@ describe("annotating them", () => {
     const panel = document.querySelector(`.${PANEL_CLASS}`);
     expect(panel.nextElementSibling.textContent).toBe("CRAFT RANDOM");
     const text = panel.textContent.replace(/\s+/g, " ");
-    expect(text).toContain("Common craft");
     expect(text).toContain("Today −1.66 g · 1 craft · 1 in battle");
-    // a held helmet: sells ~3.50 against its cost 2.86
-    expect(text).toContain("helmet crit dmg 9% ~3.50 +0.64");
+    // sold like it in the last 24 h at the same stats: no mark, the window small
+    expect(text).toContain("helmet crit dmg 9% 3.50 24h +0.64");
     // the knife went to battle: no result
     expect(text).toContain("knife atk 30 · crit 3% in battle");
     // 6 scraps × 0.25 + 1 steel × 1.83 = 3.33; EV 0.3 × 1.2 + 0.7 × 1.4 = 1.34
-    expect(text).toContain("Craft now 3.33 → ~1.34 g −60%");
+    // the question at CRAFT RANDOM comes first: worth it now?
+    expect(
+      text.indexOf("Craft now 3.33 → 1.34 · −1.99 g (−60%)"),
+    ).toBeGreaterThanOrEqual(0);
+    expect(text.indexOf("Craft now")).toBeLessThan(text.indexOf("Today"));
     expect(words(panel)).toBeLessThanOrEqual(45);
     const eco = panel.querySelector(
       '[data-action="ledger-mode"][data-mode="eco"]',

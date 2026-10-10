@@ -8,7 +8,14 @@ import * as dom from "./dom.mjs";
 import { SCRAP_LADDER } from "./ladder.mjs";
 import { quote, freshness, TTL, positive } from "./quality.mjs";
 import { fmt, signed, gold, signedGold, escapeHtml, ago } from "./format.mjs";
-import { setHtml, helpMark } from "./ui.mjs";
+import { setHtml, helpMark, SOURCE_TAGS } from "./ui.mjs";
+import {
+  tileTokens,
+  tileStats,
+  tileCode,
+  heldIndex,
+  tileSource,
+} from "./picker.mjs";
 import { salesStats } from "./sales.mjs";
 import { readStats, codeFor, summarizeOffers, statRanks } from "./offers.mjs";
 import { comparableFills, percentileRank, liquidity } from "./resale.mjs";
@@ -47,7 +54,7 @@ export function valueOf({ code, stats, sales, avg, avgAt, now }) {
       now,
       state: null,
     });
-    const v = similarValue(code, skills, fills);
+    const v = similarValue(code, skills, fills, { now });
     if (v.value != null)
       return {
         amount: v.value,
@@ -56,6 +63,8 @@ export function valueOf({ code, stats, sales, avg, avgAt, now }) {
         matched: v.matched,
         n: v.n,
         label: v.label,
+        detail: v.detail,
+        hours: v.hours,
         span: v.span,
         low: v.low,
         high: v.high,
@@ -113,37 +122,121 @@ export function createEquipment({
       return rowCache.styleReads;
     },
   };
+  let pickerSource = "all"; // the picker's source filter: all, crafted, bought, opened or looted
+  let pickerHeld = null; // the pieces the player holds by their history, for the picker's marks
   const removePicker = () => {
     document.querySelector(".ss-pick-bar")?.remove();
+    for (const el of document.querySelectorAll(".ss-src-badge")) el.remove();
     for (const el of document.querySelectorAll(
-      "[data-ss-pick], [data-ss-wide]",
+      "[data-ss-pick], [data-ss-wide], [data-ss-src]",
     )) {
       delete el.dataset.ssPick;
       delete el.dataset.ssWide;
+      delete el.dataset.ssSrc;
     }
     pickerTarget = null;
     pickerShowAll = false;
+    pickerSource = "all";
   };
-  function picker(code, enabled) {
+  const SOURCE_ORDER = ["crafted", "bought", "opened", "looted"];
+  const SOURCE_WORDS = {
+    crafted: "crafted",
+    bought: "bought",
+    opened: "case",
+    looted: "loot",
+  };
+  /** A tile's mark: the glyph of every way its identical pieces came, and what the tooltip says. */
+  function badgeFor(found) {
+    if (!found?.pieces.length)
+      return {
+        text: "?",
+        title: "not in your history: got another way, or before it",
+        sources: [],
+      };
+    const sources = SOURCE_ORDER.filter((s) => found.sources.includes(s));
+    const text = sources.map((s) => SOURCE_TAGS[s].glyph).join("/");
+    if (found.pieces.length === 1) {
+      const p = found.pieces[0];
+      const day = p.at
+        ? new Date(p.at).toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "short",
+          })
+        : "";
+      const title = [
+        `${SOURCE_TAGS[p.source]?.name ?? p.source}${day ? ` ${day}` : ""}`,
+        p.cost != null && p.source !== "looted" ? `cost ${gold(p.cost)}` : "",
+        p.value?.value != null ? `sells ${gold(p.value.value)}` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      return { text, title, sources };
+    }
+    const counts = sources
+      .map(
+        (s) =>
+          `${found.pieces.filter((p) => p.source === s).length} ${SOURCE_WORDS[s]}`,
+      )
+      .join(" · ");
+    return {
+      text,
+      title: `${found.pieces.length} identical: ${counts}`,
+      sources,
+    };
+  }
+  /**
+   * The inventory picker: every tile marked with how its piece came (by the
+   * history), a source filter that dims what another source brought, and the
+   * market's item as a removable filter. Dimmed, never hidden: the picker is
+   * a virtual list, and a hidden tile would leave a hole in its row.
+   */
+  function picker(code, enabled, held = pickerHeld) {
+    pickerHeld = held;
     const dialog = dom.pickerDialog();
-    const target = dom.targetFromCode(code);
-    if (!dialog || !target || !enabled) {
+    if (!dialog || !enabled) {
       removePicker();
       return;
     }
-    if (pickerTarget !== code) {
-      pickerTarget = code;
+    const target = code ? dom.targetFromCode(code) : null;
+    const targetCode = target ? code : null;
+    if (pickerTarget !== targetCode) {
+      pickerTarget = targetCode;
       pickerShowAll = false;
     }
     const tiles = dom.pickerTiles(dialog, palette);
-    const matches = tiles.filter(
-      (t) => dom.pickerDecision(t, target) === "show",
-    ).length;
+    const matches = target
+      ? tiles.filter((t) => dom.pickerDecision(t, target) === "show").length
+      : 0;
+    const index = held ? heldIndex(held) : null;
     for (const t of tiles) {
-      const want =
-        !pickerShowAll && matches && dom.pickerDecision(t, target) === "hide"
-          ? "hide"
-          : "show";
+      let sources = [];
+      if (index) {
+        const read = tileStats(tileTokens(t.tile));
+        const itemCode = read ? tileCode(t.slot, read.stats) : null;
+        const b = badgeFor(
+          itemCode ? tileSource(index, itemCode, read.stats) : null,
+        );
+        sources = b.sources;
+        let el = t.tile.querySelector(":scope > .ss-src-badge");
+        if (!el) {
+          el = document.createElement("span");
+          el.className = "ss-src-badge";
+          el.dataset.lens = "";
+          t.tile.prepend(el);
+        }
+        if (el.textContent !== b.text) el.textContent = b.text;
+        if (el.title !== b.title) el.title = b.title;
+        const src = sources.join(" ") || "unknown";
+        if (t.tile.dataset.ssSrc !== src) t.tile.dataset.ssSrc = src;
+      }
+      const itemDim =
+        target &&
+        !pickerShowAll &&
+        matches &&
+        dom.pickerDecision(t, target) === "hide";
+      const sourceDim =
+        index && pickerSource !== "all" && !sources.includes(pickerSource);
+      const want = itemDim || sourceDim ? "hide" : "show";
       if (t.cell.dataset.ssPick !== want) t.cell.dataset.ssPick = want;
     }
     let bar = dialog.querySelector(".ss-pick-bar");
@@ -152,16 +245,50 @@ export function createEquipment({
       bar.className = "ss-pick-bar";
       bar.dataset.lens = "";
       bar.addEventListener("click", (e) => {
-        if (e.target.closest("[data-picker-toggle]")) {
-          pickerShowAll = !pickerShowAll;
-          picker(pickerTarget, true);
-        }
+        const toggle = e.target.closest("[data-picker-toggle]");
+        const source = e.target.closest("[data-picker-source]");
+        if (!toggle && !source) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (toggle) pickerShowAll = !pickerShowAll;
+        if (source) pickerSource = source.dataset.pickerSource;
+        picker(pickerTarget, true);
       });
       dom.pickerCard(dialog).prepend(bar);
     }
+    const label = targetCode ? escapeHtml(dom.itemLabel(targetCode)) : "";
+    const item = !target
+      ? ""
+      : !matches
+        ? `<span class="lens-muted">◎ ${label}: no tile recognized</span>`
+        : pickerShowAll
+          ? `<button type="button" data-picker-toggle aria-pressed="false" title="show only this item">◎ ${label}</button>`
+          : `<span class="lens-chip">◎ ${label} <small>${matches}</small> <button type="button" data-picker-toggle aria-label="show every item" title="show every item">×</button></span>`;
+    const counts = Object.fromEntries(
+      SOURCE_ORDER.map((s) => [
+        s,
+        (held ?? []).filter((p) => p.source === s).length,
+      ]),
+    );
+    const filter = held
+      ? `<span class="lens-srcs" role="group" aria-label="How you got it">${[
+          ["all", "All", held.length],
+          ...SOURCE_ORDER.map((s) => [
+            s,
+            `${SOURCE_TAGS[s].glyph} ${SOURCE_TAGS[s].name}`,
+            counts[s],
+          ]),
+        ]
+          .filter(([k, , n]) => k === "all" || n > 0)
+          .map(
+            ([k, name, n]) =>
+              `<button type="button" data-picker-source="${k}" aria-pressed="${pickerSource === k}">${name} <small>${n}</small></button>`,
+          )
+          .join("")}</span>`
+      : `<span class="lens-muted">reading your history…</span>`;
     setHtml(
       bar,
-      `<span>${matches ? `${matches} matching ${escapeHtml(dom.itemLabel(code))} · ${tiles.length} total` : "No matches recognized; nothing hidden"}</span><button type="button" data-picker-toggle>${pickerShowAll ? "Filter items" : "Show all"}</button>`,
+      `${item ? `<div class="lens-pick-item">${item}</div>` : ""}${filter}`,
     );
   }
   function clear() {
@@ -223,7 +350,7 @@ export function createEquipment({
     if (value) {
       const gap = r.price != null ? value.amount - r.price : null;
       lines.push(
-        `Sells for <b>${fmt(value.amount)} g</b> · ${escapeHtml(value.label)}${value.low != null ? ` · ${fmt(value.low)}–${fmt(value.high)}` : ""}${value.sellsHours != null ? ` · listed to sold in ${value.sellsHours < 1 ? `${Math.round(value.sellsHours * 60)} min` : `${value.sellsHours.toFixed(1)} h`} (median)` : ""}${gap != null ? ` · against this price <b>${signed(gap)} g</b> (${signed((gap / r.price) * 100, 1)}%)` : ""}`,
+        `Sells for <b>${fmt(value.amount)} g</b> · ${escapeHtml(value.detail ?? value.label)}${value.low != null ? ` · ${fmt(value.low)}–${fmt(value.high)}` : ""}${value.sellsHours != null ? ` · listed to sold in ${value.sellsHours < 1 ? `${Math.round(value.sellsHours * 60)} min` : `${value.sellsHours.toFixed(1)} h`} (median)` : ""}${gap != null ? ` · against this price <b>${signed(gap)} g</b> (${signed((gap / r.price) * 100, 1)}%)` : ""}`,
       );
       if (value.source === "fills" && r.sales) {
         const fills = comparableFills(r.sales.fills, {
@@ -264,24 +391,39 @@ export function createEquipment({
               : !r.q.complete
                 ? "bid depth too thin"
                 : "no quote";
+    // Two routes: scrap it, or sell it at what pieces of these stats sold for. The verdict's route is the big
+    // number; a PASS shows the better route, muted. The value's mark: none for the same stats, ≈ otherwise.
+    const scrapRoute =
+      r.v.margin != null ? { gain: r.v.margin, pct: r.v.marginPct } : null;
+    const sellRoute =
+      value?.matched && r.price > 0
+        ? {
+            gain: value.amount - r.price,
+            pct: (value.amount - r.price) / r.price,
+          }
+        : null;
+    const route =
+      kind === "hit"
+        ? scrapRoute
+        : kind === "flip"
+          ? sellRoute
+          : [scrapRoute, sellRoute]
+              .filter(Boolean)
+              .sort((a, b) => b.gain - a.gain)[0];
+    const loud = kind === "hit" || kind === "flip";
+    const big = route
+      ? `<b class="lens-gain ${loud ? (route.gain >= 0 ? "lens-pos" : "lens-neg") : "lens-muted"}">${signedGold(route.gain)} · ${signed(route.pct * 100, 0)}%</b>`
+      : `<b class="lens-gain lens-muted">–</b>`;
     const scrap =
-      r.v.margin == null
-        ? `<span class="lens-kv"><b>–</b><small>scrap · ${escapeHtml(why)}</small></span>`
-        : `<span class="lens-kv"><b class="${r.v.margin >= 0 ? "lens-pos" : "lens-neg"}">${signedGold(r.v.margin)}</b><small>scrap ${signed(r.v.marginPct * 100, 0)}%</small></span>`;
-    const gapPct =
-      value && r.price > 0 ? ((value.amount - r.price) / r.price) * 100 : null;
-    const basis = value
-      ? value.source === "avg"
-        ? "game avg"
-        : value.matched
-          ? `${value.n} ${value.basis === "same" ? "same" : "similar"} stats`
-          : `${value.n} any stats`
-      : salesState;
-    const gap = gapPct != null && value?.matched;
-    const worth = value
-      ? `<span class="lens-kv"><b class="${gap ? (gapPct >= 0 ? "lens-pos" : "lens-neg") : "lens-muted"}">${gap ? "~" : "≈"}${gold(value.amount)}</b><small>sells${gap ? ` ${signed(gapPct, 0)}%` : ""} · ${escapeHtml(basis)}</small></span>`
-      : `<span class="lens-kv"><b>–</b><small>sells · ${escapeHtml(salesState)}</small></span>`;
-    return `<span class="lens-tag" data-kind="${kind}">${TAGS[kind]}</span>${scrap}${worth}<button type="button" data-action="details" aria-expanded="${open}" aria-label="${open ? "Hide" : "Show"} details for this offer">${open ? "▾" : "▸"}</button>${open ? detailsHtml(r, ctx) : ""}`;
+      r.v.margin != null && r.price != null
+        ? `scrap ${gold(r.price + r.v.margin)}`
+        : `scrap · ${escapeHtml(why)}`;
+    const mark =
+      value && !(value.source === "fills" && value.basis === "same") ? "≈" : "";
+    const sells = value
+      ? `sells ${mark}${gold(value.amount)} · ${escapeHtml(value.source === "avg" ? "game avg" : value.label)}`
+      : `sells · ${escapeHtml(salesState)}`;
+    return `<span class="lens-tag" data-kind="${kind}">${TAGS[kind]}</span><span class="lens-kv">${big}<small>${scrap} · ${sells}</small></span><button type="button" data-action="details" aria-expanded="${open}" aria-label="${open ? "Hide" : "Show"} details for this offer">${open ? "▾" : "▸"}</button>${open ? detailsHtml(r, ctx) : ""}`;
   }
   /** Scan the rows and annotate them; returns the counts for the bar's pulse. */
   function render(state) {
@@ -422,6 +564,7 @@ export function createEquipment({
                   now: now(),
                   state: null,
                 }),
+                { now: now() },
               ).label
             : state.salesReading === r.code
               ? "reading sales…"
@@ -442,6 +585,7 @@ export function createEquipment({
                       now: now(),
                       state: null,
                     }),
+                    { now: now() },
                   ).fills
                 : comparableFills(r.sales.fills, {
                     code: r.code,
@@ -499,7 +643,7 @@ export function createEquipment({
       );
     }
     previousRows = current;
-    if (!setup) picker(code, s.picker);
+    if (!setup) picker(code, s.picker, state.ledger?.heldPieces ?? null);
     else removePicker();
     const summary = summarizeOffers(valuations);
     last = {

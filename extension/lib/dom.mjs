@@ -497,7 +497,9 @@ export function pickerDecision(tile, target) {
  * does not exist there. Accept "Item" followed by anything but a letter.
  */
 export function isPickerText(text) {
-  return /^Item(?![A-Za-z])/.test(String(text ?? "").trim());
+  const t = String(text ?? "").trim();
+  // v0.27: "Items" and the selection counter ("Items0/5…"); "Items for sale" is something else
+  return /^Item(?![A-Za-z])/.test(t) || /^Items\d+\/\d+/.test(t);
 }
 
 /**

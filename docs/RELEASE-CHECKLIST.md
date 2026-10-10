@@ -1,4 +1,15 @@
-# 3.1.0 release checklist
+# 3.2.0 release checklist
+
+## 3.2.0 on the live page
+
+Checked on the tests and the synthetic page; the picker's DOM was read live on 2026-10-10 (structure only). Not seen on the live game:
+
+- **Inventory picker:** open "+ NEW ITEM OFFER" and a slot. The bar above the tiles shows "All · ⚒ Crafted · ↓ Bought · ▣ Case · ✦ Loot" with counts; every tile carries a small mark (hover: "Crafted 10 Oct · cost 150 · sells 154", or "14 identical: 10 bought · 4 loot", or "?" when the history does not hold it). Choose Crafted: the others dim, scrolling the list keeps the marks and the dimming on the rows it draws; nothing is selected or listed by our clicks.
+- **The market item in the picker:** with an item selected on the market, "◎ legendary boots N ×" dims the other items; × lifts it.
+- **Sales windows:** rows read "N same · 24 h" for busy items and widen to "· 3 d" or "· 7 d" only for rare stats; a value never rests on more than 50 sales.
+- **Tables:** the Ledger and Craft tab tables keep their own dark rows, without the game's grey stripes.
+
+## 3.1.0 on the live page
 
 ## 3.1.0 on the live page
 

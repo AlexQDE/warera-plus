@@ -205,6 +205,17 @@ tiers are intentional, so a stat value maps back to its rarity unambiguously.
   minimum-stat filter (ATTACK / CRIT. CHANCE for a weapon), empty by default.
 - Literal English anchors in every locale: "Buy", "market tax" / "Taxed
   price", the grid titles, the picker label "Item", "New item offer".
+- **The inventory picker since v0.27** (read live 2026-10-10): "+ NEW ITEM
+  OFFER" opens "SELL AN ITEM" with five slots ("pick up to 5 weapons or
+  equipment in perfect condition"); a slot opens a dialog whose text starts
+  `Items0/5`, then the game's own filters (All / Weapons / Equipment, All /
+  each rarity). The tiles sit in a **virtual list** (rows carry `data-index`;
+  64 of 286 tiles were in the DOM), so a filter must dim tiles, not remove
+  them. A tile is a box with a rarity gradient (`background-image`), the
+  skin image and its numbers, each `%` in a text node of its own
+  (`270 | 50 | % | 100 | %`). Only 100% pieces are offered, so a tile's
+  code and stats match the history's held pieces exactly; the 3.0 picker
+  test for "Item" no longer matched it.
 - The grid's "Current value" is `gameStat.getEquipmentAvgByCode`, a mean of
   recent sales, not the cheapest offer (jet 430.5 while the cheapest offer
   was 383.8 on 2026-09-03).

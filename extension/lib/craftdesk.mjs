@@ -5,14 +5,20 @@
 // pieces of a window, by activity and tier, and the recent pieces.
 // Rendering only. Numbers first; the method lives in the "?" tooltips.
 import { fmt, signed, gold, signedGold, escapeHtml as esc } from "./format.mjs";
-import { setHtml, timeLabel, helpMark as help } from "./ui.mjs";
+import {
+  setHtml,
+  timeLabel,
+  helpMark as help,
+  SOURCE_TAGS,
+  sourceTag,
+} from "./ui.mjs";
 import { freshness, TTL } from "./quality.mjs";
 import { tierBoard, bestTier } from "./craftboard.mjs";
 import { itemLabel, slotName, rarityFromItemCode } from "./dom.mjs";
 import { comparableFills } from "./resale.mjs";
 import { localDayOf } from "./observed.mjs";
 import { spanWords, WINDOW_HOURS } from "./similar.mjs";
-import { modeSwitch } from "./dialogs.mjs";
+import { modeSwitch, valueHtml } from "./dialogs.mjs";
 
 const pct = (v, d = 0) => (v == null ? "–" : `${signed(v * 100, d)}%`);
 const count = (n) => Number(n ?? 0).toLocaleString("en-US");
@@ -67,13 +73,7 @@ export function createCraftDesk({ settings, now = Date.now }) {
     const top = bestTier(rows);
     const fresh = scrapFresh && steelFresh;
     const prices = `<div class="lens-prices"><span>Scraps <b>${fmt(book?.asks?.[0]?.price)}</b></span><span>Steel <b>${fmt(steel?.asks?.[0]?.price)}</b></span>${book ? `<span class="lens-status" data-status="${fresh ? "fresh" : "stale"}">${timeLabel(book.at, now())}</span>` : ""}${avg ? "" : `<span class="lens-muted">Reading item prices…</span>`}<span class="lens-grow"></span>${help(CRAFT_HELP)}</div>`;
-    const cell = (value, cls = "") =>
-      `<td class="lens-num ${cls}">${value}</td>`;
-    const roiCell = (roi) =>
-      cell(
-        pct(roi),
-        roi == null ? "lens-muted" : roi >= 0 ? "lens-pos" : "lens-neg",
-      );
+    const cell = (value) => `<td class="lens-num">${value}</td>`;
     const body = rows
       .map((r) => {
         const open = tier === r.tier;
@@ -85,10 +85,20 @@ export function createCraftDesk({ settings, now = Date.now }) {
           r.evRandom == null
             ? `<span class="lens-muted" title="slots with a price">${r.covered}/6</span>`
             : gold(r.evRandom);
-        const best = r.best
-          ? `${esc(slotName(r.best.code))} <small>${gold(r.best.avg)}</small>`
+        // profit in gold, the percentage small; the chosen slot and its profit in one cell
+        const gain =
+          r.costRandom.value != null && r.evRandom != null
+            ? r.evRandom - r.costRandom.value
+            : null;
+        const profit =
+          gain == null
+            ? `<span class="lens-muted">–</span>`
+            : `<b class="${cls(gain)}">${signedGold(gain)}</b> <small class="${cls(gain)}">${pct(r.roiRandom)}</small>`;
+        const chosen = r.best
+          ? `<span title="${esc(itemLabel(r.best.code))} sells ~${gold(r.best.avg)} g; a chosen slot costs ${r.costChosen.value == null ? "–" : gold(r.costChosen.value)} g">${esc(slotName(r.best.code))} <small class="${cls(r.roiChosen)}">${pct(r.roiChosen)}</small></span>`
           : `<span class="lens-muted">–</span>`;
-        const main = `<tr class="lens-tier" data-rarity="${r.rarity}" aria-expanded="${open}"><th scope="row"><button type="button" data-action="desk-tier" data-tier="${r.tier}" aria-pressed="${open}">${r.rarity}</button></th>${cell(cost)}${cell(ev)}${roiCell(r.roiRandom)}<td>${best}</td>${roiCell(r.roiChosen)}</tr>`;
+        const isBest = top?.row === r;
+        const main = `<tr class="lens-tier${isBest ? " lens-best" : ""}" data-rarity="${r.rarity}" aria-expanded="${open}"${isBest ? ` title="best now: ${top.mode === "random" ? "a random craft" : "the chosen slot"}"` : ""}><th scope="row"><button type="button" data-action="desk-tier" data-tier="${r.tier}" aria-pressed="${open}"><span aria-hidden="true">${open ? "▾" : "▸"}</span> ${r.rarity}</button></th>${cell(cost)}${cell(ev)}<td class="lens-num">${profit}</td><td>${chosen}</td></tr>`;
         if (!open) return main;
         const slots = r.slots
           .map(
@@ -96,7 +106,7 @@ export function createCraftDesk({ settings, now = Date.now }) {
               `<span class="lens-chip"><b>${esc(slotName(sl.code))}</b> ${sl.avg == null ? "–" : gold(sl.avg)} <small>${Math.round(sl.odds * 100)}%</small></span>`,
           )
           .join("");
-        const chosen =
+        const chosenCost =
           r.costChosen.value == null
             ? "no depth"
             : `${gold(r.costChosen.value)} g`;
@@ -124,13 +134,10 @@ export function createCraftDesk({ settings, now = Date.now }) {
                 : "reading sales…"
             }</p>`
           : "";
-        return `${main}<tr class="lens-tier-detail"><td colspan="6"><div class="lens-chips">${slots}</div><p>${r.scraps} scraps + ${r.steelRandom} steel · chosen slot ${r.steelChosen} steel · ${chosen}${reroll}</p>${fillsLine}</td></tr>`;
+        return `${main}<tr class="lens-tier-detail"><td colspan="5"><div class="lens-chips">${slots}</div><p>${r.scraps} scraps + ${r.steelRandom} steel · chosen slot ${r.steelChosen} steel · ${chosenCost}${reroll}</p>${fillsLine}</td></tr>`;
       })
       .join("");
-    const headline = top
-      ? `<p class="lens-headline">Best now: <b>${top.row.rarity}</b> ${top.mode === "random" ? `random <b class="${top.row.roiRandom >= 0 ? "lens-pos" : "lens-neg"}">${pct(top.row.roiRandom)}</b>` : `${esc(slotName(top.row.best?.code))} chosen <b class="${top.row.roiChosen >= 0 ? "lens-pos" : "lens-neg"}">${pct(top.row.roiChosen)}</b>`}</p>`
-      : "";
-    return `${prices}${headline}<table class="lens-board"><thead><tr><th>Tier</th><th class="lens-num">Cost</th><th class="lens-num">Worth</th><th class="lens-num">Profit</th><th>Best slot</th><th class="lens-num">Profit</th></tr></thead><tbody>${body}</tbody></table>`;
+    return `${prices}<table class="lens-board"><thead><tr><th>Tier</th><th class="lens-num">Cost</th><th class="lens-num">Worth</th><th class="lens-num">Profit</th><th>Chosen</th></tr></thead><tbody>${body}</tbody></table>`;
   }
 
   const cls = (v) => (v == null ? "" : v >= 0 ? "lens-pos" : "lens-neg");
@@ -153,7 +160,7 @@ export function createCraftDesk({ settings, now = Date.now }) {
     const m = v.windows.today.money;
     const t = v.windows.today;
     if (!m.n && !t.crafted.n && !t.opened.n && !t.bought.n) return "";
-    return `today <b class="${cls(m.realized)}">${signedGold(m.realized)} g</b>${m.unknownCost ? `<span title="a sale with no cost on record">*</span>` : ""}`;
+    return `cashed <b class="${cls(m.realized)}">${signedGold(m.realized)} g</b>${m.unknownCost ? `<span title="a sale with no cost on record">*</span>` : ""}`;
   }
   const WINDOWS = [
     ["today", "Today"],
@@ -162,11 +169,17 @@ export function createCraftDesk({ settings, now = Date.now }) {
     ["all", "All"],
   ];
   const SOURCES = [
-    ["crafted", "Crafting", "crafted"],
-    ["opened", "Cases", "cases"],
-    ["bought", "Buys", "bought"],
-    ["looted", "Loot", "loot"],
+    ["crafted", "Crafting", "crafted", "craft"],
+    ["opened", "Cases", "cases", "case"],
+    ["bought", "Buys", "bought", "buy"],
+    ["looted", "Loot", "loot", "loot"],
   ];
+  const WINDOW_WORDS = {
+    today: "today",
+    week: "7 days",
+    month: "30 days",
+    all: "all time",
+  };
   const TIERS = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
   const ROWS_SHOWN = 30;
 
@@ -190,23 +203,23 @@ export function createCraftDesk({ settings, now = Date.now }) {
       ? esc(meta.username)
       : `player …${esc(String(id).slice(-6))}`;
     const legend = `Your whole history, read once with your key, kept in this browser and updated every minute. Cost: a craft is its recipe at that day's scrap and steel prices (${state.settings?.craftSteelMode === "chosen" ? "chosen slot" : "random craft"}), a case its price that day, a buy what you paid, loot nothing. A held piece counts at what pieces of its stats sold for in 7 days (≈: any stats or the game's average). Eco leaves gear worn in battle out; War counts it.${v.approxBefore ? ` The game keeps 30 days of prices: costs before ${v.approxBefore} are approximate (≈).` : ""}`;
-    const head = `<div class="lens-own-head"><b>${who}</b> <small>${count(meta.count)} tx${meta.done ? "" : ", still reading"} · ${timeLabel(meta.at ?? v.at, now())}${state.historyBusy ? " · reading" : ""}</small>${state.historyError ? ` <small class="lens-neg">last read failed</small>` : ""}<span class="lens-grow"></span><span class="lens-windows">${WINDOWS.map(([k, label]) => `<button type="button" data-action="desk-window" data-window="${k}" aria-pressed="${craftWindow === k}">${label}</button>`).join("")}</span>${modeSwitch(mode)}${help(legend)}</div>`;
     const m = w.money;
     const total = SOURCES.reduce((s, [k]) => s + (w[k]?.estimated ?? 0), 0);
     const pieces = SOURCES.reduce((s, [k]) => s + (w[k]?.n ?? 0), 0);
-    const held = SOURCES.reduce((s, [k]) => s + (w[k]?.held ?? 0), 0);
     const worn = SOURCES.reduce((s, [k]) => s + (w[k]?.worn ?? 0), 0);
-    const parts = SOURCES.filter(([k]) => w[k]?.n)
-      .map(([k, , word]) => `${count(w[k].n)} ${word}`)
+    const head = `<div class="lens-own-head"><b title="${esc(`${count(meta.count)} transactions${meta.done ? "" : ", still reading back to your first day"} · read ${localDayOf(meta.at ?? v.at)}`)}">${who}</b>${meta.done ? "" : ` <small>${count(meta.count)} tx, still reading</small>`}${state.historyBusy ? ` <small>reading…</small>` : ""}${state.historyError ? ` <small class="lens-neg">last read failed</small>` : ""}<span class="lens-grow"></span><span class="lens-windows">${WINDOWS.map(([k, label]) => `<button type="button" data-action="desk-window" data-window="${k}" aria-pressed="${craftWindow === k}">${label}</button>`).join("")}</span>${modeSwitch(mode, worn)}${help(legend)}</div>`;
+    // what was got in the window at what it sells for now, by source; what was cashed in it, from any piece
+    const bySource = SOURCES.filter(([k]) => w[k]?.n)
+      .map(
+        ([k, , , word]) =>
+          `${word} ${money(w[k].estimatedKnown ? w[k].estimated : null)}`,
+      )
       .join(" · ");
+    const span = WINDOW_WORDS[craftWindow] ?? "today";
     const tile = (label, value, sub) =>
       `<div><small>${label}</small> <b>${value}</b> <span>${sub}</span></div>`;
-    const tiles = `<div class="lens-tiles">${tile("Result", `<span class="${cls(total)}">${signedGold(total)} g</span>`, `${held ? `${count(held)} held at their stats' price` : "nothing held"}${worn && mode !== "war" ? ` · ${count(worn)} in battle, not counted` : ""}`)}${tile("Sold &amp; scrapped", `<span class="${cls(m.realized)}">${signedGold(m.realized)} g</span>`, m.n ? `${count(m.sold)} sold · ${count(m.scrapped)} scrapped${m.unknownCost ? ` · ${count(m.unknownCost)} without cost` : ""}` : "nothing sold")}${tile("Pieces", count(pieces), parts || "none")}</div>`;
+    const tiles = `<div class="lens-tiles lens-tiles-2">${tile(`Got · ${span}`, `<span class="${cls(total)}">${signedGold(total)} g</span>`, pieces ? `${count(pieces)} piece${pieces === 1 ? "" : "s"}, if sold now${bySource ? `<br>${bySource}` : ""}` : "nothing got")}${tile(`Cashed · ${span}`, `<span class="${cls(m.realized)}">${signedGold(m.realized)} g</span>`, m.n ? `${count(m.sold)} sold · ${count(m.scrapped)} scrapped${m.unknownCost ? ` · ${count(m.unknownCost)} without cost` : ""}` : "nothing sold")}</div>`;
     const chips = [
-      ...SOURCES.filter(([k]) => w[k]?.n).map(
-        ([k, name]) =>
-          `<span class="lens-chip">${name} ${money(w[k].estimatedKnown ? w[k].estimated : null)}</span>`,
-      ),
       ...Object.entries(w.tiers)
         .sort((a, b) => TIERS.indexOf(a[0]) - TIERS.indexOf(b[0]))
         .map(
@@ -222,18 +235,11 @@ export function createCraftDesk({ settings, now = Date.now }) {
     const all = v.rows ?? [];
     const rows = all.slice(0, ROWS_SHOWN).map((p) => {
       const approx = p.approx ? "≈" : "";
-      const got =
-        p.source === "crafted"
-          ? `craft ${gold(p.cost)}${approx}`
-          : p.source === "opened"
-            ? `${p.via === "case2" ? "elite" : "case"} ${gold(p.cost)}${approx}`
-            : p.source === "bought"
-              ? `buy ${gold(p.cost)}`
-              : p.source === "looted"
-                ? "loot"
-                : `<span class="lens-muted" title="got before your history starts">–</span>`;
+      const src = SOURCE_TAGS[p.source];
+      const got = src
+        ? `${sourceTag(p.source, p.via === "case2" ? "elite case" : "")}${p.source === "looted" ? "" : ` ${gold(p.cost)}${approx}`}`
+        : `<span class="lens-muted" title="got before your history starts">–</span>`;
       const inBattle = p.worn && mode !== "war";
-      const rough = /any stats/i.test(p.value?.label ?? "");
       const nowCell =
         p.fate === "sold"
           ? `sold ${gold(p.proceeds)}${p.sellsHours != null ? ` <small>· ${hoursWord(p.sellsHours)}</small>` : ""}`
@@ -241,20 +247,18 @@ export function createCraftDesk({ settings, now = Date.now }) {
             ? inBattle
               ? `<span class="lens-muted">in battle</span>`
               : `scrap ${gold(p.proceeds)}`
-            : p.value?.value != null
-              ? `<span title="${esc(p.value.label)}"${rough ? ' class="lens-muted"' : ""}>${rough ? "≈" : "~"}${gold(p.value.value)}</span>`
-              : `<span class="lens-muted" title="reading the sales of these stats">…</span>`;
+            : valueHtml(p.value);
       const back = p.fate === "held" ? (p.value?.value ?? null) : p.proceeds;
       const pnl =
         !inBattle && back != null && p.cost != null ? back - p.cost : null;
       const when = new Date(p.goneAt ?? p.at ?? Date.now());
       const time = `${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`;
       const stats = statsWords(p.skills);
-      return `<tr data-fate="${p.fate}" data-source="${p.source}"><td>${craftWindow === "today" ? "" : `<small>${esc(localDayOf(when.toISOString()).slice(5))}</small> `}${time}</td><td>${esc(itemLabel(p.code))}${stats ? ` <small>${esc(stats)}</small>` : ""}</td><td>${got}</td><td>${nowCell}</td><td class="lens-num">${pnl == null ? "" : money(pnl)}</td></tr>`;
+      return `<tr data-fate="${p.fate}" data-source="${p.source}"><td>${craftWindow === "today" ? "" : `<small>${esc(localDayOf(when.toISOString()).slice(5))}</small> `}${time}</td><td>${esc(itemLabel(p.code))}${stats ? ` <small>${esc(stats)}</small>` : ""}</td><td class="lens-num">${got}</td><td class="lens-num">${nowCell}</td><td class="lens-num">${pnl == null ? "" : money(pnl)}</td></tr>`;
     });
     const more = (v.rowsTotal ?? all.length) - rows.length;
     const list = rows.length
-      ? `<table class="lens-crafts"><thead><tr><th>When</th><th>Piece</th><th>Cost</th><th>Now</th><th class="lens-num">±</th></tr></thead><tbody>${rows.join("")}</tbody></table>${more > 0 ? `<p class="lens-muted">+${count(more)} more</p>` : ""}`
+      ? `<table class="lens-crafts"><thead><tr><th>When</th><th>Piece</th><th class="lens-num">Cost</th><th class="lens-num">Now</th><th class="lens-num">±</th></tr></thead><tbody>${rows.join("")}</tbody></table>${more > 0 ? `<p class="lens-muted">+${count(more)} more</p>` : ""}`
       : `<p class="lens-muted">Nothing in this window.</p>`;
     return own(
       `${head}${tiles}${chips ? `<div class="lens-chips">${chips}</div>` : ""}${list}`,

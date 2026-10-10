@@ -105,7 +105,9 @@ describe("the value of a row", () => {
       basis: "same",
       matched: true,
       n: 3,
-      label: "3 sales · atk 30 · crit 3% · 7 d",
+      label: "3 same · 24 h",
+      detail: "3 sales · atk 30 · crit 3% · 24 h",
+      hours: 24,
       low: 0.9,
       high: 1.1,
       sellsHours: 2,
@@ -130,7 +132,8 @@ describe("the value of a row", () => {
       matched: true,
       n: 5,
       amount: 2,
-      label: "5 sales · atk 30–33 · crit 4% · 7 d",
+      label: "5 similar · 24 h",
+      detail: "5 sales · atk 30–33 · crit 4% · 24 h",
     });
     const far = (price, i) => fill(price, i, { attack: 40, criticalChance: 5 });
     const item = valueOf({
@@ -145,7 +148,7 @@ describe("the value of a row", () => {
       matched: false,
       n: 5,
       amount: 3,
-      label: "5 sales · any stats · 7 d",
+      label: "5 any · 24 h",
     });
     const avg = valueOf({
       code: "knife",
@@ -200,7 +203,8 @@ describe("row annotation", () => {
     const a = annotation();
     expect(tag()).toBe("SNIPE");
     expect(a.textContent).toContain("+0.20");
-    expect(a.textContent).toContain("scrap +20%");
+    expect(a.textContent).toContain("+0.20 · +20%");
+    expect(a.textContent).toContain("scrap 1.20");
     expect(row.dataset.scrapSniper).toBe("hit");
     expect(row.querySelector(".buy").disabled).toBe(false);
     expect(row.querySelector(".buy").textContent).toBe("BUY");
@@ -217,7 +221,7 @@ describe("row annotation", () => {
     state.avg = { at: iso(), values: { knife: 1.5 }, times: { knife: iso() } };
     equipment.render(state);
     expect(annotation().textContent).toContain("≈1.50");
-    expect(annotation().textContent).toContain("sells · game avg"); // no gap figure on a number that rests on no stats
+    expect(annotation().textContent).toContain("sells ≈1.50 · game avg"); // no gap figure on a number that rests on no stats
     state.salesReading = "knife";
     state.avg = null;
     equipment.render(state);
@@ -230,15 +234,14 @@ describe("row annotation", () => {
     state.salesByCode = { knife: sales([fill(1, 1), fill(1.1, 2)]) };
     equipment.render(state);
     expect(annotation().textContent).toContain(
-      "sells · 2 sales in 7 d, too few with these stats",
+      "sells · 2 sales · too few alike",
     );
     state.salesByCode.knife = sales(
       [...state.salesByCode.knife.fills, fill(1.05, 3)],
       { at: iso(1) },
     );
     equipment.render(state);
-    expect(annotation().textContent).toContain("~1.05");
-    expect(annotation().textContent).toContain("sells +5% · 3 same stats");
+    expect(annotation().textContent).toContain("sells 1.05 · 3 same · 24 h");
     // an armour row prints its one stat as a percentage; the fills carry it as the slot's stat
     mount("boots5");
     lines = ["Item", "38%", "100%", "Seller", "100", "BUY"];
@@ -257,8 +260,7 @@ describe("row annotation", () => {
       },
     };
     equipment.render(state);
-    expect(annotation().textContent).toContain("sells +0% · 5 same stats");
-    expect(annotation().textContent).toContain("~100");
+    expect(annotation().textContent).toContain("sells 100 · 5 same · 24 h");
   });
   it("tags FLIP only when sales of these stats beat the price by the threshold; the average and unmatched sales never do", () => {
     state.book = { at: iso(), bids: [{ price: 0.1, quantity: 2000 }] }; // 6 scraps = 0.6 g against a 1 g price
@@ -278,15 +280,17 @@ describe("row annotation", () => {
     };
     equipment.render(state);
     expect(tag()).toBe("PASS"); // sales of other stats are no reason either
-    expect(annotation().textContent).toContain("5 any stats");
+    expect(annotation().textContent).toContain("sells ≈1.50 · 5 any · 24 h");
     state.salesByCode = {
       knife: sales([fill(1.5, 1), fill(1.5, 2), fill(1.5, 3)]),
     };
     equipment.render(state);
     expect(tag()).toBe("FLIP");
     expect(row.dataset.scrapSniper).toBe("flip");
-    expect(annotation().textContent).toContain("−0.40");
-    expect(annotation().textContent).toContain("sells +50% · 3 same stats");
+    expect(annotation().textContent).toContain("+0.50 · +50%"); // the flip's gain is the big number
+    expect(annotation().textContent).toContain(
+      "scrap 0.60 · sells 1.50 · 3 same · 24 h",
+    );
     settings.flipPct = 60; // 1.5 is 50% above 1
     equipment.render(state);
     expect(tag()).toBe("PASS");
@@ -338,7 +342,7 @@ describe("row annotation", () => {
       "This piece: atk 30 · crit 3% · 100% durability",
     );
     expect(region.textContent).toContain(
-      "Sells for 1.075 g · 8 sales · atk 30 · crit 3% · 7 d · 0.900–1.300 · listed to sold in 2.0 h (median)",
+      "Sells for 1.075 g · 8 sales · atk 30 · crit 3% · 24 h · 0.900–1.300 · listed to sold in 2.0 h (median)",
     );
     expect(region.textContent).toContain("against this price +0.075 g (+7.5%)");
     expect(region.textContent).toContain(
@@ -394,11 +398,11 @@ describe("row annotation", () => {
       knife: sales([1, 1.1, 0.9].map((p, i) => fill(p, 165 + i))),
     };
     equipment.render(state);
-    expect(annotation().textContent).toContain("3 same stats");
+    expect(annotation().textContent).toContain("3 same · 7 d");
     vi.setSystemTime(new Date(NOW + 2 * 3600e3));
     equipment.render(state);
     expect(annotation().textContent).toContain(
-      "sells · 2 sales in 7 d, too few with these stats",
+      "sells · 2 sales · too few alike",
     );
   });
 });

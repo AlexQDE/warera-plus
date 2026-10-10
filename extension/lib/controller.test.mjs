@@ -492,8 +492,20 @@ describe("background controller", () => {
       ["tank", false, "held"],
       ["tank", true, "scrapped"],
     ]);
-    expect(eco.craftsToday[0].value).toMatchObject({ value: 141 });
+    expect(eco.craftsToday[0].value).toMatchObject({
+      value: 141,
+      level: "same",
+      hours: 24,
+    });
     expect(eco.salesWanted[0]).toBe("tank");
+    // every piece still held, with how it came, for the inventory picker
+    expect(eco.heldPieces).toHaveLength(1);
+    expect(eco.heldPieces[0]).toMatchObject({
+      code: "tank",
+      skills: { attack: 152, criticalChance: 30 },
+      source: "crafted",
+    });
+    expect(eco.heldPieces[0].value).toMatchObject({ value: 141 });
     await controller.handle(
       { type: "saveSettings", settings: { ledgerMode: "war" } },
       { trusted: true },

@@ -61,6 +61,20 @@ export function reaches(from, anchor) {
 }
 export const timeLabel = (at, now = Date.now()) =>
   `<span data-lens-time="${escapeHtml(at)}">${escapeHtml(ago(at, now))}</span>`;
+/** How a piece came to the player, one tag each, the same in the Ledger and on the inventory picker. */
+export const SOURCE_TAGS = Object.freeze({
+  crafted: { word: "CRAFT", glyph: "⚒", name: "Crafted" },
+  bought: { word: "BUY", glyph: "↓", name: "Bought" },
+  opened: { word: "CASE", glyph: "▣", name: "Case" },
+  looted: { word: "LOOT", glyph: "✦", name: "Loot" },
+});
+/** @param {string} source @param {string} [title] */
+export const sourceTag = (source, title = "") => {
+  const t = SOURCE_TAGS[/** @type {keyof typeof SOURCE_TAGS} */ (source)];
+  return t
+    ? `<span class="lens-src" data-src="${escapeHtml(source)}" title="${escapeHtml(title || t.name)}">${t.word}</span>`
+    : "";
+};
 /** A "?" that carries a section's method in its tooltip, instead of a paragraph. */
 export const helpMark = (title) =>
   `<span class="lens-help" tabindex="0" role="note" title="${escapeHtml(title)}">?</span>`;

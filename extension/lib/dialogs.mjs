@@ -8,7 +8,7 @@ import { setHtml } from "./ui.mjs";
 import { slotName } from "./dom.mjs";
 import { snapshotSummary, CASE_LABELS } from "./cases.mjs";
 import { tierBoard } from "./craftboard.mjs";
-import { spanWords } from "./similar.mjs";
+import { spanWords, windowWords } from "./similar.mjs";
 
 export const PANEL_CLASS = "ss-dialog";
 const RARITY_RE = /^(mythic|legendary|epic|rare|uncommon|common)$/i;
@@ -97,15 +97,31 @@ const result = (v) =>
 const count = (n) => Number(n ?? 0).toLocaleString("en-US");
 
 /** The Eco / War switch: whether gear worn in battle counts in the results. */
-export function modeSwitch(mode) {
+export function modeSwitch(mode, worn = 0) {
   const button = (m, label, title) =>
     `<button type="button" data-action="ledger-mode" data-mode="${m}" aria-pressed="${mode === m}" title="${title}">${label}</button>`;
-  return `<span class="lens-mode" role="group" aria-label="Gear worn in battle">${button("eco", "Eco", "Eco: gear worn in battle is left out of your results")}${button("war", "War", "War: gear worn in battle counts (contracts, bounties)")}</span>`;
+  return `<span class="lens-mode" role="group" aria-label="Gear worn in battle">${button("eco", "Eco", `Eco: ${worn ? `${count(worn)} pieces worn in battle left out of your results` : "gear worn in battle is left out of your results"}`)}${button("war", "War", "War: gear worn in battle counts (contracts, bounties)")}</span>`;
 }
 
 /**
- * One piece: its slot and stats, then what it sells for (held: sales of
- * those stats, ≈ when only the game's average is known), sold for or
+ * A held piece's value: no mark when it rests on sales of the same stats,
+ * ≈ otherwise (similar stats; muted for any stats or the game's average),
+ * the window it was read over small after it; the full basis on hover.
+ */
+export function valueHtml(v) {
+  if (v?.value == null)
+    return `<span class="lens-muted" title="reading the sales of these stats">…</span>`;
+  const avg = v.level === "avg" || /game avg/i.test(v.label ?? "");
+  const level =
+    v.level ?? (avg || /any stats/i.test(v.label ?? "") ? "item" : "same");
+  const faint = level === "item" || level === "avg";
+  const when =
+    v.hours != null ? windowWords(v.hours).replace(" ", "") : avg ? "avg" : "";
+  return `<span title="${esc(v.detail ?? v.label ?? "")}"${faint ? ' class="lens-muted"' : ""}>${level === "same" ? "" : "≈"}${gold(v.value)}${when ? ` <small>${when}</small>` : ""}</span>`;
+}
+
+/**
+ * One piece: its slot and stats, then what it sells for (held), sold for or
  * scrapped for, and the result against its cost. In eco mode a piece worn
  * in battle says so and has no result.
  */
@@ -116,15 +132,12 @@ export function pieceHtml(p, mode = "eco") {
   if (p.worn && mode !== "war")
     return `${name} <span class="lens-muted">in battle</span>`;
   const v = p.fate === "held" ? p.value : null;
-  const rough = /any stats/i.test(v?.label ?? "");
   const worth =
     p.fate === "sold"
       ? `sold ${gold(p.proceeds)}`
       : p.fate === "scrapped"
         ? `scrap ${gold(p.proceeds)}`
-        : v?.value != null
-          ? `<span title="${esc(v.label)}"${rough ? ' class="lens-muted"' : ""}>${rough ? "≈" : "~"}${gold(v.value)}</span>`
-          : `<span class="lens-muted" title="reading the sales of these stats">…</span>`;
+        : valueHtml(v);
   const back = p.fate === "held" ? (v?.value ?? null) : (p.proceeds ?? null);
   const pnl = back != null && p.cost != null ? back - p.cost : null;
   return `${name} <span class="lens-worth">${worth}</span> ${result(pnl)}`;
@@ -138,11 +151,12 @@ export function outcomeLine(o, unit, mode = "eco") {
     unit === "opened"
       ? `${count(n)} opened`
       : `${count(n)} ${unit}${n === 1 ? "" : "s"}`;
-  return `${result(o.estimatedKnown ? o.estimated : null)} g · ${what}${o.worn && mode !== "war" ? ` · ${count(o.worn)} in battle` : ""}`;
+  return `${result(o.estimatedKnown ? o.estimated : null)} g · ${what}${o.worn && mode !== "war" ? ` <small>· ${count(o.worn)} in battle</small>` : ""}`;
 }
 
-const head = (title, mode) =>
-  `<header class="lens-head"><span class="lens-brand">◈</span><span class="lens-section">${esc(title)}</span><span class="lens-grow"></span>${modeSwitch(mode)}</header>`;
+/** The panel's head: the answer to the window's question first; the Eco / War switch only when battle gear is in view. */
+const head = (body, title, mode, worn) =>
+  `<header class="lens-head"${title ? ` title="${esc(title)}"` : ""}><span class="lens-brand">◈</span>${body}<span class="lens-grow"></span>${worn ? modeSwitch(mode, worn) : ""}</header>`;
 const line = (label, body, title = "") =>
   `<p class="lens-line"${title ? ` title="${esc(title)}"` : ""}><small>${label}</small> ${body}</p>`;
 const TAG = {
@@ -161,20 +175,22 @@ export function caseHtml({ code, cases, avg, sellFrom, ledger }) {
       })
     : null;
   const row = summary?.rows.find((r) => r.code === code);
-  const label = CASE_LABELS[code] ?? code;
   const [kind, word] = TAG[row?.verdict] ?? TAG.even;
   const now = row
-    ? `<p class="lens-line" title="Open: what a case gives at the scrap bids${row.policy ? ` (sold from ${esc(sellFrom)} up)` : ""}. Sell: the best bid for the sealed case.">Open <b>~${row.complete ? gold(row.openValue) : "–"}</b> · Sell <b>${gold(row.bid)}</b> <span class="lens-tag" data-kind="${kind}">${word}</span></p>`
-    : `<p class="lens-muted">Reading prices…</p>`;
+    ? `<span class="lens-section">Open ~${row.complete ? gold(row.openValue) : "–"} · Sell ${gold(row.bid)}</span> <span class="lens-tag" data-kind="${kind}">${word}</span>`
+    : `<span class="lens-muted">Reading prices…</span>`;
   const w = ledger?.windows;
+  const today = w?.today.cases[code];
+  const all = w?.all.cases[code];
   const mine = w
-    ? `${line("Today", outcomeLine(w.today.cases[code], "opened", mode))}${line("All", outcomeLine(w.all.cases[code], "opened", mode))}`
+    ? `${line("Today", outcomeLine(today, "opened", mode))}${line("All", outcomeLine(all, "opened", mode))}`
     : `<p class="lens-muted">Reading your history…</p>`;
   const last =
     ledger?.lastOpened && ledger.lastOpened.via === code
       ? line("Last", pieceHtml(ledger.lastOpened, mode))
       : "";
-  return `${head(label, mode)}${now}${mine}${last}`;
+  const title = `${CASE_LABELS[code] ?? code}. Open: what a case gives at the scrap bids${row?.policy ? ` (drops sold from ${sellFrom} up)` : ""}. Sell: the best bid for the sealed case.`;
+  return `${head(now, title, mode, today?.worn || all?.worn)}${mine}${last}`;
 }
 
 export function craftHtml({ tier, cases, avg, ledger }) {
@@ -187,9 +203,9 @@ export function craftHtml({ tier, cases, avg, ledger }) {
     avg: avg?.values,
   });
   const r = rows.find((x) => x.rarity === tier);
-  const name = tier.charAt(0).toUpperCase() + tier.slice(1);
   const w = ledger?.windows;
   const today = w?.today.tiers[tier];
+  const all = w?.all.tiers[tier];
   const crafts = (ledger?.craftsToday ?? []).filter((p) => p.rarity === tier);
   const shown = crafts.slice(0, 8);
   const list = shown.length
@@ -200,18 +216,19 @@ export function craftHtml({ tier, cases, avg, ledger }) {
       ? `${line("Today", outcomeLine(today, "craft", mode))}${list}`
       : `<p class="lens-muted">No ${esc(tier)} crafts today</p>`
     : `<p class="lens-muted">Reading your history…</p>`;
-  const now = r
-    ? line(
-        "Craft now",
-        `${r.costRandom.value == null ? "–" : gold(r.costRandom.value)} → ${r.evRandom == null ? "–" : `~${gold(r.evRandom)}`} g${r.roiRandom != null ? ` <b class="${cls(r.roiRandom)}">${signed(r.roiRandom * 100, 0)}%</b>` : ""}`,
-        `A random craft: ${r.scraps} scraps + ${r.steelRandom} steel at the market asks, against the game's average price of the six slots at the game's odds${r.evRandom == null ? ` (${r.covered}/6 priced)` : ""}${r.lossRandom != null ? `. A bad roll scrapped at once gives ${gold(r.scrapsBack)} g back` : ""}.`,
-      )
+  const cost = r?.costRandom.value ?? null;
+  const ev = r?.evRandom ?? null;
+  const now =
+    cost != null && ev != null
+      ? `<span class="lens-section">Craft now</span> <span class="lens-answer">${gold(cost)} → ${gold(ev)} · <b class="${cls(ev - cost)}">${signedGold(ev - cost)} g</b> (${signed(r.roiRandom * 100, 0)}%)</span>`
+      : `<span class="lens-section">Craft now</span> <span class="lens-muted">${r && ev == null ? `${r.covered}/6 slots priced` : "reading prices…"}</span>`;
+  const title = r
+    ? `A random craft: ${r.scraps} scraps + ${r.steelRandom} steel at the market asks, against the game's average price of the six slots at the game's odds${r.lossRandom != null ? `. A bad roll scrapped at once gives ${gold(r.scrapsBack)} g back` : ""}.`
     : "";
-  const all = w?.all.tiers[tier];
   const total = all
     ? line(`All ${esc(tier)}`, outcomeLine(all, "craft", mode))
     : "";
-  return `${head(`${name} craft`, mode)}${mine}${now}${total}`;
+  return `${head(now, title, mode, today?.worn || all?.worn)}${mine}${total}`;
 }
 
 export function createDialogs({ onAction = () => {}, onMode = () => {} } = {}) {

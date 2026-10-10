@@ -97,7 +97,12 @@ describe("the craft board", () => {
     expect(mythic.textContent).toContain("357"); // 1458 × 0.21 + 32 × 1.6
     expect(mythic.textContent).toContain("1/6");
     expect(mythic.textContent).toContain("jet");
-    expect(text()).toContain("Best now: epic random −17%");
+    // the best tier is outlined, no sentence; profit in gold with the percentage small; the chosen slot in one cell
+    expect(epic.classList.contains("lens-best")).toBe(true);
+    expect(body.querySelectorAll(".lens-best")).toHaveLength(1);
+    expect(epic.textContent.replace(/\s+/g, " ")).toContain("−7.82 −17%");
+    expect(epic.textContent.replace(/\s+/g, " ")).toContain("sniper +1%");
+    expect(text()).not.toContain("Best now");
     expect(text()).toContain("Scraps 0.210");
     expect(text()).toContain("Steel 1.600");
     // the method lives in a tooltip, not in a paragraph
@@ -343,25 +348,26 @@ describe("the ledger", () => {
     render("ledger");
     const plain = () => text().replace(/\s+/g, " ");
     expect(plain()).toContain("Johnny_Sins");
-    expect(plain()).toContain("23,906 tx");
+    expect(body.querySelector('[title*="23,906 transactions"]')).not.toBeNull();
     // result: crafting −7.716 + cases −25.7
-    expect(plain()).toContain("Result −33.4 g");
-    expect(plain()).toContain("3 in battle, not counted");
-    expect(plain()).toContain("Sold & scrapped −41.4 g");
+    // what was got in the window, at what it would sell for now; what was cashed in it, from any piece
+    expect(plain()).toContain("Got · today −33.4 g");
+    expect(plain()).toContain("12 pieces, if sold now");
+    expect(plain()).toContain("craft −7.72 · case −25.7");
+    expect(
+      body.querySelector('[data-action="ledger-mode"][data-mode="eco"]').title,
+    ).toContain("3 pieces worn in battle left out");
+    expect(plain()).toContain("Cashed · today −41.4 g");
     expect(plain()).toContain("2 sold · 9 scrapped · 1 without cost");
-    expect(plain()).toContain("Pieces 12");
-    expect(plain()).toContain("2 crafted · 10 cases");
-    expect(plain()).toContain("Crafting −7.72");
-    expect(plain()).toContain("Cases −25.7");
     expect(plain()).toContain("Legendary 2 −7.72");
     // the rows: what each cost, where it is now, the result
-    expect(plain()).toContain("craft 149");
-    expect(plain()).toContain("~161");
+    expect(plain()).toContain("CRAFT 149");
+    expect(plain()).toContain("161");
     expect(
       body.querySelector('[title="5 sales · atk 159 · crit 32% · 7 d"]'),
     ).not.toBeNull();
     expect(plain()).toContain("sold 129 · 20 min");
-    expect(plain()).toContain("case 3.80≈");
+    expect(plain()).toContain("CASE 3.80≈");
     expect(plain()).toContain("scrap 1.20");
     expect(
       body.querySelector('[title="got before your history starts"]'),

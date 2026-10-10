@@ -85,6 +85,10 @@ describe("isPickerText", () => {
     expect(isPickerText("Item27050%430.5100%15633%148.8100%")).toBe(true);
     expect(isPickerText("Item\n270\n50%")).toBe(true);
     expect(isPickerText("  Item")).toBe(true);
+    // the v0.27 picker: "Items", the selection counter, then its filters (read live 2026-10-10)
+    expect(
+      isPickerText("Items0/5ClearAll286Weapons62Equipment224All286Mythic10"),
+    ).toBe(true);
   });
 
   it("rejects the outer offer dialog and anything else starting with Item-something", () => {

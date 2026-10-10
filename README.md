@@ -4,6 +4,13 @@ Read-only decision support inside [WarEra](https://app.warera.io): what an offer
 
 The extension compares offers and estimates. It never buys, crafts, lists, opens a case or travels for you. It uses your own API key and has no runtime dependencies or build step.
 
+## What changed in 3.2.0
+
+- **Your own items in the sell picker.** The game's inventory picker ("+ NEW ITEM OFFER", a slot) marks every tile with how you got it, by your history: ⚒ crafted, ↓ bought, ▣ from a case, ✦ looted, ? not in your history; hover for the day, the cost and what it sells for. A filter above the tiles (All · Crafted · Bought · Case · Loot) dims the rest; the market's selected item is a second filter you can lift. The picker is a virtual list, so tiles are dimmed, never removed. The 3.0 picker filter did not recognise the v0.27 picker; it does again.
+- **Recent prices first.** A piece's value is the median of the 50 newest sales alike at most, from the last 24 hours, widened a day at a time up to 7 days only when 24 hours hold too few (3 of the same stats, else 5 similar). Rows say which: "94 same · 24 h", "5 similar · 3 d", "5 any · 7 d".
+- **Answer first.** Offer rows lead with the verdict's gain ("SNIPE +0.01 · +1%"), the scrap and sale values small beneath. The craft window's head is "Craft now 150 → 154 · +4 g (+3%)"; the case window's "Open ~3.72 · Sell 3.40 EVEN"; Eco / War shows in a game window only when battle gear is in view. The Ledger has two tiles, **Got** (what came to you in the window, at what it sells for now, by source) and **Cashed** (what was sold or scrapped in it); the bar's head says "cashed". Ledger costs carry the same CRAFT / BUY / CASE / LOOT tags as the picker. The Craft tab shows profit in gold with the percentage small, the chosen slot in one cell, the best tier outlined. A value from sales of the same stats has no mark; ≈ marks similar stats, any stats or the game's average.
+- **The game's table styles stay out** of the extension's tables.
+
 ## What changed in 3.1.0
 
 - **Eco and War.** A piece worn in battle and then scrapped returns fewer scraps than its tier's ladder (a fresh reroll returns all of them), and the dismantle row says so. In **Eco** (the default) such pieces are left out of every result and counted apart ("N in battle, not counted"); **War** counts them, for contract and bounty play. The switch sits in the Ledger and in the game's craft and case windows. On one account the legendary crafts read −26,279 g with the battle gear and +313 g without it (150 crafts, 268 worn).
