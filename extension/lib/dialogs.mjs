@@ -5,7 +5,14 @@
 // never made, and only asks the worker to read the history again soon.
 import { signed, gold, signedGold, escapeHtml as esc } from "./format.mjs";
 import { setHtml } from "./ui.mjs";
-import { slotName } from "./dom.mjs";
+import {
+  slotName,
+  itemLabel,
+  slotFromAlt,
+  isItemImageAlt,
+  selectedTileIndex,
+} from "./dom.mjs";
+import { WEAPONS, RARITIES } from "./items.mjs";
 import { snapshotSummary, CASE_LABELS } from "./cases.mjs";
 import { tierBoard } from "./craftboard.mjs";
 import { spanWords, windowWords } from "./similar.mjs";
@@ -75,10 +82,50 @@ export function findDialog(root = document) {
     const craft = buttons.find((b) => /^craft\b/i.test(label(b)));
     if (craft && /^craft items$/i.test(lines[0] ?? "")) {
       const tier = craftTier(lines);
-      if (tier) return { kind: "craft", dialog, tier, button: craft };
+      if (tier)
+        return {
+          kind: "craft",
+          dialog,
+          tier,
+          button: craft,
+          slot: pickedSlot(dialog, tier, label(craft)),
+        };
     }
   }
   return null;
+}
+
+/**
+ * The slot picked in a craft dialog, as its code (boots5, tank), or null for
+ * a random craft. The button reads CRAFT RANDOM until a slot is picked; the
+ * picked slot's tile carries a class none of the other slot tiles has
+ * (read live 2026-10-10).
+ * @param {Element} dialog @param {string} tier @param {string} buttonLabel
+ */
+export function pickedSlot(dialog, tier, buttonLabel) {
+  if (/^craft random/i.test(buttonLabel)) return null;
+  const tiles = [...dialog.querySelectorAll("img")]
+    .filter(
+      (img) =>
+        !img.closest("[data-lens]") &&
+        isItemImageAlt(img.getAttribute("alt")) &&
+        slotFromAlt(img.getAttribute("alt")),
+    )
+    .map((img) => {
+      let tile = null;
+      for (let e = img; e && e !== dialog; e = e.parentElement)
+        if (getComputedStyle(e).backgroundImage !== "none") {
+          tile = e;
+          break;
+        }
+      return { img, tile: tile ?? img.parentElement?.parentElement ?? null };
+    });
+  if (tiles.length < 2) return null;
+  const i = selectedTileIndex(tiles.map((t) => t.tile?.className ?? ""));
+  if (i < 0) return null;
+  const slot = slotFromAlt(tiles[i].img.getAttribute("alt"));
+  if (!slot) return null;
+  return WEAPONS.includes(slot) ? slot : `${slot}${RARITIES.indexOf(tier) + 1}`;
 }
 
 /** "atk 270 · crit 50%" for a piece's stats. */
@@ -193,7 +240,7 @@ export function caseHtml({ code, cases, avg, sellFrom, ledger }) {
   return `${head(now, title, mode, today?.worn || all?.worn)}${mine}${last}`;
 }
 
-export function craftHtml({ tier, cases, avg, ledger }) {
+export function craftHtml({ tier, slot = null, cases, avg, ledger }) {
   const mode = ledger?.mode ?? "eco";
   const books = cases?.books ?? {};
   const rows = tierBoard({
@@ -216,15 +263,26 @@ export function craftHtml({ tier, cases, avg, ledger }) {
       ? `${line("Today", outcomeLine(today, "craft", mode))}${list}`
       : `<p class="lens-muted">No ${esc(tier)} crafts today</p>`
     : `<p class="lens-muted">Reading your history…</p>`;
-  const cost = r?.costRandom.value ?? null;
-  const ev = r?.evRandom ?? null;
+  // a picked slot doubles the steel and is worth what that slot sells for; a random craft, the six at the game's odds
+  const picked = slot ? r?.slots.find((s) => s.code === slot) : null;
+  const cost = slot
+    ? (r?.costChosen.value ?? null)
+    : (r?.costRandom.value ?? null);
+  const ev = slot ? (picked?.avg ?? null) : (r?.evRandom ?? null);
+  const what = slot ? `Craft ${esc(slotName(slot))}` : "Craft now";
   const now =
     cost != null && ev != null
-      ? `<span class="lens-section">Craft now</span> <span class="lens-answer">${gold(cost)} → ${gold(ev)} · <b class="${cls(ev - cost)}">${signedGold(ev - cost)} g</b> (${signed(r.roiRandom * 100, 0)}%)</span>`
-      : `<span class="lens-section">Craft now</span> <span class="lens-muted">${r && ev == null ? `${r.covered}/6 slots priced` : "reading prices…"}</span>`;
-  const title = r
-    ? `A random craft: ${r.scraps} scraps + ${r.steelRandom} steel at the market asks, against the game's average price of the six slots at the game's odds${r.lossRandom != null ? `. A bad roll scrapped at once gives ${gold(r.scrapsBack)} g back` : ""}.`
-    : "";
+      ? `<span class="lens-section">${what}</span> <span class="lens-answer">${gold(cost)} → ${gold(ev)} · <b class="${cls(ev - cost)}">${signedGold(ev - cost)} g</b> (${signed(((ev - cost) / cost) * 100, 0)}%)</span>`
+      : `<span class="lens-section">${what}</span> <span class="lens-muted">${r && ev == null ? (slot ? "no price for it yet" : `${r.covered}/6 slots priced`) : "reading prices…"}</span>`;
+  const random =
+    r?.costRandom.value != null && r.evRandom != null
+      ? ` A random craft instead: ${gold(r.costRandom.value)} → ${gold(r.evRandom)} (${signed(r.roiRandom * 100, 0)}%).`
+      : "";
+  const title = !r
+    ? ""
+    : slot
+      ? `A chosen ${slotName(slot)}: ${r.scraps} scraps + ${r.steelChosen} steel (twice the random fee) at the market asks, against the game's average price of ${itemLabel(slot)}.${random}`
+      : `A random craft: ${r.scraps} scraps + ${r.steelRandom} steel at the market asks, against the game's average price of the six slots at the game's odds${r.lossRandom != null ? `. A bad roll scrapped at once gives ${gold(r.scrapsBack)} g back` : ""}.`;
   const total = all
     ? line(`All ${esc(tier)}`, outcomeLine(all, "craft", mode))
     : "";
@@ -320,7 +378,7 @@ export function createDialogs({ onAction = () => {}, onMode = () => {} } = {}) {
       panel,
       found.kind === "case"
         ? caseHtml({ ...ctx, code: found.code })
-        : craftHtml({ ...ctx, tier: found.tier }),
+        : craftHtml({ ...ctx, tier: found.tier, slot: found.slot }),
     );
     current = found;
     return {

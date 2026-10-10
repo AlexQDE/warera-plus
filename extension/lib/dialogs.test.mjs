@@ -56,6 +56,18 @@ function caseDialog() {
 function craftDialog() {
   document.body.innerHTML = `<main></main><div role="dialog"><div>${div(CRAFT_LINES.slice(0, 21))}</div><button>CLOSE</button><button>CRAFT RANDOM</button></div>`;
 }
+// The slot row as read live on 2026-10-10: six gradient tiles with the slot's
+// skin image and a "?" for a random craft; the picked tile carries a class
+// none of the others has, and the button reads CRAFT instead of CRAFT RANDOM.
+function slotDialog(picked) {
+  const slots = ["knife", "helmet", "chest", "boots", "gloves", "pants"]
+    .map(
+      (s) =>
+        `<div class="tile ${s === picked ? "picked " : ""}t" style="background-image: linear-gradient(red, black)"><div><img alt="ct${s[0].toUpperCase()}${s.slice(1)}" src="x.png"></div></div>`,
+    )
+    .join("");
+  document.body.innerHTML = `<main></main><div role="dialog"><div>${div(CRAFT_LINES.slice(0, 21))}</div><div class="slots">${slots}</div><button>CLOSE</button><button>${picked ? "CRAFT" : "CRAFT RANDOM"}</button></div>`;
+}
 // jsdom has no layout: innerText is textContent, so give each element its lines
 for (const proto of [window.HTMLElement.prototype]) {
   Object.defineProperty(proto, "innerText", {
@@ -309,6 +321,39 @@ describe("annotating them", () => {
     const panel = document.querySelector(`.${PANEL_CLASS}`);
     expect(panel.nextElementSibling.className).toBe("actions");
     d.dispose();
+  });
+  it("reads the slot picked for the craft and prices that craft: the doubled steel against the slot's own value", () => {
+    slotDialog("boots");
+    expect(findDialog()).toMatchObject({
+      kind: "craft",
+      tier: "common",
+      slot: "boots1",
+    });
+    const d = createDialogs();
+    d.render({
+      cases,
+      avg: {
+        values: {
+          knife: 1.2,
+          helmet1: 1.4,
+          chest1: 1.4,
+          gloves1: 1.4,
+          pants1: 1.4,
+          boots1: 1.4,
+        },
+      },
+      settings: {},
+      ledger,
+    });
+    const text = document
+      .querySelector(`.${PANEL_CLASS}`)
+      .textContent.replace(/\s+/g, " ");
+    // 6 scraps × 0.25 + 2 steel × 1.83 = 5.16 against common boots' 1.40
+    expect(text).toContain("Craft boots 5.16 → 1.40 · −3.76 g (−73%)");
+    d.dispose();
+    // nothing picked (the "?"): the random craft, as before
+    slotDialog(null);
+    expect(findDialog()).toMatchObject({ kind: "craft", slot: null });
   });
   it("hands a click on the Eco / War switch to the app and keeps it from the game's dialog", () => {
     craftDialog();
