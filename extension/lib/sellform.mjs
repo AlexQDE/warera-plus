@@ -121,7 +121,7 @@ export function sellHintHtml(picks) {
           ? `sold ${gold(one.sold.value)} · ${esc(one.sold.label)}`
           : "",
         one.floor
-          ? `ask ${gold(one.floor.price)} · ${ageWords(one.floor.ageMin)}`
+          ? `${one.floor.better ? "better ask" : "ask"} ${gold(one.floor.price)} · ${ageWords(one.floor.ageMin)}`
           : "",
         one.rising
           ? `<span class="lens-pos">rising${one.trend != null ? ` ${one.trend >= 0 ? "+" : "−"}${Math.round(Math.abs(one.trend) * 100)}% vs week` : ""}</span>`

@@ -4,7 +4,8 @@
 // similar.mjs), the asks of the same stats on the market now with their
 // age, and today's sales against the week's. The book is ordered by price,
 // then by listing time, so matching the cheapest ask queues behind it and
-// one thousandth under it is first in line. When fresh asks sit above what
+// one thousandth under it is first in line; a cheaper ask of better stats
+// counts too, since nobody buys ours above it. When fresh asks sit above what
 // sold, or today sells above the week, prices are rising: list first in
 // line. When the cheapest ask is well under what sells, keep to what sells
 // and offer the quick price beside it. Always inside the range the game's
@@ -83,15 +84,30 @@ export function suggestPrice({
     alike.filter((x) => x.age <= 24).length >= 3 &&
     alike.filter((x) => x.age > 24).length >= 3;
   const trend = enough && today != null && week ? today / week - 1 : null;
-  // the asks of the same stats now: the cheapest, and the fresh ones
-  const same = asks.filter(
-    (a) => positive(a?.price) != null && near(a.skills, SAME_DISTANCE),
-  );
-  const cheapest = same.reduce(
-    (/** @type {Ask | null} */ best, a) =>
-      !best || a.price < best.price ? a : best,
-    null,
-  );
+  // the asks of the same stats now, and of stats at least as good in every
+  // one: a buyer takes the better piece when it is not dearer, so the
+  // cheapest of either is the one to list under; the fresh ones are the same stats only
+  const listed = asks.filter((a) => positive(a?.price) != null);
+  const same = listed.filter((a) => near(a.skills, SAME_DISTANCE));
+  const better = (/** @type {Ask} */ a) =>
+    !!ranges &&
+    !!skills &&
+    Object.keys(ranges).every(
+      (k) =>
+        typeof skills[k] === "number" &&
+        typeof a.skills?.[k] === "number" &&
+        a.skills[k] >= skills[k],
+    );
+  const cheapest = listed
+    .filter((a) => near(a.skills, SAME_DISTANCE) || better(a))
+    .reduce(
+      (/** @type {Ask | null} */ best, a) =>
+        !best || a.price < best.price ? a : best,
+      null,
+    );
+  // a better piece that is not one of the same stats
+  const underBetter =
+    !!cheapest && !near(cheapest.skills, SAME_DISTANCE) && better(cheapest);
   const freshMedian = median(
     same
       .filter((a) => a.ageMin != null && a.ageMin <= FRESH_MINUTES)
@@ -102,17 +118,18 @@ export function suggestPrice({
     (trend != null && trend >= RISING) ||
     (freshMedian != null && fair != null && freshMedian >= fair * (1 + RISING));
   const fast = cheapest ? round3(cheapest.price - 0.001) : null;
+  const first = underBetter ? "under better stats" : "first in line";
   /** @type {{ price: number | null, why: string }} */
   let pick;
   if (fast != null && fair != null)
     pick =
       rising || fast >= fair * (1 - NEAR)
-        ? { price: fast, why: "first in line" }
+        ? { price: fast, why: first }
         : {
             price: round3(fair),
             why: "what sells; the cheapest ask is under it",
           };
-  else if (fast != null) pick = { price: fast, why: "first in line" };
+  else if (fast != null) pick = { price: fast, why: first };
   else if (fair != null) pick = { price: round3(fair), why: "what sells" };
   else
     pick = {
@@ -144,7 +161,11 @@ export function suggestPrice({
       label: sold.label,
     },
     floor: cheapest
-      ? { price: cheapest.price, ageMin: cheapest.ageMin ?? null }
+      ? {
+          price: cheapest.price,
+          ageMin: cheapest.ageMin ?? null,
+          better: underBetter,
+        }
       : null,
     trend,
     rising,

@@ -4,6 +4,10 @@ Read-only decision support inside [WarEra](https://app.warera.io): what an offer
 
 The extension compares offers and estimates. It never buys, crafts, lists, opens a case or travels for you. It uses your own API key and has no runtime dependencies or build step.
 
+## What changed in 3.3.3
+
+- **The sell price undercuts better pieces too.** The suggestion listed one thousandth under the cheapest ask of the same stats, so a 297/41 jet went up at 543.998 while 298/42 and 298/43 sat at 535: first among its own stats, but behind better pieces no buyer would pass over. It now lists under the cheapest ask that is the same stats or at least as good in every stat, and says so: "under better stats" and "better ask 535". Cheaper pieces of worse stats still do not pull the price down, and the trend still reads the same stats only.
+
 ## What changed in 3.3.2
 
 - **The picker's filter holds off the market.** On the inventory (Quick dismantle) every scan cleared the market's state, the picker's with it, so a filter clicked there fell back to All a moment later. The picker now removes itself only when its window closes.

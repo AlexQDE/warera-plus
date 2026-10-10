@@ -87,6 +87,32 @@ describe("the sell form", () => {
     expect(typed).toHaveBeenCalledWith("471.9");
     expect(sale).not.toHaveBeenCalled();
   });
+  it("says when the ask it lists under is a piece of better stats", () => {
+    const div = document.createElement("div");
+    div.innerHTML = sellHintHtml([
+      {
+        code: "jet",
+        s: {
+          price: 534.998,
+          why: "under better stats",
+          sold: {
+            value: 494,
+            n: 5,
+            level: "same",
+            hours: 24,
+            label: "5 same · 24 h",
+          },
+          floor: { price: 534.999, ageMin: 46, better: true },
+          trend: null,
+          rising: false,
+          clamped: false,
+        },
+      },
+    ]);
+    const text = div.textContent.replace(/\s+/g, " ");
+    expect(text).toContain("534.998 under better stats");
+    expect(text).toContain("better ask 535 · 46 min");
+  });
   it("says to list apart when the picked pieces are worth very different prices", () => {
     const one = (code, price) => ({
       code,

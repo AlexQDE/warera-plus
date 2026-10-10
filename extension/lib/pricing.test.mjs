@@ -43,7 +43,7 @@ describe("suggesting a price", () => {
       level: "same",
       hours: 24,
     });
-    expect(s.floor).toEqual({ price: 192, ageMin: 10 });
+    expect(s.floor).toEqual({ price: 192, ageMin: 10, better: false });
   });
   it("keeps to what sells when the cheapest ask is well under it, and offers the quick price beside", () => {
     const fills = [200, 201, 199].map((p, i) => boots(p, 32, i + 1));
@@ -98,6 +98,46 @@ describe("suggesting a price", () => {
     });
     expect(none.price).toBe(504.177);
     expect(none.why).toBe("the game's estimate");
+  });
+  it("lists under a cheaper piece of better stats, not just under the same stats", () => {
+    // the market of 11 Oct: a 297/41 jet, with 298/42 and 298/43 listed cheaper than the cheapest 297/41
+    const jet = (price, attack, crit, ageMin) => ({
+      price,
+      skills: { attack, criticalChance: crit },
+      ageMin,
+    });
+    const fills = [488, 494, 500, 492, 496].map((p, i) => ({
+      price: p,
+      at: hoursAgo(i + 1),
+      skills: { attack: 297, criticalChance: 41 },
+    }));
+    const s = suggestPrice({
+      code: "jet",
+      skills: { attack: 297, criticalChance: 41 },
+      fills,
+      asks: [
+        jet(534.999, 298, 42, 46),
+        jet(535, 298, 43, 249),
+        jet(544, 297, 41, 10080),
+        jet(547.996, 297, 43, 300),
+      ],
+      now: NOW,
+    });
+    expect(s.price).toBe(534.998);
+    expect(s.why).toBe("under better stats");
+    expect(s.floor).toMatchObject({ price: 534.999, better: true });
+  });
+  it("does not price under a cheaper piece of worse stats", () => {
+    const fills = [185, 184, 186].map((p, i) => boots(p, 35, i + 1));
+    const s = suggestPrice({
+      code: "boots5",
+      skills: { dodge: 35 },
+      fills,
+      asks: [ask(170, 31, 3), ask(190, 35, 20)], // dodge 31 is worse and outside the same stats
+      now: NOW,
+    });
+    expect(s.floor).toMatchObject({ price: 190, better: false });
+    expect(s.price).toBe(189.999);
   });
   it("ignores asks of other stats", () => {
     const fills = [185, 184, 186].map((p, i) => boots(p, 32, i + 1));
