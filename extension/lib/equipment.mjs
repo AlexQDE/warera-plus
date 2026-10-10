@@ -207,7 +207,7 @@ export function createEquipment({
     const matches = target
       ? tiles.filter((t) => dom.pickerDecision(t, target) === "show").length
       : 0;
-    const index = held ? heldIndex(held) : null;
+    const index = Array.isArray(held) ? heldIndex(held) : null;
     for (const t of tiles) {
       let sources = [];
       if (index) {
@@ -254,8 +254,13 @@ export function createEquipment({
         if (source) pickerSource = source.dataset.pickerSource;
         picker(pickerTarget, true);
       });
-      dom.pickerCard(dialog).prepend(bar);
     }
+    // under the card's title (the v0.27 dialog starts with a full-screen backdrop), else at the card's top
+    const place = dom.pickerTitle(dialog);
+    if (place) {
+      if (place.title.nextElementSibling !== bar)
+        place.title.insertAdjacentElement("afterend", bar);
+    } else if (!bar.isConnected) dom.pickerCard(dialog).prepend(bar);
     const label = targetCode ? escapeHtml(dom.itemLabel(targetCode)) : "";
     const item = !target
       ? ""
@@ -267,10 +272,10 @@ export function createEquipment({
     const counts = Object.fromEntries(
       SOURCE_ORDER.map((s) => [
         s,
-        (held || []).filter((p) => p.source === s).length,
+        (Array.isArray(held) ? held : []).filter((p) => p.source === s).length,
       ]),
     );
-    const filter = held
+    const filter = Array.isArray(held)
       ? `<span class="lens-srcs" role="group" aria-label="How you got it">${[
           ["all", "All", held.length],
           ...SOURCE_ORDER.map((s) => [
@@ -287,7 +292,9 @@ export function createEquipment({
           .join("")}</span>`
       : held === false
         ? `<span class="lens-muted">sources need your history: turn on Craft in settings</span>`
-        : `<span class="lens-muted">reading your history…</span>`;
+        : held === "stale"
+          ? `<span class="lens-notice">reload WarEra Plus in the browser's extensions page: its background is older than this page</span>`
+          : `<span class="lens-muted">reading your history…</span>`;
     setHtml(
       bar,
       `${item ? `<div class="lens-pick-item">${item}</div>` : ""}${filter}`,
@@ -650,7 +657,11 @@ export function createEquipment({
       picker(
         code,
         s.picker,
-        state.craftsUserId ? (state.ledger?.heldPieces ?? null) : false,
+        !state.craftsUserId
+          ? false
+          : !state.ledger
+            ? null
+            : (state.ledger.heldPieces ?? "stale"), // a view without them comes from an older worker
       );
     else removePicker();
     const summary = summarizeOffers(valuations);

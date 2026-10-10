@@ -16,12 +16,15 @@ const tile = (alt, numbers) =>
         : `<div>${n}</div>`,
     )
     .join("")}</div></div></div>`;
-const PICKER = `<main></main><div role="dialog"><div class="card"><div>Items</div><div>0/5</div><div data-index="0">${[
+// As the live DOM nests it: the dialog holds a full-screen backdrop first,
+// then a wrapper with the card; the card holds the title, then a scrolling
+// body (the counter, the game's filters, the rows), then CLOSE.
+const PICKER = `<main></main><div role="dialog"><div class="backdrop"></div><div class="wrapper"><div class="card"><div class="x"><button aria-label="close"></button></div><div class="title"><span>Items</span></div><div class="body"><div class="scroller"><div class="content"><div>0/5<button>Clear</button></div><div class="filters"><button>All 4</button></div><div data-index="0">${[
   tile("winterJet", [270, "50%", "100%"]),
   tile("winterGun", [59, "10%", "100%"]),
   tile("winterGun", [59, "10%", "100%"]),
   tile("dieselChest", [70, "100%"]),
-].join("")}</div><button>Close</button></div></div>`;
+].join("")}</div></div></div><button>Close</button></div></div></div></div>`;
 
 const held = [
   {
@@ -124,6 +127,23 @@ describe("the inventory picker", () => {
     ]);
     document.querySelector('[data-picker-source="all"]').click();
     expect(cells().every((c) => c.dataset.ssPick === "show")).toBe(true);
+  });
+  it("puts its bar in the card under the title, not in the full-screen backdrop", () => {
+    equipment.render(state);
+    const bar = document.querySelector(".ss-pick-bar");
+    expect(bar.closest(".backdrop")).toBeNull();
+    expect(bar.parentElement.className).toBe("card");
+    expect(bar.previousElementSibling.className).toBe("title");
+    // a second render keeps the one bar where it is
+    equipment.render(state);
+    expect(document.querySelectorAll(".ss-pick-bar")).toHaveLength(1);
+  });
+  it("asks for an extension reload when the page's code is newer than the worker's", () => {
+    state.ledger = { windows: {} }; // a view without heldPieces: a worker from before 3.2
+    equipment.render(state);
+    expect(document.querySelector(".ss-pick-bar").textContent).toContain(
+      "reload WarEra Plus",
+    );
   });
   it("says what is missing when no history can be read, instead of waiting for ever", () => {
     state.craftsUserId = null;

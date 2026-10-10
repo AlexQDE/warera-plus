@@ -4,6 +4,11 @@ Read-only decision support inside [WarEra](https://app.warera.io): what an offer
 
 The extension compares offers and estimates. It never buys, crafts, lists, opens a case or travels for you. It uses your own API key and has no runtime dependencies or build step.
 
+## What changed in 3.2.2
+
+- **The picker's bar sits in the picker.** The v0.27 dialog opens with a full-screen backdrop as its first child; the bar went there (the top of the page) and looked missing. It now goes under the card's title and stays in view while the list scrolls.
+- **A worker older than the page says so.** When the page's code is newer than the extension's background (the page reloaded, the extension not), the picker asks for an extension reload instead of "reading your history…" for ever.
+
 ## What changed in 3.2.1
 
 - **SNIPE asks for 3% at least.** The default minimum scrap ROI is 3% instead of 0%, so a one-cent margin no longer earns the tag. A 0 saved by an earlier version was the old default written with every save, so it becomes 3% once; a value you set yourself (in the settings, any time) is kept, 0 included.

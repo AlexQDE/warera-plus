@@ -480,6 +480,30 @@ export function pickerCard(dialog) {
 }
 
 /**
+ * Where the extension's bar goes in the picker: right after the card's title
+ * ("Items"), so it stays in view while the list scrolls. The v0.27 dialog's
+ * first child is a full-screen backdrop, so the card is found from a tile
+ * upwards: the first ancestor with a child that is only the title. null when
+ * there is none (the caller falls back to pickerCard).
+ * @param {Element} dialog
+ * @returns {{ card: Element, title: Element } | null}
+ */
+export function pickerTitle(dialog) {
+  const img = [...dialog.querySelectorAll("img")].find((i) =>
+    isItemImageAlt(i.getAttribute("alt")),
+  );
+  for (let n = img?.parentElement; n && n !== dialog; n = n.parentElement) {
+    const title = [...n.children].find(
+      (c) =>
+        !c.classList.contains("ss-pick-bar") &&
+        /^\s*items?\s*$/i.test(c.textContent ?? ""),
+    );
+    if (title) return { card: n, title };
+  }
+  return null;
+}
+
+/**
  * Show, hide, or leave alone one picker tile for the market's target item.
  * A tile the page could not describe (unknown skin name, off-palette border)
  * is never hidden: 'unknown'.
