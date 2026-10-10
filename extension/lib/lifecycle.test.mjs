@@ -437,6 +437,15 @@ describe("SPA lifecycle and DOM work", () => {
       runtime.sendMessage.mock.calls.some(([m]) => m.type === "ledger"),
     ).toBe(true);
     expect(document.querySelector(".ss-src-badge")).not.toBeNull();
+    // a filter picked here stays picked through the scans that follow the click
+    document.querySelector('[data-picker-source="crafted"]').click();
+    await settle(6000);
+    expect(
+      document
+        .querySelector('[data-picker-source="crafted"]')
+        ?.getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(document.querySelectorAll(".ss-pick-bar")).toHaveLength(1);
   });
   it("suggests a price in the sell form from the sales of the picked piece's stats, and Use fills the game's input", async () => {
     window.history.replaceState({}, "", "/market/equipments");

@@ -374,7 +374,7 @@ export function createEquipment({
     grid = null;
     listRoot = null;
     openDetails.clear();
-    removePicker();
+    // the picker is not the market's: it opens on any page and removes itself when its dialog closes
     last = { hits: 0, flips: 0, scanned: 0, readable: 0, code: null };
   }
   /** One offer's identity across re-renders of the same list: item, price and its own numbers (a duplicate listing gets its ordinal). */

@@ -749,6 +749,7 @@ export async function startLens(runtime = chrome.runtime) {
     observer.disconnect();
     removeBar();
     dialogs.dispose();
+    equipment.picker(null, false);
     document.getElementById("scrap-sniper-cases")?.remove();
     for (const el of document.querySelectorAll(".ss-trip")) el.remove();
     document.removeEventListener("visibilitychange", visible);

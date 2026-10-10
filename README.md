@@ -4,6 +4,10 @@ Read-only decision support inside [WarEra](https://app.warera.io): what an offer
 
 The extension compares offers and estimates. It never buys, crafts, lists, opens a case or travels for you. It uses your own API key and has no runtime dependencies or build step.
 
+## What changed in 3.3.2
+
+- **The picker's filter holds off the market.** On the inventory (Quick dismantle) every scan cleared the market's state, the picker's with it, so a filter clicked there fell back to All a moment later. The picker now removes itself only when its window closes.
+
 ## What changed in 3.3.1
 
 - **The craft window follows the slot you pick.** Pick boots (or any slot) instead of the random "?": the head turns to "Craft boots cost → worth · gain (pct)", the chosen-slot recipe (twice the steel) at the market asks against that slot's value; the random craft stays in the tooltip for comparison. Back on "?" it is the random craft again. The pick is read off the game's button (CRAFT RANDOM or CRAFT) and the one slot tile the game marks (read live 2026-10-10).
