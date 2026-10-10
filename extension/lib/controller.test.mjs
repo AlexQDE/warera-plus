@@ -69,6 +69,26 @@ function setup(fetchImpl = vi.fn(async () => response()), initial = {}) {
 }
 
 describe("background controller", () => {
+  it("lifts a stored SNIPE threshold of 0 from an older schema to the 3% default, but keeps a 0 the player saves", async () => {
+    const { controller } = setup(undefined, {
+      settings: { apiKey: "test-only-key", minMarginPct: 0, schemaVersion: 4 },
+    });
+    const read = async () =>
+      (await controller.handle({ type: "getSettings" })).settings.minMarginPct;
+    expect(await read()).toBe(3);
+    // the settings page saving 0 is a choice, even over the old schema
+    await controller.handle(
+      { type: "saveSettings", settings: { minMarginPct: 0 } },
+      { trusted: true },
+    );
+    expect(await read()).toBe(0);
+    // and it stays one through a page save (a tab, the Eco / War switch)
+    await controller.handle({
+      type: "saveSettings",
+      settings: { panel: "ledger" },
+    });
+    expect(await read()).toBe(0);
+  });
   it("never exposes a key or accepts a content-script key write", async () => {
     const { controller, storage } = setup();
     expect(
@@ -80,7 +100,7 @@ describe("background controller", () => {
     });
     expect(storage.data.settings.apiKey).toBe("test-only-key");
     expect(storage.data.settings.intervalSec).toBe(10);
-    expect(storage.data.settings.minMarginPct).toBe(0);
+    expect(storage.data.settings.minMarginPct).toBe(3); // not a number: the default
     expect(
       (await controller.handle({ type: "getSettings" }, { trusted: true }))
         .apiKey,

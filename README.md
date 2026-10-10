@@ -4,6 +4,10 @@ Read-only decision support inside [WarEra](https://app.warera.io): what an offer
 
 The extension compares offers and estimates. It never buys, crafts, lists, opens a case or travels for you. It uses your own API key and has no runtime dependencies or build step.
 
+## What changed in 3.2.1
+
+- **SNIPE asks for 3% at least.** The default minimum scrap ROI is 3% instead of 0%, so a one-cent margin no longer earns the tag. A 0 saved by an earlier version was the old default written with every save, so it becomes 3% once; a value you set yourself (in the settings, any time) is kept, 0 included.
+
 ## What changed in 3.2.0
 
 - **Your own items in the sell picker.** The game's inventory picker ("+ NEW ITEM OFFER", a slot) marks every tile with how you got it, by your history: ⚒ crafted, ↓ bought, ▣ from a case, ✦ looted, ? not in your history; hover for the day, the cost and what it sells for. A filter above the tiles (All · Crafted · Bought · Case · Loot) dims the rest; the market's selected item is a second filter you can lift. The picker is a virtual list, so tiles are dimmed, never removed. The 3.0 picker filter did not recognise the v0.27 picker; it does again.

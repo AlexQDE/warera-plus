@@ -11,7 +11,7 @@ import {
 } from "./api.mjs";
 import { CASE_CODES, WOODEN_CODES, ALL_GEAR_CODES } from "./cases.mjs";
 import { makeSingleFlight } from "./flight.mjs";
-import { preferences } from "./settings.mjs";
+import { preferences, DEFAULTS } from "./settings.mjs";
 import { CACHE_VERSION, TTL, freshness } from "./quality.mjs";
 import { replayHistory, windowView, localDayOf, memoDay } from "./observed.mjs";
 import { similarValue, WINDOW_HOURS } from "./similar.mjs";
@@ -245,7 +245,14 @@ export function createController({
         (savesKey &&
           rejectedAuthRevision === (Number(settings.authRevision) || 0));
       const next = {
-        ...preferences({ ...settings, ...patch }),
+        // a threshold in the patch is the player's choice: read it under the current schema
+        ...preferences({
+          ...settings,
+          ...patch,
+          ...(Object.hasOwn(patch, "minMarginPct")
+            ? { schemaVersion: DEFAULTS.schemaVersion }
+            : {}),
+        }),
         revision: (Number(settings.revision) || 0) + 1,
         authRevision:
           (Number(settings.authRevision) || 0) + (resetsAuth ? 1 : 0),

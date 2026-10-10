@@ -2,9 +2,27 @@ import { describe, it, expect } from "vitest";
 import { DEFAULTS, SELL_FROM, PANELS, preferences } from "./settings.mjs";
 
 describe("preferences", () => {
+  it("asks SNIPE for 3% at least by default, and lifts the old default of 0 once, never a chosen value", () => {
+    expect(preferences({}).minMarginPct).toBe(3);
+    // 0 stored by 3.2 and earlier was the default every save wrote, not a choice
+    expect(
+      preferences({ minMarginPct: 0, schemaVersion: 4 }).minMarginPct,
+    ).toBe(3);
+    expect(
+      preferences({ minMarginPct: 7, schemaVersion: 4 }).minMarginPct,
+    ).toBe(7);
+    expect(
+      preferences({ minMarginPct: -5, schemaVersion: 4 }).minMarginPct,
+    ).toBe(-5);
+    // 0 saved under the new schema is the player's choice
+    expect(
+      preferences({ minMarginPct: 0, schemaVersion: 5 }).minMarginPct,
+    ).toBe(0);
+    expect(preferences({}).schemaVersion).toBe(5);
+  });
   it("defaults to the bar alone, both market modules on, no player id set", () => {
     expect(preferences({})).toMatchObject({
-      minMarginPct: 0,
+      minMarginPct: 3,
       flipPct: 10,
       intervalSec: 30,
       panel: "none",

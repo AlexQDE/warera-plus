@@ -16,8 +16,8 @@ export const SELL_FROM = Object.freeze([
 /** The one section open under the bar on the equipment market; "none" is the bar alone. */
 export const PANELS = Object.freeze(["none", "market", "craft", "ledger"]);
 export const DEFAULTS = Object.freeze({
-  /** SNIPE needs at least this ROI on the scrap value (a negative threshold shows near misses). */
-  minMarginPct: 0,
+  /** SNIPE needs at least this ROI on the scrap value (a negative threshold shows near misses); 3% keeps a one-cent margin from shouting. */
+  minMarginPct: 3,
   /** FLIP needs the value (same-roll fills, else the game's average) at least this far above the price. */
   flipPct: 10,
   intervalSec: 30,
@@ -37,8 +37,10 @@ export const DEFAULTS = Object.freeze({
   craftSteelMode: /** @type {"random" | "chosen"} */ ("random"),
   /** "eco" leaves gear worn in battle out of the ledger's results; "war" counts it (contracts, bounties). */
   ledgerMode: /** @type {"eco" | "war"} */ ("eco"),
-  schemaVersion: 4,
+  schemaVersion: 5,
 });
+/** Settings saved before this schema wrote the old SNIPE default (0) with every save: it was not a choice. */
+const OLD_MIN_MARGIN_SCHEMA = 5;
 /** @param {unknown} value @param {number} min @param {number} max @param {number} fallback */
 const clamp = (value, min, max, fallback) =>
   value !== "" && value !== null && Number.isFinite(Number(value))
@@ -53,9 +55,14 @@ const flag = (value, fallback) =>
 export function preferences(input = {}) {
   if (!input || typeof input !== "object" || Array.isArray(input)) input = {};
   const panel = String(input.panel ?? "");
+  const oldDefault =
+    (Number(input.schemaVersion) || 0) < OLD_MIN_MARGIN_SCHEMA &&
+    Number(input.minMarginPct) === 0;
   return {
     ...DEFAULTS,
-    minMarginPct: clamp(input.minMarginPct, -50, 500, DEFAULTS.minMarginPct),
+    minMarginPct: oldDefault
+      ? DEFAULTS.minMarginPct
+      : clamp(input.minMarginPct, -50, 500, DEFAULTS.minMarginPct),
     flipPct: clamp(input.flipPct, -50, 500, DEFAULTS.flipPct),
     intervalSec: clamp(input.intervalSec, 10, 600, DEFAULTS.intervalSec),
     panel: /** @type {"none" | "market" | "craft" | "ledger"} */ (
