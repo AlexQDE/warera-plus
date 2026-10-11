@@ -579,6 +579,10 @@
 [data-lens] .lens-srcs small {
   margin-left: 2px;
 }
+/* the game's list while it is read by scrolling: hidden, so its rows never fly past */
+[data-ss-reading] {
+  visibility: hidden !important;
+}
 /* the picker's list by stats: a weapon's crit groups, attack from the highest along each line */
 [data-lens] .lens-sort {
   display: grid;
@@ -588,6 +592,16 @@
 }
 [data-lens] .lens-sort-head {
   color: #9fb3c8;
+}
+[data-lens] .lens-sort > [data-sort-toggle] {
+  justify-self: start;
+}
+/* a long list scrolls inside itself and leaves the game's list its room */
+[data-lens] .lens-sort-list {
+  display: grid;
+  gap: 3px;
+  max-height: 132px;
+  overflow-y: auto;
 }
 [data-lens] .lens-sort-codes,
 [data-lens] .lens-sort-g {

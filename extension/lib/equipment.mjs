@@ -166,11 +166,13 @@ export function createEquipment({
   let sortNote = ""; // what the last click in the list did
   let sortClicked = new Set(); // the places ("row:col") our list clicked in this list
   let sortPicking = false; // a click of ours is on its way
+  let sortOpen = false; // the list is shown (and the game's list read) only when asked, each opening
   const removePicker = () => {
     sortScan = null;
     sortCode = null;
     sortNote = "";
     sortClicked = new Set();
+    sortOpen = false;
     document.querySelector(".ss-pick-bar")?.remove();
     for (const el of document.querySelectorAll(".ss-src-badge")) el.remove();
     for (const el of document.querySelectorAll(
@@ -345,10 +347,18 @@ export function createEquipment({
     rescan();
   }
   const unitOf = (k) => (PERCENT.has(k) ? "%" : "");
-  /** The pieces of one item in the list, by crit then attack (a weapon) or by its one stat, valued, the market filter's pass marked. */
+  /** The list by stats: one button until asked (opening the window reads nothing), then the list under it. */
   function sortHtml(targetCode, index) {
-    if (!sortScan)
-      return `<div class="lens-sort lens-muted">⇅ reading the list…</div>`;
+    const label =
+      targetCode && !WEAPONS.includes(targetCode) ? "⇅ by stat" : "⇅ by crit";
+    const toggle = `<button type="button" data-sort-toggle aria-pressed="${sortOpen}" title="${sortOpen ? "close the list" : "your pieces of this item by crit, then attack (a piece of one stat by that stat); reads the game's list once"}">${label}</button>`;
+    return sortOpen
+      ? `<div class="lens-sort" data-open>${toggle}${sortBody(targetCode, index)}</div>`
+      : `<div class="lens-sort">${toggle}</div>`;
+  }
+  /** The pieces of one item in the list, by crit then attack (a weapon) or by its one stat, valued, the market filter's pass marked. */
+  function sortBody(targetCode, index) {
+    if (!sortScan) return `<span class="lens-muted">reading the list…</span>`;
     const counts = new Map();
     for (const e of sortScan.entries)
       if (statOrder(e.code).length)
@@ -367,7 +377,7 @@ export function createEquipment({
             : null;
     if (!code)
       return targetCode
-        ? `<div class="lens-sort lens-muted">⇅ no ${escapeHtml(dom.itemLabel(targetCode))} in this list</div>`
+        ? `<span class="lens-muted">no ${escapeHtml(dom.itemLabel(targetCode))} in this list</span>`
         : "";
     const chips = targetCode
       ? ""
@@ -407,7 +417,7 @@ export function createEquipment({
       })
       .join("");
     const head = [
-      `⇅ ${escapeHtml(dom.itemLabel(code))}`,
+      escapeHtml(dom.itemLabel(code)),
       keys.map((k) => STAT_SHORT[k] ?? k).join(", then "),
       filtered
         ? `filter ${Object.entries(filter)
@@ -419,7 +429,7 @@ export function createEquipment({
     ]
       .filter(Boolean)
       .join(" · ");
-    return `<div class="lens-sort">${chips}<div class="lens-sort-head">${head}</div>${lines}</div>`;
+    return `${chips}<div class="lens-sort-head">${head}</div><div class="lens-sort-list">${lines}</div>`;
   }
   /**
    * The inventory picker: every tile marked with how its piece came (by the
@@ -441,8 +451,8 @@ export function createEquipment({
       pickerTarget = targetCode;
       pickerShowAll = false;
     }
-    // the whole list is read once per opening, and again when it changes (a filter of the game's, a piece gone)
-    if (!sortBusy) {
+    // the whole list is read when the list by stats is asked for, and again when it changes (a filter of the game's, a piece gone)
+    if (sortOpen && !sortBusy) {
       const shape = listShape(dialog);
       if (
         !sortScan ||
@@ -504,13 +514,16 @@ export function createEquipment({
         const toggle = e.target.closest("[data-picker-toggle]");
         const source = e.target.closest("[data-picker-source]");
         const sortCodeBtn = e.target.closest("[data-sort-code]");
+        const sortToggle = e.target.closest("[data-sort-toggle]");
         const sortPick = e.target.closest("[data-sort-pick]");
-        if (!toggle && !source && !sortCodeBtn && !sortPick) return;
+        if (!toggle && !source && !sortCodeBtn && !sortPick && !sortToggle)
+          return;
         e.preventDefault();
         e.stopPropagation();
         if (toggle) pickerShowAll = !pickerShowAll;
         if (source) pickerSource = source.dataset.pickerSource;
         if (sortCodeBtn) sortCode = sortCodeBtn.dataset.sortCode;
+        if (sortToggle) sortOpen = !sortOpen;
         if (sortPick) void pickEntry(sortPick.dataset.sortPick);
         picker(pickerTarget, true);
       });

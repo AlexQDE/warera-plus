@@ -258,9 +258,28 @@ describe("the list by stats", () => {
   const words = () => sort().textContent.replace(/\s+/g, " ");
   const open = async (code) => {
     equipment.picker(code, true, held, ctx);
+    sort().querySelector("[data-sort-toggle]").click();
     await vi.waitFor(() => expect(rescan).toHaveBeenCalled());
     equipment.picker(code, true, held, ctx);
   };
+
+  it("reads nothing and lists nothing until asked: opening the window stays still", async () => {
+    document.body.innerHTML = LIST();
+    equipment.picker("sniper", true, held, ctx);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(rescan).not.toHaveBeenCalled(); // no read of the list
+    expect(sort().querySelector("[data-sort-pick]")).toBeNull();
+    const toggle = sort().querySelector("[data-sort-toggle]");
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    expect(toggle.textContent).toContain("by crit");
+    toggle.click();
+    await vi.waitFor(() => expect(rescan).toHaveBeenCalled());
+    equipment.picker("sniper", true, held, ctx);
+    expect(sort().querySelectorAll("[data-sort-pick]").length).toBe(6);
+    // the same button closes it again
+    sort().querySelector("[data-sort-toggle]").click();
+    expect(sort().querySelector("[data-sort-pick]")).toBeNull();
+  });
 
   it("lists the market's item by crit, then attack, from the highest, valued, with what the market's filter lets through", async () => {
     document.body.innerHTML = LIST(

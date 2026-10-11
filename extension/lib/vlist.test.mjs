@@ -17,11 +17,13 @@ function fakeList(items, { perRow = 8, rowHeight = 105, viewport = 300 } = {}) {
   const scroller = dialog.querySelector(".scroller");
   const content = dialog.querySelector(".content");
   let top = 0;
+  let scrolls = 0; // how often the list was scrolled
   Object.defineProperty(scroller, "clientHeight", { value: viewport });
   Object.defineProperty(scroller, "scrollHeight", { value: rows * rowHeight });
   Object.defineProperty(scroller, "scrollTop", {
     get: () => top,
     set: (v) => {
+      scrolls++;
       top = Math.max(0, Math.min(v, rows * rowHeight - viewport));
     },
   });
@@ -61,6 +63,7 @@ function fakeList(items, { perRow = 8, rowHeight = 105, viewport = 300 } = {}) {
     scroller,
     selected,
     rendered: () => content.children.length,
+    scrolls: () => scrolls,
   };
 }
 // what a row holds, column by column: here the tile's text is its item
@@ -76,6 +79,30 @@ afterEach(() => {
 });
 
 describe("the game's virtual list", () => {
+  it("hides the list while it scrolls through it, so the rows do not fly past", async () => {
+    const items = Array.from({ length: 70 }, (_, i) => `piece ${i}`);
+    const list = fakeList(items);
+    const seen = [];
+    const scan = await scanList(list.dialog, readRow, {
+      wait: async () => {
+        seen.push(list.scroller.hasAttribute("data-ss-reading"));
+      },
+    });
+    expect(scan.complete).toBe(true);
+    expect(seen.length).toBeGreaterThan(1);
+    expect(seen.every(Boolean)).toBe(true);
+    expect(list.scroller.hasAttribute("data-ss-reading")).toBe(false);
+  });
+  it("does not scroll at all when every row is already in view", async () => {
+    // the game's own filter leaves two rows, both drawn
+    const items = Array.from({ length: 12 }, (_, i) => `piece ${i}`);
+    const list = fakeList(items, { viewport: 150 });
+    expect(list.rendered()).toBe(2);
+    const scan = await scanList(list.dialog, readRow, { wait: instant });
+    expect(scan.complete).toBe(true);
+    expect(scan.entries).toHaveLength(12);
+    expect(list.scrolls()).toBe(0);
+  });
   it("reads every row by scrolling through the list, then puts the scroll back", async () => {
     const items = Array.from({ length: 70 }, (_, i) => `piece ${i}`);
     const list = fakeList(items);

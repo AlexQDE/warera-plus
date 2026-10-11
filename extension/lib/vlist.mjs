@@ -64,9 +64,30 @@ function scrollTo(scroller, top) {
 }
 
 /**
+ * Every row is drawn now: they run from the first without a gap and the last
+ * one reaches the bottom of the rows' box (a list the game's own filter cut
+ * short).
+ * @param {Element} dialog
+ */
+function allInView(dialog) {
+  const rows = listRows(dialog);
+  if (!rows.length) return true;
+  const idx = rows.map((r) => Number(r.dataset.index)).sort((a, b) => a - b);
+  if (idx.some((v, i) => v !== i)) return false;
+  const height = parseFloat(rows[0].parentElement?.style.height ?? "");
+  const last = rows.find((r) => Number(r.dataset.index) === idx.at(-1));
+  const y = last ? translateY(last) : null;
+  return (
+    Number.isFinite(height) && y != null && y + rowHeight(dialog) >= height - 2
+  );
+}
+
+/**
  * Every piece in the list, column by column, row by row: `readRow` tells what
  * a row's tiles are ([{ tile, ...what it reads }]); each entry gets its `row`
  * and `col`. `complete` when every row from the first to the last was seen.
+ * When rows are missing the list is scrolled through hidden (`data-ss-reading`,
+ * content.css), so its rows never fly past, and put back before it shows again.
  * @template {{ tile: Element }} T
  * @param {Element} dialog @param {(row: HTMLElement) => T[]} readRow
  * @param {{ wait?: () => Promise<unknown> }} [options]
@@ -86,19 +107,24 @@ export async function scanList(
   };
   take();
   const scroller = listScroller(dialog);
-  if (scroller) {
+  if (scroller && !allInView(dialog)) {
     const start = scroller.scrollTop;
     const h = rowHeight(dialog);
     const step = Math.max(h, scroller.clientHeight - h);
     const end = scroller.scrollHeight - scroller.clientHeight;
-    for (let top = 0, n = 0; n < 500; top += step, n++) {
-      scrollTo(scroller, Math.min(top, end));
+    scroller.setAttribute("data-ss-reading", "");
+    try {
+      for (let top = 0, n = 0; n < 500; top += step, n++) {
+        scrollTo(scroller, Math.min(top, end));
+        await wait();
+        take();
+        if (top >= end) break;
+      }
+      scrollTo(scroller, start);
       await wait();
-      take();
-      if (top >= end) break;
+    } finally {
+      scroller.removeAttribute("data-ss-reading");
     }
-    scrollTo(scroller, start);
-    await wait();
   }
   const rows = [...byRow.keys()].sort((a, b) => a - b);
   return {
