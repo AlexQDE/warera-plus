@@ -658,6 +658,7 @@ export async function startLens(runtime = chrome.runtime) {
               // without a key no sales come: the price rests on the asks and the game's estimate
               return {
                 code: it.code,
+                noKey: !state.hasKey,
                 s:
                   sales || !state.hasKey
                     ? suggestPrice({

@@ -113,6 +113,27 @@ describe("the sell form", () => {
     expect(text).toContain("534.998 under better stats");
     expect(text).toContain("better ask 535 · 46 min");
   });
+  it("says the sales need the API key when there is none to read them with", () => {
+    const div = document.createElement("div");
+    div.innerHTML = sellHintHtml([
+      {
+        code: "boots5",
+        noKey: true,
+        s: {
+          price: 190,
+          why: "the game's estimate",
+          sold: { value: null, n: 0, level: null, hours: null, label: "" },
+          floor: null,
+          trend: null,
+          rising: false,
+          clamped: false,
+        },
+      },
+    ]);
+    const text = div.textContent.replace(/\s+/g, " ");
+    expect(text).toContain("190 the game's estimate");
+    expect(text).toContain("sales need your API key");
+  });
   it("says to list apart when the picked pieces are worth very different prices", () => {
     const one = (code, price) => ({
       code,

@@ -100,7 +100,8 @@ const priceText = (/** @type {number} */ v) =>
  * suggestPrice). One piece: its price, why, and what it rests on. Several:
  * one price for all when they are close (the lowest), else each piece's
  * price and no Use, since one price would sell the dearer ones cheap.
- * @param {Array<{ code: string, s: ReturnType<typeof import("./pricing.mjs").suggestPrice> }>} picks
+ * `noKey`: no API key to read sales with, so the price rests on the asks.
+ * @param {Array<{ code: string, noKey?: boolean, s: ReturnType<typeof import("./pricing.mjs").suggestPrice> }>} picks
  */
 export function sellHintHtml(picks) {
   const priced = picks.filter((p) => p.s?.price != null);
@@ -119,7 +120,9 @@ export function sellHintHtml(picks) {
     ? [
         one.sold.value != null
           ? `sold ${gold(one.sold.value)} · ${esc(one.sold.label)}`
-          : "",
+          : priced[0].noKey
+            ? `<span class="lens-muted">sales need your API key</span>`
+            : "",
         one.floor
           ? `${one.floor.better ? "better ask" : "ask"} ${gold(one.floor.price)} · ${ageWords(one.floor.ageMin)}`
           : "",

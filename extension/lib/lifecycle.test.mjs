@@ -512,6 +512,7 @@ describe("SPA lifecycle and DOM work", () => {
     const hint = document.querySelector(".ss-sell");
     expect(hint?.textContent).toContain("190");
     expect(hint.querySelector("[data-sell-use]")).not.toBeNull();
+    expect(hint.textContent).toContain("sales need your API key");
     form.remove();
     // the picker's sources rest on the history, which needs the key
     const win = document.createElement("div");
