@@ -21,7 +21,7 @@ import {
   sortGroups,
   meetsFilter,
 } from "./picker.mjs";
-import { scanList, clickEntry, listRows } from "./vlist.mjs";
+import { scanList, clickEntry, listRows, selectionCount } from "./vlist.mjs";
 import { WEAPONS } from "./items.mjs";
 import { ageMinutes } from "./pricing.mjs";
 import { salesStats } from "./sales.mjs";
@@ -164,10 +164,13 @@ export function createEquipment({
   let sortBusy = false;
   let sortCode = null; // the item picked in the list when the market names none
   let sortNote = ""; // what the last click in the list did
+  let sortClicked = new Set(); // the places ("row:col") our list clicked in this list
+  let sortPicking = false; // a click of ours is on its way
   const removePicker = () => {
     sortScan = null;
     sortCode = null;
     sortNote = "";
+    sortClicked = new Set();
     document.querySelector(".ss-pick-bar")?.remove();
     for (const el of document.querySelectorAll(".ss-src-badge")) el.remove();
     for (const el of document.querySelectorAll(
@@ -289,6 +292,7 @@ export function createEquipment({
       const { height } = listShape(dialog);
       const r = await scanList(dialog, readPickerRow);
       if (dom.pickerDialog() !== dialog) return;
+      sortClicked = new Set();
       sortScan = {
         dialog,
         height,
@@ -310,14 +314,27 @@ export function createEquipment({
   async function pickEntry(id) {
     const dialog = dom.pickerDialog();
     const entry = sortScan?.entries.find((e) => `${e.row}:${e.col}` === id);
-    if (!dialog || !entry) return;
+    if (!dialog || !entry || sortPicking) return; // one click at a time: a second before the first lands could undo it
+    // a window with no counter (Quick dismantle) cannot tell a selected tile: one of ours is never clicked twice there
+    if (!selectionCount(dialog) && sortClicked.has(id)) {
+      sortNote = "already selected";
+      return;
+    }
     const key = pieceKey(entry.code, entry.skills);
-    const r = await clickEntry(
-      dialog,
-      entry,
-      readPickerRow,
-      (x) => keyOfTile(x) === key,
-    );
+    sortPicking = true;
+    sortClicked.add(id);
+    let r;
+    try {
+      r = await clickEntry(
+        dialog,
+        entry,
+        readPickerRow,
+        (x) => keyOfTile(x) === key,
+      );
+    } finally {
+      sortPicking = false;
+    }
+    if (r === "missing") sortClicked.delete(id);
     sortNote =
       r === "selected"
         ? "selected"
@@ -386,9 +403,7 @@ export function createEquipment({
     };
     const lines = sortGroups(code, pieces)
       .map((g) => {
-        const shown = g.pieces.slice(0, 12);
-        const more = g.pieces.length - shown.length;
-        return `<div class="lens-sort-g">${g.value != null ? `<b>${g.value}${unitOf(keys[0])}</b>` : ""}${shown.map(button).join("")}${more > 0 ? `<small>+${more}</small>` : ""}</div>`;
+        return `<div class="lens-sort-g">${g.value != null ? `<b>${g.value}${unitOf(keys[0])}</b>` : ""}${g.pieces.map(button).join("")}</div>`;
       })
       .join("");
     const head = [

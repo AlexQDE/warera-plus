@@ -248,7 +248,8 @@ describe("the list by stats", () => {
         picks.push(i);
         if (chosen.has(i)) chosen.delete(i);
         else chosen.add(i);
-        count.firstChild.nodeValue = `${chosen.size}/5`;
+        if (/^\d+\/5$/.test(count.firstChild.nodeValue))
+          count.firstChild.nodeValue = `${chosen.size}/5`;
       }),
     );
     return { picks, chosen };
@@ -282,6 +283,7 @@ describe("the list by stats", () => {
     await open("sniper");
     sort().querySelector('[data-sort-pick="0:2"]').click(); // attack 121, crit 20
     await vi.waitFor(() => expect(picks).toEqual([2]));
+    await new Promise((r) => setTimeout(r, 300)); // the first click has landed
     expect([...chosen]).toEqual([2]);
     // clicked again: it stays selected
     sort().querySelector('[data-sort-pick="0:2"]').click();
@@ -299,5 +301,33 @@ describe("the list by stats", () => {
     sort().querySelector('[data-sort-code="jet"]').click();
     expect(words()).toMatch(/50%.*270/);
     expect(words()).not.toMatch(/130/);
+  });
+  it("lists every piece of a crit, however many, each one clickable", async () => {
+    const many = Array.from({ length: 20 }, (_, i) =>
+      tile("sniper", [130 - i, "20%", "100%"]),
+    ).join("");
+    document.body.innerHTML = LIST().replace(
+      '<div data-index="0">',
+      `<div data-index="0">${many}`,
+    );
+    await open("sniper");
+    const crit20 = sort().querySelector(".lens-sort-g");
+    expect(crit20.querySelectorAll("[data-sort-pick]").length).toBe(23); // the 20 added and three of the six
+    expect(crit20.textContent).not.toMatch(/\+\d/);
+  });
+  it("never clicks a piece twice in a window that prints no counter, so it is not unselected", async () => {
+    document.body.innerHTML = LIST("", "Quick dismantle").replace(
+      "0/5",
+      "Equipped items are left out of select all.",
+    );
+    const { picks } = listen();
+    await open(null);
+    sort().querySelector('[data-sort-pick="0:2"]').click();
+    await vi.waitFor(() => expect(picks).toEqual([2]));
+    await new Promise((r) => setTimeout(r, 300)); // the first click has landed
+    sort().querySelector('[data-sort-pick="0:2"]').click();
+    await new Promise((r) => setTimeout(r, 300));
+    expect(picks).toEqual([2]);
+    expect(words()).toContain("already selected");
   });
 });
