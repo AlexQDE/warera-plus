@@ -16,7 +16,13 @@ import {
   tileCode,
   heldIndex,
   tileSource,
+  pieceKey,
+  statOrder,
+  sortGroups,
+  meetsFilter,
 } from "./picker.mjs";
+import { scanList, clickEntry, listRows } from "./vlist.mjs";
+import { WEAPONS } from "./items.mjs";
 import { ageMinutes } from "./pricing.mjs";
 import { salesStats } from "./sales.mjs";
 import { readStats, codeFor, summarizeOffers, statRanks } from "./offers.mjs";
@@ -27,6 +33,8 @@ import {
   listedPeers,
   spanWords,
   WINDOW_HOURS,
+  STAT_SHORT,
+  PERCENT,
 } from "./similar.mjs";
 
 /**
@@ -151,7 +159,15 @@ export function createEquipment({
   let pickerSource = "all"; // the picker's source filter: all, crafted, bought, opened or looted
   let pickerHeld = null; // the pieces the player holds by their history, for the picker's marks
   let lastAsks = []; // the asks of the last scan: code, price, stats, age
+  // The picker's list by stats: the game's whole list, read by scrolling it (vlist.mjs) and read again when it changes.
+  let sortScan = null; // { dialog, height, row0, entries: [{ row, col, code, skills, durability }], complete }
+  let sortBusy = false;
+  let sortCode = null; // the item picked in the list when the market names none
+  let sortNote = ""; // what the last click in the list did
   const removePicker = () => {
+    sortScan = null;
+    sortCode = null;
+    sortNote = "";
     document.querySelector(".ss-pick-bar")?.remove();
     for (const el of document.querySelectorAll(".ss-src-badge")) el.remove();
     for (const el of document.querySelectorAll(
@@ -172,7 +188,7 @@ export function createEquipment({
     opened: "case",
     looted: "loot",
   };
-  let pickerCtx = { bids: null, flipPct: DEFAULTS.flipPct }; // the scrap bids and FLIP threshold the picker judges with
+  let pickerCtx = { bids: null, flipPct: DEFAULTS.flipPct, avg: null }; // the scrap bids, FLIP threshold and the game's averages the picker judges with
   /** Bought, and now sells at least the FLIP threshold above what was paid. */
   const flipOf = (p) =>
     p.source === "bought" &&
@@ -244,6 +260,152 @@ export function createEquipment({
       scrap,
     };
   }
+  /** A picker row's tiles, column by column: the tile, its item and stats. */
+  const readPickerRow = (row) =>
+    dom.pickerTiles(row, palette).map((t) => {
+      const read = tileStats(tileTokens(t.tile));
+      const code = read ? tileCode(t.slot, read.stats) : null;
+      return {
+        tile: t.tile,
+        code,
+        skills: code && read ? rowSkills(code, read.stats) : null,
+        durability: read?.durability ?? null,
+      };
+    });
+  const keyOfTile = (x) =>
+    x.code && x.skills ? pieceKey(x.code, x.skills) : "?";
+  /** What tells the list changed (the game's filter, a piece gone): the rows' box height and the first row's pieces when it is in view. */
+  function listShape(dialog) {
+    const rows = listRows(dialog);
+    const row0 = rows.find((r) => r.dataset.index === "0");
+    return {
+      height: rows[0]?.parentElement?.style.height ?? "",
+      row0: row0 ? readPickerRow(row0).map(keyOfTile).join(" ") : null,
+    };
+  }
+  async function scanPicker(dialog) {
+    sortBusy = true;
+    try {
+      const { height } = listShape(dialog);
+      const r = await scanList(dialog, readPickerRow);
+      if (dom.pickerDialog() !== dialog) return;
+      sortScan = {
+        dialog,
+        height,
+        row0: r.entries
+          .filter((e) => e.row === 0)
+          .map(keyOfTile)
+          .join(" "),
+        entries: r.entries
+          .filter((e) => e.code && e.skills)
+          .map(({ tile: _tile, ...e }) => e), // the tiles are re-rendered as the list scrolls: keep what they showed
+        complete: r.complete,
+      };
+    } finally {
+      sortBusy = false;
+      rescan();
+    }
+  }
+  /** Select the piece clicked in our list in the game's list: one click on its tile, never a second that unselects it. */
+  async function pickEntry(id) {
+    const dialog = dom.pickerDialog();
+    const entry = sortScan?.entries.find((e) => `${e.row}:${e.col}` === id);
+    if (!dialog || !entry) return;
+    const key = pieceKey(entry.code, entry.skills);
+    const r = await clickEntry(
+      dialog,
+      entry,
+      readPickerRow,
+      (x) => keyOfTile(x) === key,
+    );
+    sortNote =
+      r === "selected"
+        ? "selected"
+        : r === "already"
+          ? "already selected"
+          : "not there now: reading the list again";
+    if (r === "missing") sortScan = null;
+    rescan();
+  }
+  const unitOf = (k) => (PERCENT.has(k) ? "%" : "");
+  /** The pieces of one item in the list, by crit then attack (a weapon) or by its one stat, valued, the market filter's pass marked. */
+  function sortHtml(targetCode, index) {
+    if (!sortScan)
+      return `<div class="lens-sort lens-muted">⇅ reading the list…</div>`;
+    const counts = new Map();
+    for (const e of sortScan.entries)
+      if (statOrder(e.code).length)
+        counts.set(e.code, (counts.get(e.code) ?? 0) + 1);
+    const weapon = (c) => (WEAPONS.includes(c) ? 0 : 1);
+    const codes = [...counts.keys()].sort(
+      (a, b) => weapon(a) - weapon(b) || counts.get(b) - counts.get(a),
+    );
+    const code =
+      targetCode && counts.has(targetCode)
+        ? targetCode
+        : !targetCode && sortCode && counts.has(sortCode)
+          ? sortCode
+          : !targetCode
+            ? codes[0]
+            : null;
+    if (!code)
+      return targetCode
+        ? `<div class="lens-sort lens-muted">⇅ no ${escapeHtml(dom.itemLabel(targetCode))} in this list</div>`
+        : "";
+    const chips = targetCode
+      ? ""
+      : `<span class="lens-sort-codes">${codes
+          .map(
+            (c) =>
+              `<button type="button" data-sort-code="${escapeHtml(c)}" aria-pressed="${c === code}">${escapeHtml(dom.itemLabel(c))} <small>${counts.get(c)}</small></button>`,
+          )
+          .join("")}</span>`;
+    const keys = statOrder(code);
+    const filter = code === targetCode ? dom.statFilter(keys) : {};
+    const filtered = Object.keys(filter).length > 0;
+    const pieces = sortScan.entries.filter((e) => e.code === code);
+    const pass = pieces.filter((e) => meetsFilter(e.skills, filter)).length;
+    const avg = positive(pickerCtx.avg?.[code]);
+    const valueOfPiece = (e) => {
+      const p = index
+        ?.get(pieceKey(e.code, e.skills))
+        ?.find((x) => x.value?.value != null);
+      if (p)
+        return `${p.value.level === "same" ? "~" : "≈"}${gold(p.value.value)}`;
+      return avg != null ? `≈${gold(avg)}` : "";
+    };
+    const statWords = (e) =>
+      keys
+        .map((k) => `${STAT_SHORT[k] ?? k} ${e.skills[k]}${unitOf(k)}`)
+        .join(" · ");
+    const last = /** @type {string} */ (keys.at(-1)); // the stat that varies along a line: a weapon's attack
+    const button = (e) => {
+      const ok = !filtered || meetsFilter(e.skills, filter);
+      const v = valueOfPiece(e);
+      return `<button type="button" data-sort-pick="${e.row}:${e.col}" data-pass="${ok}" title="${escapeHtml(`${statWords(e)}${v ? ` · sells ${v}` : ""} · click: select it`)}">${e.skills[last]}${unitOf(last)}${v ? ` <small>${v}</small>` : ""}</button>`;
+    };
+    const lines = sortGroups(code, pieces)
+      .map((g) => {
+        const shown = g.pieces.slice(0, 12);
+        const more = g.pieces.length - shown.length;
+        return `<div class="lens-sort-g">${g.value != null ? `<b>${g.value}${unitOf(keys[0])}</b>` : ""}${shown.map(button).join("")}${more > 0 ? `<small>+${more}</small>` : ""}</div>`;
+      })
+      .join("");
+    const head = [
+      `⇅ ${escapeHtml(dom.itemLabel(code))}`,
+      keys.map((k) => STAT_SHORT[k] ?? k).join(", then "),
+      filtered
+        ? `filter ${Object.entries(filter)
+            .map(([k, v]) => `${STAT_SHORT[k] ?? k} ≥${v}${unitOf(k)}`)
+            .join(" · ")} → ${pass} of ${pieces.length}`
+        : "",
+      sortScan.complete ? "" : "part of the list",
+      sortNote,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    return `<div class="lens-sort">${chips}<div class="lens-sort-head">${head}</div>${lines}</div>`;
+  }
   /**
    * The inventory picker: every tile marked with how its piece came (by the
    * history), a source filter that dims what another source brought, and the
@@ -263,6 +425,19 @@ export function createEquipment({
     if (pickerTarget !== targetCode) {
       pickerTarget = targetCode;
       pickerShowAll = false;
+    }
+    // the whole list is read once per opening, and again when it changes (a filter of the game's, a piece gone)
+    if (!sortBusy) {
+      const shape = listShape(dialog);
+      if (
+        !sortScan ||
+        sortScan.dialog !== dialog ||
+        shape.height !== sortScan.height ||
+        (shape.row0 != null && shape.row0 !== sortScan.row0)
+      ) {
+        sortScan = null;
+        void scanPicker(dialog);
+      }
     }
     const tiles = dom.pickerTiles(dialog, palette);
     const matches = target
@@ -313,11 +488,15 @@ export function createEquipment({
       bar.addEventListener("click", (e) => {
         const toggle = e.target.closest("[data-picker-toggle]");
         const source = e.target.closest("[data-picker-source]");
-        if (!toggle && !source) return;
+        const sortCodeBtn = e.target.closest("[data-sort-code]");
+        const sortPick = e.target.closest("[data-sort-pick]");
+        if (!toggle && !source && !sortCodeBtn && !sortPick) return;
         e.preventDefault();
         e.stopPropagation();
         if (toggle) pickerShowAll = !pickerShowAll;
         if (source) pickerSource = source.dataset.pickerSource;
+        if (sortCodeBtn) sortCode = sortCodeBtn.dataset.sortCode;
+        if (sortPick) void pickEntry(sortPick.dataset.sortPick);
         picker(pickerTarget, true);
       });
     }
@@ -367,7 +546,7 @@ export function createEquipment({
             : `<span class="lens-muted">reading your history…</span>`;
     setHtml(
       bar,
-      `${item ? `<div class="lens-pick-item">${item}</div>` : ""}${filter}`,
+      `${item ? `<div class="lens-pick-item">${item}</div>` : ""}${filter}${sortHtml(targetCode, index)}`,
     );
   }
   function clear() {
@@ -737,6 +916,7 @@ export function createEquipment({
       picker(code, s.picker, heldOf(state), {
         bids: state.book?.bids ?? null,
         flipPct: s.flipPct,
+        avg: state.avg?.values ?? null,
       });
     else removePicker();
     const summary = summarizeOffers(valuations);

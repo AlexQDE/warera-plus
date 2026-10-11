@@ -532,6 +532,26 @@ export function isPickerText(text) {
 }
 
 /**
+ * The market's minimum-stat filter under a selected item (inputs named by
+ * the stat: attack, criticalChance, read live 2026-10-11), for `keys`:
+ * { attack: 120, criticalChance: 20 }; a field left empty is left out.
+ * @param {ReadonlyArray<string>} keys
+ */
+export function statFilter(keys, root = document) {
+  /** @type {Record<string, number>} */
+  const out = {};
+  for (const k of keys) {
+    const input = /** @type {HTMLInputElement | null} */ (
+      root.querySelector(`input[name="${k}"]`)
+    );
+    const text = String(input?.value ?? "").trim();
+    const v = Number(text);
+    if (text && Number.isFinite(v)) out[k] = v;
+  }
+  return out;
+}
+
+/**
  * Every item tile in the picker: { img, tile, cell, slot, rarity }. `cell` is
  * the flex-wrap child that holds the tile (hiding the tile alone leaves a gap
  * in the grid, hiding the cell does not).

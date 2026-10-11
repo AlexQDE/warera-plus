@@ -640,6 +640,7 @@ export async function startLens(runtime = chrome.runtime) {
       equipment.picker(null, !!pickDialog, heldOf(state), {
         bids: state.book?.bids ?? null,
         flipPct: state.settings.flipPct,
+        avg: state.avg?.values ?? null,
       });
     if (pickDialog) nextRoots.push(pickDialog);
     // The sell form: a price for the picked pieces, from the sales of their stats and the asks on the page.

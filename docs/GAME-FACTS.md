@@ -216,6 +216,16 @@ tiers are intentional, so a stat value maps back to its rarity unambiguously.
   (`270 | 50 | % | 100 | %`). Only 100% pieces are offered, so a tile's
   code and stats match the history's held pieces exactly; the 3.0 picker
   test for "Item" no longer matched it.
+- The picker's virtual list (read live 2026-10-11): rows of 8 tiles, each
+  row `top: 0; transform: translateY(4 + 105 * index px)` inside a box as
+  tall as every row, in a scrolling box (753 px tall for 225 pieces in
+  2,851 px). The rows change on the scroll event: a programmatic scroll in a
+  hidden tab renders nothing until a `scroll` event is dispatched. A click
+  on a tile selects it (the counter goes 0/5 -> 1/5 and the piece shows in
+  the head); a second click unselects it; the tile's classes do not change.
+  The market's minimum-stat filter inputs are named by the stat
+  (`input[name=attack]`, `input[name=criticalChance]`; placeholder = the
+  range's low end, rifle 71 / 11).
 - The grid's "Current value" is `gameStat.getEquipmentAvgByCode`, a mean of
   recent sales, not the cheapest offer (jet 430.5 while the cheapest offer
   was 383.8 on 2026-09-03).

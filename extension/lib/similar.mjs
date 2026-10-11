@@ -40,7 +40,7 @@ export const STAT_SHORT = Object.freeze({
   dodge: "dodge",
 });
 /** Stats the game prints as a percentage. */
-const PERCENT = new Set([
+export const PERCENT = new Set([
   "criticalChance",
   "criticalDamages",
   "precision",

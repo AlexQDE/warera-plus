@@ -55,13 +55,14 @@ const held = [
   },
 ];
 
-let equipment, state;
+let equipment, state, rescan;
 beforeEach(() => {
   document.body.innerHTML = PICKER;
+  rescan = vi.fn();
   equipment = createEquipment({
     settings: () => ({ ...DEFAULTS }),
     requestSales: vi.fn(),
-    rescan: vi.fn(),
+    rescan,
   });
   state = {
     book: {
@@ -216,5 +217,87 @@ describe("flip and scrap candidates in the picker", () => {
     const bar = document.querySelector(".ss-pick-bar");
     expect(bar.previousElementSibling.textContent).toBe("Quick dismantle");
     expect(badge(0).textContent).toBe("⚒");
+  });
+});
+
+describe("the list by stats", () => {
+  // a row of epic snipers in the game's own order, and a jet
+  const SNIPERS = [
+    [110, 19],
+    [130, 20],
+    [121, 20],
+    [128, 20],
+    [129, 19],
+    [126, 18],
+  ];
+  const LIST = (page = "", title = "<span>Items</span>") =>
+    `<main>${page}</main><div role="dialog"><div class="backdrop"></div><div class="wrapper"><div class="card"><div class="title">${title}</div><div class="body"><div class="scroller"><div class="content"><div>0/5<button>Clear</button></div><div data-index="0">${[
+      ...SNIPERS.map(([a, c]) => tile("sniper", [a, `${c}%`, "100%"])),
+      tile("winterJet", [270, "50%", "100%"]),
+    ].join(
+      "",
+    )}</div></div></div><button>Close</button></div></div></div></div>`;
+  const ctx = { bids: null, flipPct: 10, avg: { sniper: 300, jet: 480 } };
+  /** Clicks on the game's tiles, by their place in the row; each selects or unselects, as the game's do. */
+  const listen = () => {
+    const picks = [];
+    const chosen = new Set();
+    const count = document.querySelector(".content > div");
+    [...document.querySelectorAll(".tile")].forEach((t, i) =>
+      t.addEventListener("click", () => {
+        picks.push(i);
+        if (chosen.has(i)) chosen.delete(i);
+        else chosen.add(i);
+        count.firstChild.nodeValue = `${chosen.size}/5`;
+      }),
+    );
+    return { picks, chosen };
+  };
+  const sort = () => document.querySelector(".ss-pick-bar .lens-sort");
+  const words = () => sort().textContent.replace(/\s+/g, " ");
+  const open = async (code) => {
+    equipment.picker(code, true, held, ctx);
+    await vi.waitFor(() => expect(rescan).toHaveBeenCalled());
+    equipment.picker(code, true, held, ctx);
+  };
+
+  it("lists the market's item by crit, then attack, from the highest, valued, with what the market's filter lets through", async () => {
+    document.body.innerHTML = LIST(
+      '<input name="attack" value="125"><input name="criticalChance" value="20">',
+    );
+    await open("sniper");
+    expect(words()).toMatch(/20%.*130.*128.*121.*19%.*129.*110.*18%.*126/);
+    expect(words()).not.toContain("270"); // the jet is another item
+    expect(words()).toContain("≈300"); // no sales of these stats held: the game's average
+    // crit at least 20 and attack at least 125: two of them
+    const through = [...sort().querySelectorAll("[data-sort-pick]")]
+      .filter((b) => b.dataset.pass === "true")
+      .map((b) => b.dataset.sortPick);
+    expect(through).toEqual(["0:1", "0:3"]);
+    expect(words()).toContain("2 of 6");
+  });
+  it("selects the piece clicked in the list by clicking its tile in the game's list once", async () => {
+    document.body.innerHTML = LIST();
+    const { picks, chosen } = listen();
+    await open("sniper");
+    sort().querySelector('[data-sort-pick="0:2"]').click(); // attack 121, crit 20
+    await vi.waitFor(() => expect(picks).toEqual([2]));
+    expect([...chosen]).toEqual([2]);
+    // clicked again: it stays selected
+    sort().querySelector('[data-sort-pick="0:2"]').click();
+    await vi.waitFor(() => expect(picks).toEqual([2, 2, 2]));
+    expect([...chosen]).toEqual([2]);
+  });
+  it("offers the items in the window when the market names none, weapons first, and lists the one picked", async () => {
+    document.body.innerHTML = LIST("", "Quick dismantle");
+    await open(null);
+    const codes = [...sort().querySelectorAll("[data-sort-code]")].map(
+      (b) => b.dataset.sortCode,
+    );
+    expect(codes).toEqual(["sniper", "jet"]);
+    expect(words()).toMatch(/20%.*130/);
+    sort().querySelector('[data-sort-code="jet"]').click();
+    expect(words()).toMatch(/50%.*270/);
+    expect(words()).not.toMatch(/130/);
   });
 });

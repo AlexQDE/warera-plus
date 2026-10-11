@@ -579,6 +579,40 @@
 [data-lens] .lens-srcs small {
   margin-left: 2px;
 }
+/* the picker's list by stats: a weapon's crit groups, attack from the highest along each line */
+[data-lens] .lens-sort {
+  display: grid;
+  gap: 3px;
+  margin-top: 6px;
+  font-size: 11px;
+}
+[data-lens] .lens-sort-head {
+  color: #9fb3c8;
+}
+[data-lens] .lens-sort-codes,
+[data-lens] .lens-sort-g {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+}
+[data-lens] .lens-sort-g > b {
+  min-width: 34px;
+  text-align: right;
+  margin-right: 3px;
+}
+[data-lens] .lens-sort button {
+  min-height: 20px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+[data-lens] .lens-sort button small {
+  opacity: 0.75;
+}
+[data-lens] .lens-sort [data-pass="false"] {
+  opacity: 0.4;
+}
 /* dimmed, never hidden: the picker is a virtual list and a hidden tile leaves a hole in its row */
 [data-ss-pick="hide"] {
   opacity: 0.28;

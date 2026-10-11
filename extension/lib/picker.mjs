@@ -115,3 +115,55 @@ export function tileSource(index, code, stats) {
   const pieces = index.get(key) ?? [];
   return { key, pieces, sources: [...new Set(pieces.map((p) => p.source))] };
 }
+
+/**
+ * The stats a piece of `code` is ordered by, the first deciding: a weapon by
+ * its crit, then its attack (pick the crit on the market's filter, walk the
+ * attack down); a piece of one stat by that stat. Empty for an unknown code.
+ * @param {string} code
+ */
+export function statOrder(code) {
+  const keys = Object.keys(STAT_RANGES[code] ?? {});
+  return WEAPONS.includes(code) ? ["criticalChance", "attack"] : keys;
+}
+
+/**
+ * Pieces of `code` in that order, from the highest: one group per value of
+ * the first stat when there is a second (a weapon's crit), else one group.
+ * @template {{ skills: Record<string, number> }} P
+ * @param {string} code @param {ReadonlyArray<P>} pieces
+ * @returns {Array<{ value: number | null, pieces: P[] }>}
+ */
+export function sortGroups(code, pieces) {
+  const keys = statOrder(code);
+  if (!keys.length) return [];
+  const sorted = pieces
+    .filter((p) => keys.every((k) => typeof p.skills?.[k] === "number"))
+    .sort((a, b) => {
+      for (const k of keys) {
+        const d = b.skills[k] - a.skills[k];
+        if (d) return d;
+      }
+      return 0;
+    });
+  if (keys.length < 2)
+    return sorted.length ? [{ value: null, pieces: sorted }] : [];
+  /** @type {Array<{ value: number | null, pieces: P[] }>} */
+  const groups = [];
+  for (const p of sorted) {
+    const v = p.skills[keys[0]];
+    if (groups.at(-1)?.value !== v) groups.push({ value: v, pieces: [] });
+    /** @type {{ pieces: P[] }} */ (groups.at(-1)).pieces.push(p);
+  }
+  return groups;
+}
+
+/**
+ * Whether stats pass the market's minimum-stat filter ({ attack: 120,
+ * criticalChance: 20 }); a stat left empty filters nothing.
+ * @param {Record<string, number>} skills @param {Record<string, number>} filter
+ */
+export const meetsFilter = (skills, filter) =>
+  Object.entries(filter).every(
+    ([k, min]) => typeof skills?.[k] === "number" && skills[k] >= min,
+  );
