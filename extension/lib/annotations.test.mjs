@@ -446,10 +446,10 @@ describe("states, pulse and the Market section", () => {
     expect(tag()).toBe("STALE");
     expect(equipment.pulse()).toBe("");
   });
-  it("removes annotations while the key is missing", () => {
+  it("removes annotations while the key is rejected", () => {
     equipment.render(state);
     expect(annotation()).not.toBeNull();
-    state.setup = "Add your WarEra API key in extension settings.";
+    state.setup = "API key rejected. Check and save your key in settings.";
     equipment.render(state);
     expect(annotation()).toBeNull();
     expect(row.dataset.scrapSniper).toBeUndefined();

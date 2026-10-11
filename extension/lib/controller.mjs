@@ -93,11 +93,15 @@ export function createController({
         "rejectedAuthRevision",
         cacheKey,
       ]);
+      // without a key the books and the averages are read keyless; the API serves sales only with one
       const key = keyOf(got.settings);
-      if (!key)
-        return { error: "no-key", message: "Add your API key in settings" };
+      if (!key && kind === "sales")
+        return {
+          error: "needs-key",
+          message: "Sales of these stats need your API key",
+        };
       const authRevision = Number(got.settings?.authRevision) || 0;
-      if (got.rejectedAuthRevision === authRevision)
+      if (key && got.rejectedAuthRevision === authRevision)
         return {
           error: "key-rejected",
           message: "API key rejected. Check and save your key in settings.",
@@ -423,7 +427,10 @@ export function createController({
       ]);
       const key = keyOf(got.settings);
       if (!key)
-        return { error: "no-key", message: "Add your API key in settings" };
+        return {
+          error: "needs-key",
+          message: "Your history needs your API key",
+        };
       const authRevision = Number(got.settings?.authRevision) || 0;
       if (got.rejectedAuthRevision === authRevision)
         return {
@@ -778,6 +785,13 @@ export function createController({
           return {
             error: "forbidden",
             message: "Use extension settings to test a key",
+          };
+        if (!keyOf({ apiKey: msg.key }))
+          return {
+            ok: false,
+            error: "no-key",
+            message:
+              "No key: scrap prices, SNIPE and averages still work; sales by stats, FLIP and your history need one.",
           };
         await ready;
         if (hold > now())

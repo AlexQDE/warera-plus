@@ -228,6 +228,11 @@ tiers are intentional, so a stat value maps back to its rarity unambiguously.
 - `api2.warera.io` answers a wrong or missing key from the keyless bucket
   (`ratelimit-limit` 100) instead of refusing; an accepted key gets 500. So
   "accepted" means limit > 100; a missing header is unverified, not rejected.
+- Without a key (2026-10-11, policy `100;w=60`, per address): `tradingOrder.getTopOrders`,
+  `tradingOrder.getTopOrdersPerItemCode`, `itemTrading.getItemTrading`,
+  `gameStat.getEquipmentAvgByCode` and `user.getUserLite` answer;
+  `transaction.getPaginatedTransactions` answers 401 "API token required"
+  (sales and a player's history need a key). A GET batch counts as one.
 - `tradingOrder.getTopOrders {itemCode, limit}`: limit capped at 100 per
   side, no cursor; a side returning exactly 100 rows is truncated.
 - Undocumented but answering the key: `tradingOrder.getTopOrdersPerItemCode

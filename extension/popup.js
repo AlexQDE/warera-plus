@@ -48,7 +48,7 @@ async function load() {
         ? "API key rejected. Check the key, then Save to retry."
         : r.hasKey
           ? "Key saved on this browser. Test checks API acceptance."
-          : "Add your WarEra API key to begin.",
+          : "No key: scrap prices, SNIPE and averages work; sales by stats, FLIP and your history need a key.",
     );
   } catch (e) {
     status(e.message, "bad");

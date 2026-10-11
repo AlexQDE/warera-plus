@@ -416,4 +416,13 @@ describe("the ledger", () => {
     render("ledger");
     expect(text()).toContain("last read failed");
   });
+  it("says the ledger needs the API key when there is none, instead of reading forever", () => {
+    state.craftsUserId = ME;
+    state.ledger = null;
+    state.history = null;
+    state.hasKey = false;
+    render("ledger");
+    expect(text()).toContain("needs your API key");
+    expect(text()).not.toContain("Reading your history");
+  });
 });

@@ -6,6 +6,8 @@ import {
   findDialog,
   createDialogs,
   outcomeLine,
+  craftHtml,
+  caseHtml,
   PANEL_CLASS,
 } from "./dialogs.mjs";
 
@@ -386,6 +388,14 @@ describe("annotating them", () => {
     d.dispose();
     open.click();
     expect(onAction).toHaveBeenCalledTimes(1);
+  });
+  it("says the player's own results need the API key instead of waiting for a history that cannot come", () => {
+    const craft = craftHtml({ tier: "epic", ledger: null, needsKey: true });
+    expect(craft).toContain("needs your API key");
+    expect(craft).not.toContain("Reading your history");
+    const open = caseHtml({ code: "case1", ledger: null, needsKey: true });
+    expect(open).toContain("needs your API key");
+    expect(open).not.toContain("Reading your history");
   });
   it("words an outcome as its result and count, an empty one plainly", () => {
     expect(outcomeLine(null, "opened")).toBe("none");

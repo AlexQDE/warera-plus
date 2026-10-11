@@ -28,6 +28,7 @@ export async function startLens(runtime = chrome.runtime) {
     revision: null,
     authRevision: null,
     rejected: false,
+    hasKey: true, // without a key the books and averages are read keyless; sales and the history need one
     setup: null,
     invalidated: false,
     book: null,
@@ -115,13 +116,12 @@ export async function startLens(runtime = chrome.runtime) {
       sched.schedule();
     }
     if (r.rejected) state.rejected = true;
+    state.hasKey = !!r.hasKey;
     state.setup = state.invalidated
       ? "WarEra Plus was updated. Reload this page."
-      : state.rejected
+      : state.rejected && state.hasKey
         ? "API key rejected. Check and save your key in settings."
-        : r.hasKey
-          ? null
-          : "Add your WarEra API key in extension settings.";
+        : null;
     if (previousSetup !== state.setup) sched.schedule();
   }
   const save = async (patch) => {
@@ -133,6 +133,7 @@ export async function startLens(runtime = chrome.runtime) {
   };
   async function read(kind, force = false, code) {
     if (disposed || document.hidden || state.setup || state.invalidated) return;
+    if (kind === "sales" && !state.hasKey) return; // the API serves sales only with a key
     if (state.busy.has(kind)) {
       // Sales reads are single-flight. One asked for while another item's read is in flight is kept, with
       // whether it was forced, and runs when that read finishes; a plain repeat of the item being read is not.
@@ -183,7 +184,7 @@ export async function startLens(runtime = chrome.runtime) {
       return;
     }
     if (r) {
-      if (r.error === "no-key" || r.error === "key-rejected") {
+      if (r.error === "key-rejected") {
         state.setup = r.message;
         state.rejected = r.error === "key-rejected";
         state.book = null;
@@ -268,7 +269,8 @@ export async function startLens(runtime = chrome.runtime) {
   /** One history step in the worker (it decides whether a poll or a backfill page is due), then the view when it changed. */
   async function syncHistory(force = false) {
     const userId = state.craftsUserId;
-    if (!userId || state.setup || disposed || document.hidden) return;
+    if (!userId || !state.hasKey || state.setup || disposed || document.hidden)
+      return; // the API serves the history only with a key
     if (historyBusy) {
       if (force) historyAgain = true;
       return;
@@ -653,23 +655,27 @@ export async function startLens(runtime = chrome.runtime) {
           sellHintHtml(
             read.items.map((it) => {
               const sales = state.salesByCode[it.code];
+              // without a key no sales come: the price rests on the asks and the game's estimate
               return {
                 code: it.code,
-                s: sales
-                  ? suggestPrice({
-                      code: it.code,
-                      skills: it.skills,
-                      fills: comparableFills(sales.fills, {
+                s:
+                  sales || !state.hasKey
+                    ? suggestPrice({
                         code: it.code,
-                        hours: WINDOW_HOURS,
+                        skills: it.skills,
+                        fills: sales
+                          ? comparableFills(sales.fills, {
+                              code: it.code,
+                              hours: WINDOW_HOURS,
+                              now,
+                              state: null,
+                            })
+                          : [],
+                        asks: equipment.asks(it.code),
                         now,
-                        state: null,
-                      }),
-                      asks: equipment.asks(it.code),
-                      now,
-                      game: read.game,
-                    })
-                  : null,
+                        game: read.game,
+                      })
+                    : null,
               };
             }),
           ),

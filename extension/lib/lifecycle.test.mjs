@@ -146,9 +146,12 @@ describe("SPA lifecycle and DOM work", () => {
     runtime.info.revision++;
     runtime.info.hasKey = false;
     await settle(5100);
-    expect(document.getElementById("scrap-sniper-cases").textContent).toContain(
-      "Add your WarEra API key",
-    );
+    // no key is no notice: the books are read keyless
+    expect(
+      document.getElementById("scrap-sniper-cases").textContent,
+    ).not.toContain("API key");
+    runtime.info.authRevision++;
+    runtime.info.revision++;
     runtime.info.hasKey = true;
     runtime.info.rejected = true;
     await settle(5100);
@@ -483,6 +486,45 @@ describe("SPA lifecycle and DOM work", () => {
     expect(hint.textContent).toContain("185");
     hint.querySelector("[data-sell-use]").click();
     expect(form.querySelector('input[name="price"]').value).toBe("185");
+  });
+  it("works without an API key: no notice, no sales or history asked for, and each place says what needs the key", async () => {
+    window.history.replaceState({}, "", "/market/equipments");
+    marketFixture();
+    const runtime = marketRuntime({ panel: "market", userId: ME });
+    runtime.info.hasKey = false;
+    app = await startLens(runtime);
+    await settle(3000);
+    const types = () => runtime.sendMessage.mock.calls.map(([m]) => m.type);
+    expect(types()).toContain("book");
+    expect(document.body.textContent).not.toContain("Add your WarEra API key");
+    // the market's sales line, then the ledger, say they need the key
+    expect(bodyText()).toContain("need your API key");
+    bar().querySelector('[data-action="tab"][data-tab="ledger"]').click();
+    await settle(1000);
+    expect(bodyText()).toContain("needs your API key");
+    // the sell form prices from the asks and the game's estimate, with Use
+    const form = document.createElement("div");
+    form.setAttribute("role", "dialog");
+    form.innerHTML = `<div class="card"><div>Sell an item</div><div class="tile" style="background-image: linear-gradient(45deg, red, black)"><img alt="dieselBoots" src="x.png"><div>32<b>%</b></div><div>100<b>%</b></div></div><div>Market average <span>181.3</span></div><div><label><span>PRICE</span><input name="price" value="190"></label><div>Suggested price <span>190</span></div><div><span>133</span><span>304</span></div></div><div>You receive <span>190</span></div><button>Put on sale</button></div>`;
+    document.body.appendChild(form);
+    document.body.click();
+    await settle(3000);
+    const hint = document.querySelector(".ss-sell");
+    expect(hint?.textContent).toContain("190");
+    expect(hint.querySelector("[data-sell-use]")).not.toBeNull();
+    form.remove();
+    // the picker's sources rest on the history, which needs the key
+    const win = document.createElement("div");
+    win.setAttribute("role", "dialog");
+    win.innerHTML = `<div class="card"><div class="title">Quick dismantle</div><div class="cell"><div class="tile" style="background-image: linear-gradient(45deg, red, black)"><div><img alt="dieselBoots" src="x.png"></div><div>32<b>%</b></div><div>88<b>%</b></div></div></div></div>`;
+    document.body.appendChild(win);
+    document.body.click();
+    await settle(3000);
+    expect(document.querySelector(".ss-pick-bar")?.textContent).toContain(
+      "API key",
+    );
+    expect(types()).not.toContain("sales");
+    expect(types()).not.toContain("history");
   });
   it("marks the inventory picker a moment after the click that opened it, not on the next tick", async () => {
     window.history.replaceState({}, "", "/market/equipments");

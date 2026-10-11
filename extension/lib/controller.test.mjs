@@ -138,6 +138,33 @@ describe("background controller", () => {
     expect(storage.data.book).toBeUndefined();
     expect(storage.data.settings.authRevision).toBe(1);
   });
+  it("reads the book and the averages without a key, and answers sales and history as needing one without asking", async () => {
+    const f = vi.fn(async () => response(bookData, { limit: 100 }));
+    const { controller } = setup(f, { settings: {} });
+    const settings = await controller.handle({ type: "getSettings" });
+    expect(settings.hasKey).toBe(false);
+    expect(settings.rejected).toBe(false);
+    const book = await controller.handle({ type: "book" });
+    expect(book.error).toBeUndefined();
+    expect(book.book.bids).toEqual([{ price: 0.2, quantity: 2000 }]);
+    expect(f).toHaveBeenCalledOnce();
+    expect(f.mock.calls[0][1].headers["x-api-key"]).toBeUndefined();
+    const sales = await controller.handle({ type: "sales", itemCode: "jet" });
+    expect(sales.error).toBe("needs-key");
+    const history = await controller.handle({
+      type: "history",
+      userId: "0123456789abcdef01234567",
+    });
+    expect(history.error).toBe("needs-key");
+    expect(f).toHaveBeenCalledOnce();
+    // the settings page's Test with no key asks nothing
+    const test = await controller.handle(
+      { type: "testKey", key: " " },
+      { trusted: true },
+    );
+    expect(test).toMatchObject({ ok: false, error: "no-key" });
+    expect(f).toHaveBeenCalledOnce();
+  });
   it("retains caches and auth revision for display-only settings", async () => {
     const { controller, storage } = setup();
     await controller.handle({ type: "book" });

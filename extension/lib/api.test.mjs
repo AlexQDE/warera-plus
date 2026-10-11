@@ -5,6 +5,7 @@ import {
   ApiError,
   fetchBook,
   fetchSales,
+  fetchHistoryPage,
   salesUrl,
   holdUntil,
 } from "./api.mjs";
@@ -68,14 +69,43 @@ describe("fetchBook", () => {
     expect(r.remaining).toBe(499);
   });
 
-  it("refuses to call the API without a key", async () => {
+  // Probed 2026-10-11: the book, the averages and the players answer without a key, from a bucket of 100 a minute.
+  it("reads without a key from the keyless bucket, sending no key header", async () => {
+    const { fetchImpl, calls } = fake({ limit: KEYLESS_LIMIT, remaining: 99 });
+    const r = await fetchBook(fetchImpl, "   ");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].opts.headers?.["x-api-key"]).toBeUndefined();
+    expect(r.book.bid).toBe(0.225);
+    expect(r.limit).toBe(KEYLESS_LIMIT);
+  });
+
+  it("reads without a key when the rate-limit header is missing", async () => {
+    const fetchImpl = async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({}),
+      json: async () => BODY,
+    });
+    const r = await fetchBook(fetchImpl, "");
+    expect(r.book.ask).toBe(0.226);
+  });
+
+  it("keeps a keyless error message readable", async () => {
+    const { fetchImpl } = fake({ status: 503, body: {} });
+    const err = await fetchBook(fetchImpl, "").catch((e) => e);
+    expect(err.code).toBe("http");
+    expect(err.message).toBe("the API answered 503");
+  });
+
+  // Probed 2026-10-11: transaction.getPaginatedTransactions answers 401 "API token required" without a key.
+  it("does not ask for sales or the player's history without a key", async () => {
     const { fetchImpl, calls } = fake();
-    await expect(fetchBook(fetchImpl, "")).rejects.toMatchObject({
-      code: "no-key",
+    await expect(fetchSales(fetchImpl, "", "jet")).rejects.toMatchObject({
+      code: "needs-key",
     });
-    await expect(fetchBook(fetchImpl, "   ")).rejects.toMatchObject({
-      code: "no-key",
-    });
+    await expect(
+      fetchHistoryPage(fetchImpl, " ", "0123456789abcdef01234567"),
+    ).rejects.toMatchObject({ code: "needs-key" });
     expect(calls).toHaveLength(0);
   });
 
@@ -202,13 +232,13 @@ describe("fetchSales", () => {
     expect(r.complete).toBe(false);
   });
 
-  it("refuses without a key and rejects a keyless-bucket answer", async () => {
+  it("needs a key, and rejects a keyless-bucket answer to a wrong one", async () => {
     const { fetchImpl, calls } = pagedFake([
       { items: [fill(1, 1)], next: null },
     ]);
     await expect(
       fetchSales(fetchImpl, "", "jet", { now: NOW }),
-    ).rejects.toMatchObject({ code: "no-key" });
+    ).rejects.toMatchObject({ code: "needs-key" });
     expect(calls).toHaveLength(0);
     const keyless = pagedFake([{ items: [fill(1, 1)], next: null }], {
       limit: KEYLESS_LIMIT,
@@ -426,12 +456,14 @@ describe("fetchBooks", () => {
     expect(r.source).toBe("getTopOrders");
   });
 
-  it("refuses without a key and rejects a keyless-bucket answer", async () => {
-    const { fetchImpl, calls } = fake();
-    await expect(fetchBooks(fetchImpl, "", ["oil"])).rejects.toMatchObject({
-      code: "no-key",
+  it("reads without a key, and rejects a keyless-bucket answer to a wrong one", async () => {
+    const free = fake({
+      limit: KEYLESS_LIMIT,
+      body: { result: { data: { oil: top("oil", 1, 2) } } },
     });
-    expect(calls).toHaveLength(0);
+    const r = await fetchBooks(free.fetchImpl, "", ["oil"]);
+    expect(free.calls[0].opts.headers?.["x-api-key"]).toBeUndefined();
+    expect(r.books.oil.bid).toBe(1);
     const keyless = fake({
       limit: KEYLESS_LIMIT,
       body: { result: { data: { oil: top("oil", 1, 2) } } },
@@ -476,12 +508,15 @@ describe("fetchEquipmentAvg", () => {
     expect(r.missing).toEqual(["broken"]);
   });
 
-  it("refuses without a key", async () => {
-    const { fetchImpl, calls } = fake();
-    await expect(
-      fetchEquipmentAvg(fetchImpl, " ", ["jet"]),
-    ).rejects.toMatchObject({ code: "no-key" });
-    expect(calls).toHaveLength(0);
+  it("reads without a key", async () => {
+    const { fetchImpl, calls } = fake({
+      limit: KEYLESS_LIMIT,
+      body: [{ result: { data: 487.34 } }],
+    });
+    const r = await fetchEquipmentAvg(fetchImpl, " ", ["jet"]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].opts.headers?.["x-api-key"]).toBeUndefined();
+    expect(r.avg).toEqual({ jet: 487.34 });
   });
 });
 

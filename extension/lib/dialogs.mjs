@@ -212,7 +212,20 @@ const TAG = {
   even: ["miss", "EVEN"],
 };
 
-export function caseHtml({ code, cases, avg, sellFrom, ledger }) {
+/** Where the player's own results stand before the history view arrives: on the way, or never without a key. */
+const waitingHtml = (needsKey) =>
+  needsKey
+    ? `<p class="lens-muted">Your results: your history needs your API key</p>`
+    : `<p class="lens-muted">Reading your history…</p>`;
+
+export function caseHtml({
+  code,
+  cases,
+  avg,
+  sellFrom,
+  ledger,
+  needsKey = false,
+}) {
   const mode = ledger?.mode ?? "eco";
   const summary = cases?.books
     ? snapshotSummary({
@@ -231,7 +244,7 @@ export function caseHtml({ code, cases, avg, sellFrom, ledger }) {
   const all = w?.all.cases[code];
   const mine = w
     ? `${line("Today", outcomeLine(today, "opened", mode))}${line("All", outcomeLine(all, "opened", mode))}`
-    : `<p class="lens-muted">Reading your history…</p>`;
+    : waitingHtml(needsKey);
   const last =
     ledger?.lastOpened && ledger.lastOpened.via === code
       ? line("Last", pieceHtml(ledger.lastOpened, mode))
@@ -240,7 +253,14 @@ export function caseHtml({ code, cases, avg, sellFrom, ledger }) {
   return `${head(now, title, mode, today?.worn || all?.worn)}${mine}${last}`;
 }
 
-export function craftHtml({ tier, slot = null, cases, avg, ledger }) {
+export function craftHtml({
+  tier,
+  slot = null,
+  cases,
+  avg,
+  ledger,
+  needsKey = false,
+}) {
   const mode = ledger?.mode ?? "eco";
   const books = cases?.books ?? {};
   const rows = tierBoard({
@@ -262,7 +282,7 @@ export function craftHtml({ tier, slot = null, cases, avg, ledger }) {
     ? today
       ? `${line("Today", outcomeLine(today, "craft", mode))}${list}`
       : `<p class="lens-muted">No ${esc(tier)} crafts today</p>`
-    : `<p class="lens-muted">Reading your history…</p>`;
+    : waitingHtml(needsKey);
   // a picked slot doubles the steel and is worth what that slot sells for; a random craft, the six at the game's odds
   const picked = slot ? r?.slots.find((s) => s.code === slot) : null;
   const cost = slot
@@ -373,6 +393,7 @@ export function createDialogs({ onAction = () => {}, onMode = () => {} } = {}) {
       avg: state.avg,
       sellFrom: state.settings?.sellFrom ?? "epic",
       ledger: state.ledger,
+      needsKey: state.hasKey === false,
     };
     setHtml(
       panel,

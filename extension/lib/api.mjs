@@ -1,12 +1,16 @@
-// The API calls the extension makes, and the rule that they are made only
-// with the player's own key.
+// The API calls the extension makes, with the player's own key or without one.
 //
 // Probed 2026-09-03: api2 does not refuse a wrong key. It answers the request
 // from the keyless bucket (ratelimit-limit 100) as if no key were sent; an
 // accepted key gets a bigger bucket (500). So whether the key was accepted is
 // read off the ratelimit-limit header, and an answer from the keyless bucket
-// is treated as a rejected key and its data discarded. Nothing here is ever
-// read without an accepted key.
+// to a key is treated as a rejected key and its data discarded.
+//
+// Probed 2026-10-11: without a key the books, the averages and the players
+// answer from that bucket (100 a minute, `100;w=60`), so they are read
+// keyless when no key is set; transaction.getPaginatedTransactions answers
+// 401 "API token required", so sales and the player's history need a key and
+// are never asked for without one (needs-key).
 import { summarizeBook } from "./scraplib.mjs";
 import { positive } from "./quality.mjs";
 
@@ -71,15 +75,21 @@ const header = (res, name) => {
   return Number.isFinite(v) ? v : null;
 };
 
-const cleanKey = (key) => {
-  const k = String(key ?? "").trim();
-  if (!k) throw new ApiError("no API key set", "no-key");
+/** The key, or "" to read keyless. */
+const cleanKey = (key) => String(key ?? "").trim();
+/** The key for a procedure the API serves only with one. */
+const requireKey = (key) => {
+  const k = cleanKey(key);
+  if (!k) throw new ApiError("this needs your API key", "needs-key");
   return k;
 };
+/** `text` with the key cut out; a keyless call has nothing to cut. */
+const redact = (text, key) =>
+  key ? String(text).split(String(key)).join("[redacted]") : String(text);
 
 /**
- * One keyed GET; resolves the tRPC `result.data` or throws a typed ApiError
- * (no-key | key-rejected | rate-limited | http | api | timeout | network).
+ * One GET, keyed or keyless; resolves the tRPC `result.data` or throws a typed ApiError
+ * (needs-key | key-rejected | rate-limited | http | api | timeout | network).
  * The call is abandoned after `timeoutMs`, headers and body alike.
  */
 async function call(
@@ -94,7 +104,7 @@ async function call(
     return await request(fetchImpl, key, url, ctl.signal, batch);
   } catch (e) {
     if (e instanceof ApiError) {
-      e.message = e.message.split(String(key)).join("[redacted]");
+      e.message = redact(e.message, key);
       throw e;
     }
     if (ctl.signal.aborted)
@@ -103,9 +113,7 @@ async function call(
         "timeout",
       );
     throw new ApiError(
-      `could not reach the API: ${String(e?.message ?? e)
-        .split(String(key))
-        .join("[redacted]")}`,
+      `could not reach the API: ${redact(e?.message ?? e, key)}`,
       "network",
     );
   } finally {
@@ -115,7 +123,7 @@ async function call(
 
 async function request(fetchImpl, key, url, signal, batch = false) {
   const res = await fetchImpl(url, {
-    headers: { "x-api-key": key },
+    headers: key ? { "x-api-key": key } : {},
     signal,
     credentials: "omit",
     redirect: "error",
@@ -137,23 +145,27 @@ async function request(fetchImpl, key, url, signal, batch = false) {
     });
   }
   if ([401, 403].includes(res.status))
-    throw new ApiError(
-      "The API rejected this key or its permissions",
-      "key-rejected",
-      { status: res.status },
-    );
+    throw key
+      ? new ApiError(
+          "The API rejected this key or its permissions",
+          "key-rejected",
+          { status: res.status },
+        )
+      : new ApiError("this needs your API key", "needs-key", {
+          status: res.status,
+        });
   if (!res.ok)
     throw new ApiError(`the API answered ${res.status}`, "http", {
       status: res.status,
     });
-  if (limit != null && limit <= KEYLESS_LIMIT) {
+  // a keyless call expects the keyless bucket: only a key's answer is verified
+  if (key && limit != null && limit <= KEYLESS_LIMIT)
     throw new ApiError(
       "the API did not accept this key (it answered as if none were sent)",
       "key-rejected",
       { status: res.status, limit },
     );
-  }
-  if (limit == null)
+  if (key && limit == null)
     throw new ApiError(
       "API key acceptance could not be verified: rate-limit header missing",
       "auth-unverified",
@@ -170,9 +182,9 @@ async function request(fetchImpl, key, url, signal, batch = false) {
 }
 
 /**
- * Read the scrap order book with `key`. Resolves { book, limit, remaining };
+ * Read the scrap order book, with `key` or keyless (""). Resolves { book, limit, remaining };
  * rejects with an ApiError whose `code` is one of
- * no-key | key-rejected | rate-limited | http | api | timeout | network.
+ * key-rejected | rate-limited | http | api | timeout | network.
  */
 export async function fetchBook(
   fetchImpl,
@@ -199,7 +211,7 @@ export async function fetchSales(
   itemCode,
   { hours = 72, maxPages = 5, now = Date.now(), timeoutMs = TIMEOUT_MS } = {},
 ) {
-  const k = cleanKey(key);
+  const k = requireKey(key);
   const cutoff = now - hours * 3600e3;
   const fills = [];
   let cursor;
@@ -332,7 +344,7 @@ export async function fetchHistoryPage(
   userId,
   { cursor = null, now = Date.now(), timeoutMs = TIMEOUT_MS } = {},
 ) {
-  const k = cleanKey(key);
+  const k = requireKey(key);
   const id = String(userId ?? "");
   if (!isId(id)) throw new ApiError("Invalid player id", "schema");
   const { data } = await call(fetchImpl, k, historyUrl(id, cursor), {
@@ -403,7 +415,7 @@ export async function fetchOwner(
   } catch (e) {
     if (
       e instanceof ApiError &&
-      ["key-rejected", "rate-limited", "no-key"].includes(e.code)
+      ["key-rejected", "rate-limited", "needs-key"].includes(e.code)
     )
       throw e;
     return { username: null };
@@ -481,7 +493,7 @@ async function callBatch(
           ? "Missing batch envelope"
           : null;
       data.push(failure ? null : slot.result.data);
-      errors.push(failure?.split(String(key)).join("[redacted]") ?? null);
+      errors.push(failure == null ? null : redact(failure, key));
     }
   }
   return { data, errors, limit, remaining };

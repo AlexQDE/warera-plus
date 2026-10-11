@@ -192,6 +192,10 @@ export function createCraftDesk({ settings, now = Date.now }) {
       return own(
         `<p class="lens-muted">Account not found on this page. Set your player id in the extension's settings.</p>`,
       );
+    if (!v && state.hasKey === false)
+      return own(
+        `<p class="lens-muted">Your ledger needs your API key: add it in the extension settings.</p>`,
+      );
     if (!v || v.meta?.userId !== id)
       return own(
         `<p class="lens-muted">${state.historyError ? `History read failed: ${esc(state.historyError)}. Retrying.` : `Reading your history${h ? ` · ${count(h.count)} tx` : ""}…`}</p>`,

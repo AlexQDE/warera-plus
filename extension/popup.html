@@ -248,7 +248,7 @@
         </header>
 
         <section>
-          <h2>Your WarEra API key</h2>
+          <h2>Your WarEra API key (optional)</h2>
           <label for="key">API key</label>
           <div class="row">
             <input
@@ -264,10 +264,13 @@
             ><input id="show" type="checkbox" /> show the key</label
           >
           <p class="help">
-            Create the key in the game, in your account settings, and paste it
-            here. It is stored only in this browser and sent only to
-            <code>api2.warera.io</code> as the request header. Nothing works
-            without it: the extension makes no keyless requests.
+            Optional. Without a key the scrap prices, SNIPE and the game’s
+            averages still work, from the API’s free allowance (100 requests a
+            minute). Sales by stats, FLIP, the sell price from sales, the Ledger
+            and the Crafted / Sniped filters need one: the API serves sales and
+            your history only with a key. Create it in the game, in your account
+            settings, and paste it here. It is stored only in this browser and
+            sent only to <code>api2.warera.io</code> as the request header.
           </p>
           <div id="status" class="status" role="status" aria-live="polite">
             Loading settings…

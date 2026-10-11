@@ -2,7 +2,11 @@
 
 Read-only decision support inside [WarEra](https://app.warera.io): what an offer is worth, what a craft or a case opening costs and returns, and what your own crafting, case opening and trading has made, from your whole history. Formerly **WarEra Lens**, originally **WarEra Scrap Sniper**; same extension, same settings and key.
 
-The extension compares offers and estimates. It never buys, crafts, lists, opens a case or travels for you. It uses your own API key and has no runtime dependencies or build step.
+The extension compares offers and estimates. It never buys, crafts, lists, opens a case or travels for you. It works without an API key (scrap prices, SNIPE, the game's averages) and does more with your own (sales by stats, FLIP, the Ledger). It has no runtime dependencies or build step.
+
+## What changed in 3.4.0
+
+- **Works without an API key.** The API serves the order books, the game's average prices and players without a key, from a free allowance of 100 requests a minute (the extension uses about ten). Without a key: the scrap floors and SNIPE, the case window, the craft window and its board at the game's averages, and the sell price from the asks on the market and the game's estimate. With a key, as before, plus everything that rests on sales and your history, which the API serves only with a key (checked 2026-10-11: "API token required"): FLIP, values by stats, the sell price from sales, the Ledger, today's crafts and the Crafted / Sniped / Flip filters. Those places say they need the key instead of reading forever, and nothing asks the API for them without one. A key that the API does not accept is still reported as rejected.
 
 ## What changed in 3.3.3
 
@@ -85,7 +89,7 @@ Requires Chrome 105+ or a compatible Chromium browser.
 
 1. Download or clone this repository and select the branch/version you intend to test.
 2. Open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked** and select the `extension` folder.
-3. Open the WarEra Plus settings from its toolbar icon. Paste your own API key and **Save**. **Test** is a separate explicit action; saving does not automatically call the API.
+3. Optional: open the WarEra Plus settings from its toolbar icon, paste your own API key and **Save**. Without a key the scrap prices, SNIPE, the case and craft windows and the sell price from the asks still work; sales by stats, FLIP, the Ledger and the Crafted / Sniped filters need it. **Test** is a separate explicit action; saving does not automatically call the API.
 4. Reload the WarEra page. The bar and the offer tags appear on the equipment market; cases on supported market/inventory views; travel estimates next to the nearest-case map entry.
 
 For an existing unpacked install, update files in the **same extension folder**, reload the extension and then reload the game. Keep the original extension installation identity to preserve its settings.

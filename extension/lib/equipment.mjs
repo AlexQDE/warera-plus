@@ -31,15 +31,18 @@ import {
 
 /**
  * The pieces the player holds, for the picker: false with no account to read
- * a history for, null while the view is on its way, "stale" when the view
- * has none (its worker is older than the page).
+ * a history for, "nokey" when there is no API key to read it with, null
+ * while the view is on its way, "stale" when the view has none (its worker
+ * is older than the page).
  */
 export const heldOf = (state) =>
   !state.craftsUserId
     ? false
-    : !state.ledger
-      ? null
-      : (state.ledger.heldPieces ?? "stale");
+    : state.hasKey === false
+      ? "nokey"
+      : !state.ledger
+        ? null
+        : (state.ledger.heldPieces ?? "stale");
 
 /** A row's listing age in minutes, off its "7m" / "3h47m" line; null when none. */
 const rowAge = (lines) => {
@@ -357,9 +360,11 @@ export function createEquipment({
           .join("")}</span>`
       : held === false
         ? `<span class="lens-muted">sources need your history: turn on Craft in settings</span>`
-        : held === "stale"
-          ? `<span class="lens-notice">reload WarEra Plus in the browser's extensions page: its background is older than this page</span>`
-          : `<span class="lens-muted">reading your history…</span>`;
+        : held === "nokey"
+          ? `<span class="lens-muted">sources need your history, which needs your API key</span>`
+          : held === "stale"
+            ? `<span class="lens-notice">reload WarEra Plus in the browser's extensions page: its background is older than this page</span>`
+            : `<span class="lens-muted">reading your history…</span>`;
     setHtml(
       bar,
       `${item ? `<div class="lens-pick-item">${item}</div>` : ""}${filter}`,
@@ -786,6 +791,8 @@ export function createEquipment({
       salesLine = `<p class="lens-fills lens-muted">Pick an item in the grid for its sales ${legend}</p>`;
     else if (err && !sales)
       salesLine = `<p class="lens-notice" role="status">Sales of ${escapeHtml(dom.itemLabel(code))}: ${escapeHtml(err)}</p>`;
+    else if (!sales && state.hasKey === false)
+      salesLine = `<p class="lens-fills lens-muted">Sales by stats need your API key: values are the game's average ${legend}</p>`;
     else if (!sales)
       salesLine = `<p class="lens-fills lens-muted">Reading sales of ${escapeHtml(dom.itemLabel(code))}… ${legend}</p>`;
     else {
