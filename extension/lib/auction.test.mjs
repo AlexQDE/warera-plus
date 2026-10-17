@@ -12,6 +12,8 @@ import {
   offerButtonCount,
 } from "./dom.mjs";
 import { readStatBlock } from "./offers.mjs";
+import { createEquipment } from "./equipment.mjs";
+import { DEFAULTS } from "./settings.mjs";
 
 // jsdom replaces the global URL, which node:fs does not take: resolve the path as a string
 const FIXTURE = JSON.parse(
@@ -144,6 +146,66 @@ describe("the v0.27 auction cards", () => {
       '<main><article><div><img alt="knife"></div><div>1</div><button>BUY</button></article></main>';
     expect(auctionRows()).toHaveLength(0);
     expect(offerRows()).toHaveLength(1);
+  });
+});
+
+describe("verdicts on the auction cards", () => {
+  let equipment;
+  const settings = { ...DEFAULTS };
+  const state = (bid) => ({
+    book: {
+      at: new Date().toISOString(),
+      bids: [{ price: bid, quantity: 5000 }],
+    },
+    error: null,
+    setup: null,
+  });
+  const card = (i) => document.querySelectorAll("#list > div")[i];
+  const line = (i) =>
+    card(i).querySelector(".ss-verdict")?.textContent.replace(/\s+/g, " ") ??
+    "";
+  beforeEach(() => {
+    window.history.replaceState({}, "", "/market/auctions");
+    equipment = createEquipment({
+      settings: () => settings,
+      requestSales: () => {},
+    });
+  });
+  afterEach(() => equipment.clear());
+  it("tags BID with the most to bid before tax when the next bid pays and buying now does not", () => {
+    // epic gloves (162 scraps) at a 0.2 bid: 32.4; next bid 29.91 with the 10% tax; buy now 155.23
+    equipment.render(state(0.2));
+    expect(card(2).dataset.scrapSniper).toBe("bid");
+    // the most to bid: 32.4 / 1.03 (the 3% SNIPE minimum) / 1.10 (the tax) = 28.59
+    expect(line(2)).toContain("BID");
+    expect(line(2)).toContain("≤ 28.59");
+    expect(card(0).dataset.scrapSniper).toBe("miss"); // tank: 97.2 of scraps against 218.9 and 305.72
+    expect(equipment.pulse()).toContain("1</b> bid");
+  });
+  it("tags SNIPE when buying now pays", () => {
+    // 162 scraps at 1: 162 against buy now 155.23
+    equipment.render(state(1));
+    expect(card(2).dataset.scrapSniper).toBe("hit");
+    expect(line(2)).toContain("SNIPE");
+  });
+  it("reads the tax off the card when the notice gives none, and tags nothing when the card and the notice disagree", () => {
+    document.getElementById("market").innerHTML =
+      "<div><span>Live auctions</span></div>";
+    equipment.render(state(0.2));
+    expect(card(2).dataset.scrapSniper).toBe("bid");
+    equipment.clear();
+    document.getElementById("market").innerHTML =
+      "<div><span>Live auctions</span><span>Bids are shown before tax: your country adds its 20% market tax.</span></div>";
+    equipment.render(state(0.2));
+    expect(card(2).dataset.scrapSniper).toBe("unknown");
+    expect(line(2)).toContain("tax check failed");
+  });
+  it("values a skinned card by its stats: the tier its stat falls in", () => {
+    equipment.render(state(0.2));
+    // vampireCountessGloves at precision 60: mythic gloves, 1458 scraps (291.6, printed 292)
+    expect(line(1)).toContain("scrap 292");
+    // at 23: epic gloves, 162 scraps
+    expect(line(2)).toContain("scrap 32.4");
   });
 });
 

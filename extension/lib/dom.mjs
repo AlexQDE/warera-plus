@@ -577,6 +577,35 @@ export function buildId(root = document) {
   return buildIdSeen;
 }
 
+/**
+ * The buyer's tax an auction card's buttons carry: the notice's rate (in
+ * percent) when it prints one, checked against the card (BUY NOW is the max
+ * price plus the tax, to the game's rounding: 0.02 or 0.2%); without a rate
+ * on the page the card's own BUY NOW / max - 1, between 0 and 50%. ok false:
+ * the card and the notice disagree, or the card cannot say; no verdict rests
+ * on the card then.
+ * @param {{ price: number | null, max: number | null }} card @param {number | null} noticePct
+ * @returns {{ rate: number | null, source: "notice" | "card" | null, ok: boolean }}
+ */
+export function auctionTax({ price, max }, noticePct) {
+  if (!(Number(price) > 0) || !(Number(max) > 0))
+    return { rate: null, source: null, ok: false };
+  const p = Number(price);
+  const m = Number(max);
+  if (noticePct != null && Number.isFinite(Number(noticePct))) {
+    const rate = Number(noticePct) / 100;
+    return {
+      rate,
+      source: "notice",
+      ok: Math.abs(p - m * (1 + rate)) <= Math.max(0.02, 0.002 * p),
+    };
+  }
+  const rate = Math.round((p / m - 1) * 1000) / 1000;
+  return rate >= 0 && rate <= 0.5
+    ? { rate, source: "card", ok: true }
+    : { rate: null, source: null, ok: false };
+}
+
 /** The smallest element holding every row, or null: the scope later scans start from. */
 export function rowsContainer(rows) {
   if (rows.length < 2) return null; // one row says nothing about where the others will go

@@ -25,7 +25,13 @@ import { scanList, clickEntry, listRows, selectionCount } from "./vlist.mjs";
 import { WEAPONS } from "./items.mjs";
 import { ageMinutes } from "./pricing.mjs";
 import { salesStats } from "./sales.mjs";
-import { readStats, codeFor, summarizeOffers, statRanks } from "./offers.mjs";
+import {
+  readStats,
+  readStatBlock,
+  codeFor,
+  summarizeOffers,
+  statRanks,
+} from "./offers.mjs";
 import { comparableFills, percentileRank, liquidity } from "./resale.mjs";
 import {
   similarValue,
@@ -65,6 +71,8 @@ const rowAge = (lines) => {
 export const TAGS = {
   hit: "SNIPE",
   flip: "FLIP",
+  bid: "BID", // v0.27 auction: the next bid pays (scrap or sale), buying now does not
+
   near: "NEAR MISS",
   miss: "PASS",
   unknown: "NO QUOTE",
@@ -605,6 +613,7 @@ export function createEquipment({
     last = {
       hits: 0,
       flips: 0,
+      bids: 0,
       scanned: 0,
       readable: 0,
       code: null,
@@ -613,7 +622,7 @@ export function createEquipment({
   }
   /** One offer's identity across re-renders of the same list: item, price and its own numbers (a duplicate listing gets its ordinal). */
   const rowKey = (r) =>
-    `${r.code ?? r.alt ?? ""}|${r.priceText ?? ""}|${r.stats.stats.join("/")}|${r.stats.durability ?? ""}`;
+    `${r.code ?? r.alt ?? ""}|${r.priceText ?? ""}|${r.bidText ?? ""}|${r.stats.stats.join("/")}|${r.stats.durability ?? ""}`;
   function onAnnotationClick(e) {
     // Only our own controls catch a click: the Details button and the Details text (selectable). The rest of the
     // annotation is the row's, in this handler as in the stylesheet (pointer-events).
@@ -649,9 +658,21 @@ export function createEquipment({
     else lines.push("Rarity unreadable: the frame border is off-palette");
     if (r.v.margin != null)
       lines.push(
-        `Offer <b>${fmt(r.price)} g</b> · scrap covers ${r.v.coverPct.toFixed(0)}% of it · ${r.v.ratio.toFixed(2)}× its scrap floor`,
+        `${r.kind === "auction" ? "Buy now" : "Offer"} <b>${fmt(r.price)} g</b> · scrap covers ${r.v.coverPct.toFixed(0)}% of it · ${r.v.ratio.toFixed(2)}× its scrap floor`,
       );
     else if (r.price == null) lines.push("Price unreadable on this row");
+    if (r.kind === "auction") {
+      const rate = r.tax?.rate;
+      const pct = rate != null ? Math.round(rate * 1000) / 10 : null;
+      lines.push(
+        `Auction: buy now <b>${fmt(r.price)} g</b>${r.max != null ? ` (max ${fmt(r.max)} before tax)` : ""} · next bid <b>${fmt(r.bid)} g</b>${rate != null && r.bid != null ? ` (${fmt(r.bid / (1 + rate))} before tax)` : ""}${r.start != null ? ` · start or current bid ${fmt(r.start)}` : ""}${r.ends ? ` · ends in ${escapeHtml(r.ends)}` : ""}`,
+      );
+      lines.push(
+        r.taxBad
+          ? `Tax check failed: the card's buy now and max price do not agree with the tax on the page${pct != null ? ` (${pct}%)` : ""}, so no tag`
+          : `Your ${pct}% market tax (${r.tax?.source === "card" ? "read off the card: buy now ÷ max" : "the page's notice"}) is in the buttons' amounts, not in the card's prices${r.bidding?.ceiling != null ? ` · bid at most <b>${r.bidding.ceiling.toFixed(2)}</b> before tax for the SNIPE or FLIP margin` : ""} · a bid in the last minute adds a minute, so the price is not final until the auction ends`,
+      );
+    }
     lines.push(
       `This piece: ${escapeHtml(statWords(r))}${r.stats.durability != null ? ` · ${r.stats.durability}% durability` : ""}${r.statRank?.status === "ok" ? ` · ${r.statRank.percentile.toFixed(0)}th percentile among ${r.statRank.n} listed` : ""}`,
     );
@@ -681,7 +702,7 @@ export function createEquipment({
         `Listed now with these stats: ${peers.n} other${peers.n === 1 ? "" : "s"} from <b>${fmt(peers.cheapest)} g</b>${r.price != null && peers.cheapest > r.price ? ` · this one is ${signed(((peers.cheapest - r.price) / r.price) * 100, 1)}% under the cheapest of them` : ""}`,
       );
     lines.push(
-      `Quote ${book?.at ? escapeHtml(ago(book.at, now())) : "missing"} · ${fresh ? "fresh" : "not fresh: no tag"} · displayed price, the market tax is the buyer's · read-only`,
+      `Quote ${book?.at ? escapeHtml(ago(book.at, now())) : "missing"} · ${fresh ? "fresh" : "not fresh: no tag"} · ${r.kind === "auction" ? "the buttons' amounts include your tax" : "displayed price, the market tax is the buyer's"} · read-only`,
     );
     return `<div class="lens-details" role="region" aria-label="Offer details">${lines.map((l) => `<span>${l}</span>`).join("")}</div>`;
   }
@@ -692,13 +713,15 @@ export function createEquipment({
         ? "reading"
         : kind === "error"
           ? "quote unavailable"
-          : !r.rarity
-            ? "rarity unreadable"
-            : r.price == null
-              ? "price unreadable"
-              : !r.q.complete
-                ? "bid depth too thin"
-                : "no quote";
+          : r.taxBad
+            ? "tax check failed"
+            : !r.rarity
+              ? "rarity unreadable"
+              : r.price == null
+                ? "price unreadable"
+                : !r.q.complete
+                  ? "bid depth too thin"
+                  : "no quote";
     // Two routes: scrap it, or sell it at what pieces of these stats sold for. The verdict's route is the big
     // number; a PASS shows the better route, muted. The value's mark: none for the same stats, ≈ otherwise.
     const scrapRoute =
@@ -710,15 +733,24 @@ export function createEquipment({
             pct: (value.amount - r.price) / r.price,
           }
         : null;
+    // an auction tagged BID: the gain at the next bid, the better of its two routes
+    const bidRoute =
+      kind === "bid"
+        ? [r.bidding?.scrap, r.bidding?.sell]
+            .filter(Boolean)
+            .sort((a, b) => b.gain - a.gain)[0]
+        : null;
     const route =
       kind === "hit"
         ? scrapRoute
         : kind === "flip"
           ? sellRoute
-          : [scrapRoute, sellRoute]
-              .filter(Boolean)
-              .sort((a, b) => b.gain - a.gain)[0];
-    const loud = kind === "hit" || kind === "flip";
+          : kind === "bid"
+            ? bidRoute
+            : [scrapRoute, sellRoute]
+                .filter(Boolean)
+                .sort((a, b) => b.gain - a.gain)[0];
+    const loud = kind === "hit" || kind === "flip" || kind === "bid";
     const big = route
       ? `<b class="lens-gain ${loud ? (route.gain >= 0 ? "lens-pos" : "lens-neg") : "lens-muted"}">${signedGold(route.gain)} · ${signed(route.pct * 100, 0)}%</b>`
       : `<b class="lens-gain lens-muted">–</b>`;
@@ -731,7 +763,16 @@ export function createEquipment({
     const sells = value
       ? `sells ${mark}${gold(value.amount)} · ${escapeHtml(value.source === "avg" ? "game avg" : value.label)}`
       : `sells · ${escapeHtml(salesState)}`;
-    return `<span class="lens-tag" data-kind="${kind}">${TAGS[kind]}</span><span class="lens-kv">${big}<small>${scrap} · ${sells}</small></span><button type="button" data-action="details" aria-expanded="${open}" aria-label="${open ? "Hide" : "Show"} details for this offer">${open ? "▾" : "▸"}</button>${open ? detailsHtml(r, ctx) : ""}`;
+    // an auction: what the verdict is for, buying now or bidding up to the ceiling (bids are typed before tax)
+    const how =
+      r.kind !== "auction"
+        ? ""
+        : kind === "bid" && r.bidding?.ceiling != null
+          ? `<span title="the most to bid for this margin, before tax (bids are typed before tax; your country adds ${Math.round((r.tax?.rate ?? 0) * 1000) / 10}%). A bid in the last minute adds a minute: the price is not final until the auction ends.">bid ≤ ${r.bidding.ceiling.toFixed(2)}</span> · `
+          : kind === "hit" || kind === "flip"
+            ? "buy now · "
+            : "";
+    return `<span class="lens-tag" data-kind="${kind}">${TAGS[kind]}</span><span class="lens-kv">${big}<small>${how}${scrap} · ${sells}</small></span><button type="button" data-action="details" aria-expanded="${open}" aria-label="${open ? "Hide" : "Show"} details for this offer">${open ? "▾" : "▸"}</button>${open ? detailsHtml(r, ctx) : ""}`;
   }
   /** Scan the rows and annotate them; returns the counts for the bar's pulse. */
   function render(state) {
@@ -739,14 +780,16 @@ export function createEquipment({
     // one row says nothing about where the next ones will be inserted.
     const periodic = now() - lastFullScan >= FULL_SCAN_EVERY;
     if (periodic) rowCache.epoch++; // frames and borders are re-read on the periodic full scan
-    const scoped =
-      listRoot?.isConnected && !periodic
-        ? dom.offerRows(listRoot, palette, rowCache)
-        : [];
+    // the v0.26 offer rows (BUY) and the v0.27 auction cards (buy now, bid): a page shows one or the other
+    const readRows = (root) => [
+      ...dom.offerRows(root, palette, rowCache),
+      ...dom.auctionRows(root, palette, rowCache),
+    ];
+    const scoped = listRoot?.isConnected && !periodic ? readRows(listRoot) : [];
     let rows = scoped;
     if (scoped.length >= 2) metrics.scopedScans++;
     else {
-      rows = dom.offerRows(document, palette, rowCache);
+      rows = readRows(document);
       metrics.fullScans++;
       lastFullScan = now();
     }
@@ -778,21 +821,35 @@ export function createEquipment({
     // (similar.windowFills), so every row of an item shares it and the worth of its stats is read once.
     const t = now();
     const fillsOf = (sales) => windowFills(sales, t);
+    // the buyer's market tax the notice prints: the auction cards' buttons carry it, their prices do not
+    const noticeTax = rows.some((r) => r.kind === "auction")
+      ? dom.taxRateFromText(dom.taxNotice()?.textContent)
+      : null;
+    const margin = Math.max(0, Number(s.minMarginPct) || 0) / 100;
     const valuations = rows.map((r) => {
-      // Trust the row first; a just-changed grid selection can precede replacement of the list. The row's image
-      // named by its item code says the rarity outright; a skin's name does not, and then its frame does.
-      const rarity =
-        dom.rarityFromItemCode(r.alt) ??
-        dom.rarityFromBorder(r.border, palette);
+      const auction = r.kind === "auction";
       const slot = dom.slotFromAlt(r.alt);
-      const rowCode =
-        codeFor(slot, rarity) ?? (dom.rarityFromItemCode(r.alt) ? r.alt : null);
-      const stats = readStats(r.lines);
+      const stats = auction ? readStatBlock(r.tokens) : readStats(r.lines);
+      // Trust the row first; a just-changed grid selection can precede replacement of the list. The row's image
+      // named by its item code says the rarity outright; a skin's name does not, and then its frame does (an
+      // auction card's frame has no border: there the tier its stat falls in says it, as in the picker).
+      const named = dom.rarityFromItemCode(r.alt) ? r.alt : null;
+      const borderRarity = dom.rarityFromBorder(r.border, palette);
+      const rowCode = auction
+        ? (named ?? tileCode(slot, stats.stats) ?? codeFor(slot, borderRarity))
+        : (codeFor(slot, dom.rarityFromItemCode(r.alt) ?? borderRarity) ??
+          named);
+      const rarity = dom.rarityFromItemCode(rowCode ?? r.alt) ?? borderRarity;
+      // an auction card's buttons include the tax and its prices do not: no verdict until the two agree
+      const tax = auction
+        ? dom.auctionTax({ price: r.price, max: r.max }, noticeTax)
+        : null;
+      const usable = !auction || tax.ok;
       const q = rarity
         ? quote(SCRAP_LADDER[rarity], book?.bids)
         : { value: null, complete: false, filled: 0 };
       const v = dom.verdict({
-        price: r.price,
+        price: usable ? r.price : null,
         floor: q.value,
         minMarginPct: s.minMarginPct,
       });
@@ -816,10 +873,45 @@ export function createEquipment({
         : null;
       // Only a value resting on sales of these stats can call a listing cheap.
       const flip =
+        usable &&
         r.price > 0 &&
         value != null &&
         value.matched &&
         (value.amount - r.price) / r.price >= s.flipPct / 100;
+      // The auction's other way in: the next bid. It pays when the scraps or the sales of these stats cover it
+      // with the SNIPE or FLIP margin; the most worth bidding (before tax, as bids are typed) is the ceiling.
+      let bidding = null;
+      if (auction && usable && r.bid > 0) {
+        const vb = dom.verdict({
+          price: r.bid,
+          floor: q.value,
+          minMarginPct: s.minMarginPct,
+        });
+        const flipBid =
+          value != null &&
+          value.matched &&
+          (value.amount - r.bid) / r.bid >= s.flipPct / 100;
+        const ceilings = [
+          q.value != null && q.complete ? q.value / (1 + margin) : null,
+          value?.matched ? value.amount / (1 + s.flipPct / 100) : null,
+        ].filter((c) => c != null);
+        const ceilingTaxed = ceilings.length ? Math.max(...ceilings) : null;
+        bidding = {
+          hit: !!vb.hit || flipBid,
+          scrap:
+            vb.margin != null ? { gain: vb.margin, pct: vb.marginPct } : null,
+          sell: value?.matched
+            ? {
+                gain: value.amount - r.bid,
+                pct: (value.amount - r.bid) / r.bid,
+              }
+            : null,
+          ceiling:
+            ceilingTaxed == null
+              ? null
+              : Math.floor((ceilingTaxed / (1 + tax.rate)) * 100) / 100,
+        };
+      }
       return {
         ...r,
         rarity,
@@ -828,17 +920,20 @@ export function createEquipment({
         stats,
         skills,
         similar,
-        ageMin: rowAge(r.lines),
+        ageMin: auction ? null : rowAge(r.lines),
         q,
         v,
         sales,
         value,
         flip,
+        tax,
+        taxBad: auction && !tax.ok,
+        bidding,
       };
     });
-    // the asks on the page, for the sell form's suggestion
+    // the asks on the page, for the sell form's suggestion (an auction's prices are not asks)
     lastAsks = valuations
-      .filter((r) => r.code && r.price > 0)
+      .filter((r) => r.kind !== "auction" && r.code && r.price > 0)
       .map((r) => ({
         code: r.code,
         price: r.price,
@@ -872,11 +967,13 @@ export function createEquipment({
               ? "hit"
               : r.flip
                 ? "flip"
-                : r.v.hit == null
-                  ? "unknown"
-                  : r.v.near
-                    ? "near"
-                    : "miss";
+                : r.bidding?.hit
+                  ? "bid"
+                  : r.v.hit == null
+                    ? "unknown"
+                    : r.v.near
+                      ? "near"
+                      : "miss";
       r.statRank = ranks[i];
       const base = rowKey(r);
       const ordinal = dupes.get(base) ?? 0;
@@ -933,6 +1030,9 @@ export function createEquipment({
         peers ? `${peers.n}|${peers.cheapest ?? ""}` : "",
         open,
         key,
+        r.bid ?? "",
+        r.bidding?.ceiling ?? "",
+        r.tax ? `${r.tax.ok}|${r.tax.rate}` : "",
         open ? Math.floor(now() / 60000) : "",
         open ? (salesErrors[r.code] ?? "") : "",
       ].join("|");
@@ -965,6 +1065,9 @@ export function createEquipment({
     last = {
       hits: fresh ? valuations.filter((r) => r.v.hit).length : 0,
       flips: fresh ? valuations.filter((r) => r.flip && !r.v.hit).length : 0,
+      bids: fresh
+        ? valuations.filter((r) => r.bidding?.hit && !r.v.hit && !r.flip).length
+        : 0,
       scanned: summary.scanned,
       readable: summary.readable,
       code,
@@ -996,6 +1099,7 @@ export function createEquipment({
       last.flips
         ? `<b>${last.flips}</b> flip${last.flips === 1 ? "" : "s"}`
         : "",
+      last.bids ? `<b>${last.bids}</b> bid${last.bids === 1 ? "" : "s"}` : "",
     ];
     return parts.filter(Boolean).join(" · ");
   }
@@ -1013,7 +1117,7 @@ export function createEquipment({
     const sales = code ? state.salesByCode?.[code] : null;
     const err = code ? state.salesErrors?.[code] : null;
     const legend = helpMark(
-      `Floors: what each rarity dismantles into at the scrap bids. SNIPE: the scraps a piece dismantles into sell for more than its price (minimum ROI ${s.minMarginPct}%). FLIP: pieces with these stats sold in the last 7 days for ${s.flipPct}% or more above this price; the game's average never earns it. ~ is a value from sales of the same stats, ≈ from any stats or the game's average. Quotes are snapshots, not reserved liquidity.`,
+      `Floors: what each rarity dismantles into at the scrap bids. SNIPE: the scraps a piece dismantles into sell for more than its price (minimum ROI ${s.minMarginPct}%). FLIP: pieces with these stats sold in the last 7 days for ${s.flipPct}% or more above this price; the game's average never earns it. On an auction both judge buying now (the button's amount, with your tax); BID: the next bid pays one way or the other, and bid ≤ is the most to bid for that margin, before tax (the price is not final until the auction ends). ~ is a value from sales of the same stats, ≈ from any stats or the game's average. Quotes are snapshots, not reserved liquidity.`,
     );
     let salesLine;
     if (!code)
