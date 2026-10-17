@@ -13,6 +13,7 @@ Ready for the game's v0.27, read on its dev server (dev.warera.io, client 0.27.0
 - **Rarity.** An image named by its item code says the rarity before the frame does. The six v0.27 frame colours are known (none was within reach of the v0.26 palette), and the palette read off the grid is kept after v0.27's Select-an-item window closes.
 - **The case window** takes the case from its image before its odds; a toolbox's or a wooden case's window never gets the case panel.
 - **A procedure the game removes** (404 "No procedure found") is said so and asked again in an hour, not every minute.
+- **An order that trades nothing no longer fails the books.** The dev server holds buy orders at a price of 0 (bread, grain and petroleum, 99,927 to 999,999 of them), and one such order failed all 24 books the Cases strip reads ("Invalid order price or quantity"), so the strip never left "loading". An order at a price or quantity of 0 or less is now left out of its book; a price or quantity that is no number at all still fails, as a changed API.
 - **`npm run build:dev`** writes a copy for testers in `dist/dev`, pointed at dev.warera.io and its API, to load unpacked beside the store build. The store build's permissions do not change.
 
 ## 3.6.0

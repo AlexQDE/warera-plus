@@ -503,6 +503,25 @@ describe("fetchBooks", () => {
     expect(r.limit).toBe(500);
   });
 
+  it("reads every book when one holds an order that trades nothing (dev 2026-10-17: bread bought at 0, 999,999 of it)", async () => {
+    const bread = top("bread", 0.31, 0.33);
+    bread.buyOrders.push({ ...bread.buyOrders[0], price: 0, quantity: 999999 });
+    const { fetchImpl } = fake({
+      body: {
+        result: {
+          data: { woodenCase: top("woodenCase", 7.5, 7.647), bread },
+        },
+      },
+    });
+    const r = await fetchBooks(fetchImpl, "", ["woodenCase", "bread"]);
+    expect(r.books.woodenCase).toMatchObject({ bid: 7.5, ask: 7.647 });
+    expect(r.books.bread).toMatchObject({
+      bid: 0.31,
+      bidQty: 40,
+      bids: [{ price: 0.31, quantity: 40 }],
+    });
+  });
+
   it("falls back to the documented getTopOrders, batched, when the multi-code procedure is gone", async () => {
     const calls = [];
     const fetchImpl = async (url, opts) => {
