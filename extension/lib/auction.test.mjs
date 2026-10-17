@@ -8,6 +8,8 @@ import { afterEach, beforeEach, describe, it, expect } from "vitest";
 import {
   auctionRows,
   auctionTokens,
+  readAuctionTokens,
+  createRowCache,
   offerRows,
   offerButtonCount,
 } from "./dom.mjs";
@@ -123,6 +125,46 @@ describe("the v0.27 auction cards", () => {
     expect(a).toMatchObject({ ends: "45s", start: 199, max: 277.927 });
     expect(b).toMatchObject({ ends: null, start: 600, max: 639.35 });
   });
+  it("looks for the countdown before the prices: a seller called like one after them is not it", () => {
+    expect(
+      readAuctionTokens([
+        "151",
+        "33%",
+        "100%",
+        "Tank",
+        "5ч35м",
+        "Starting price",
+        "199",
+        "Max price",
+        "277.927",
+        "24h",
+        "0 bids",
+      ]),
+    ).toEqual({ name: "Tank", ends: null, start: 199, max: 277.927 });
+  });
+  it("takes no list for a card: a number without a label is no price, and a card shows one piece", () => {
+    // v0.26 offer rows (BUY carries no amount) and a pager under them
+    const offer = (alt) =>
+      `<article><div><img alt="${alt}"></div><div>1</div><button>BUY</button></article>`;
+    document.body.innerHTML = `<main><div id="offers">${["knife", "rifle", "tank"].map(offer).join("")}</div><nav><button>1</button><button>2</button></nav></main>`;
+    expect(auctionRows()).toHaveLength(0);
+    document.querySelector("nav").innerHTML =
+      "<button>Page 1</button><button>Page 2</button>";
+    expect(auctionRows()).toHaveLength(0);
+    expect(offerRows()).toHaveLength(3);
+  });
+  it("reads a card's text again as its countdown ticks, and its frame once", () => {
+    const cache = createRowCache();
+    auctionRows(document, undefined, cache);
+    expect(cache).toMatchObject({ reads: 3, styleReads: 3 });
+    const walk = document.createTreeWalker(document.body, 4);
+    while (walk.nextNode())
+      if (walk.currentNode.nodeValue === "28s")
+        walk.currentNode.nodeValue = "27s";
+    const [tank] = auctionRows(document, undefined, cache);
+    expect(tank.ends).toBe("5h35m27s");
+    expect(cache).toMatchObject({ reads: 4, styleReads: 3 });
+  });
   it("joins what the page splits: a decimal's parts, a percent, a countdown's units", () => {
     const tank = document.querySelector("#list > div");
     expect(auctionTokens(tank)).toEqual([
@@ -199,6 +241,34 @@ describe("verdicts on the auction cards", () => {
     equipment.render(state(0.2));
     expect(card(2).dataset.scrapSniper).toBe("unknown");
     expect(line(2)).toContain("tax check failed");
+  });
+  it("shows no gain on a card that fails the tax check, whatever pieces of its stats sold for", () => {
+    document.getElementById("market").innerHTML =
+      "<div><span>Live auctions</span><span>Bids are shown before tax: your country adds its 20% market tax.</span></div>";
+    // epic gloves at precision 23 sold three times at 200 today; the card's buy now reads 155.23
+    const at = (h) => new Date(Date.now() - h * 3600e3).toISOString();
+    const fill = (h) => ({
+      price: 200,
+      at: at(h),
+      state: 100,
+      code: "gloves4",
+      skills: { precision: 23 },
+      listedAt: at(h + 2),
+    });
+    equipment.render({
+      ...state(0.2),
+      salesByCode: {
+        gloves4: {
+          code: "gloves4",
+          at: at(0),
+          complete: true,
+          fills: [fill(1), fill(2), fill(3)],
+        },
+      },
+    });
+    expect(card(2).dataset.scrapSniper).toBe("unknown");
+    expect(line(2)).toContain("sells 200");
+    expect(card(2).querySelector(".lens-gain").textContent).toBe("–");
   });
   it("values a skinned card by its stats: the tier its stat falls in", () => {
     equipment.render(state(0.2));

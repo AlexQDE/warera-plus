@@ -82,7 +82,8 @@ export const AUCTION_MAX_SHARE = Object.freeze([1, 1.6]);
  * the range the form allows, the form's own numbers when it printed them
  * (`range`), else 100-160% of the estimate. The start is what the piece's
  * scraps fetch at the bids (`scrap`), so a lone bidder never takes it for
- * less than dismantling gives, and never above the max.
+ * less than dismantling gives, and never above the max. Without the average
+ * the estimate is the form's 100%.
  * @param {{ code: string, skills: Record<string, number> | null, fills: ReadonlyArray<any> | null | undefined, avg: unknown, scrap?: number | null, range?: { lo: number, hi: number } | null, now?: number }} input
  */
 export function suggestAuction({
@@ -94,7 +95,7 @@ export function suggestAuction({
   range = null,
   now = Date.now(),
 }) {
-  const est = estimatedValue(code, skills, avg);
+  const est = estimatedValue(code, skills, avg) ?? positive(range?.lo);
   const lo =
     positive(range?.lo) ??
     (est != null ? round3(est * AUCTION_MAX_SHARE[0]) : null);

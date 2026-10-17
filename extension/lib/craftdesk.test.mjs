@@ -529,7 +529,8 @@ describe("the ledger", () => {
     state.craftsUserId = ME;
     const v = view();
     v.windows.today.wooden = { n: 1, value: 11.4, cost: 6 };
-    v.windows.today.woodenUnpriced = 1;
+    v.windows.today.woodenUnpriced = 3;
+    v.windows.today.woodenToolboxes = 2;
     v.windows.today.tools = { n: 2, scrapped: 1, proceeds: 1.2 };
     state.ledger = { ...v, mode: "eco" };
     render("ledger");
@@ -537,8 +538,15 @@ describe("the ledger", () => {
       c.textContent.replace(/\s+/g, " ").trim(),
     );
     const wooden = chips.find((c) => c.startsWith("Wooden"));
-    expect(wooden).toContain("Wooden 2");
-    expect(wooden).toContain("1 unpriced");
+    expect(wooden).toContain("Wooden 4");
+    expect(wooden).toContain("3 unpriced");
+    // the title says why: toolboxes have no market price, the other drop has none yet
+    const title = [...body.querySelectorAll(".lens-chip")].find((c) =>
+      c.textContent.startsWith("Wooden"),
+    ).title;
+    expect(title).toBe(
+      "3 wooden cases left out of the result: 2 gave toolboxes, which have no market price; 1 gave a drop without a price yet",
+    );
     const tools = chips.find((c) => c.startsWith("Toolbox"));
     expect(tools).toContain("Toolbox 2");
     expect(tools).toContain("♻ 1.20");

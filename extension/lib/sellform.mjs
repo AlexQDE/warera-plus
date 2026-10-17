@@ -4,7 +4,12 @@
 // into the game's input. Nothing is listed: PUT ON SALE stays the player's.
 import { gold, escapeHtml as esc } from "./format.mjs";
 import { setHtml } from "./ui.mjs";
-import { slotFromAlt, isItemImageAlt, slotName } from "./dom.mjs";
+import {
+  slotFromAlt,
+  isItemImageAlt,
+  slotName,
+  auctionTokens,
+} from "./dom.mjs";
 import { tileTokens, tileStats, tileCode } from "./picker.mjs";
 import { rowSkills } from "./similar.mjs";
 
@@ -176,9 +181,11 @@ export function findAuctionForm(root = document) {
 
 /**
  * The picked pieces, the two inputs, and the range the game prints for the
- * max price of one piece ("From 82.404 to 131.846": two amounts close
- * together, the second 1.6 times the first; null when the form does not
- * print it, as with several pieces, where the max is a percentage).
+ * max price of one piece ("From 82.404 to 131.846": two amounts with one
+ * word between them, the second 1.6 times the first; null when the form does
+ * not print it, as with several pieces, where the max is a percentage). The
+ * page prints decimals in pieces ("131", ".", "846"), read as one number;
+ * the start slider's numbers stand side by side and are no range.
  * @param {Element} form
  */
 export function readAuctionForm(form) {
@@ -188,17 +195,18 @@ export function readAuctionForm(form) {
   const max = /** @type {HTMLInputElement} */ (
     form.querySelector('input[name="maxPrice"]')
   );
-  const tokens = tileTokens(form);
+  const tokens = auctionTokens(form);
   let range = null;
-  for (let i = 0; i < tokens.length && !range; i++) {
-    if (!NUMBER.test(tokens[i])) continue;
+  for (let i = 0; i + 2 < tokens.length && !range; i++) {
+    if (
+      !NUMBER.test(tokens[i]) ||
+      NUMBER.test(tokens[i + 1]) ||
+      !NUMBER.test(tokens[i + 2])
+    )
+      continue;
     const lo = num(tokens[i]);
-    for (let j = i + 1; j <= i + 2 && j < tokens.length; j++) {
-      if (!NUMBER.test(tokens[j])) continue;
-      const hi = num(tokens[j]);
-      if (lo > 0 && Math.abs(hi / lo - 1.6) <= 0.002) range = { lo, hi };
-      break;
-    }
+    const hi = num(tokens[i + 2]);
+    if (lo > 0 && Math.abs(hi / lo - 1.6) <= 0.002) range = { lo, hi };
   }
   return { form, start, max, items: pickedItems(form), range };
 }

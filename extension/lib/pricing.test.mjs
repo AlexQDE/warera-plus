@@ -79,6 +79,19 @@ describe("the auction estimate, and a start and max price", () => {
     // a start never above the max
     expect(auction({ scrap: 500 }).start).toBe(82.404);
   });
+  it("takes the form's 100% as the estimate while the average is missing", () => {
+    expect(
+      auction({ avg: null, range: { lo: 82.404, hi: 131.846 } }),
+    ).toMatchObject({
+      est: 82.404,
+      max: 82.404,
+      start: 32.4,
+      clamped: false,
+      why: "the game's estimate",
+    });
+    // without the form's range there is nothing to go by
+    expect(auction({ avg: null })).toMatchObject({ est: null, max: null });
+  });
 });
 
 describe("reading a listing's age", () => {

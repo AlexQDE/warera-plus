@@ -240,6 +240,40 @@ describe("the Start an auction form (v0.27)", () => {
     ]);
     expect(read.range).toEqual({ lo: 82.404, hi: 131.846 });
   });
+  it("reads the range off its sentence: a decimal printed in pieces is one number, a slider's numbers are none", () => {
+    // the form's text nodes in page order: the start slider ("0", "0", "131", ".", "846"), then the sentence
+    // "From 82.404 to 131.846", then the max price again
+    const nodes = (form) => {
+      const out = [];
+      const walk = document.createTreeWalker(form, 4);
+      while (walk.nextNode()) out.push(walk.currentNode);
+      return out;
+    };
+    // a 9.525 estimate: the slider ends at 15.24, printed "15" "." "24" (24 is 1.6 times 15), and the
+    // sentence's 15.24 printed "15" ".24"
+    let form = open();
+    nodes(form).find((n) => n.nodeValue === "131").nodeValue = "15";
+    nodes(form).find((n) => n.nodeValue === "846").nodeValue = "24";
+    for (const n of nodes(form)) {
+      if (n.nodeValue === "82.404") n.nodeValue = "9.525";
+      else if (n.nodeValue === "131.846") {
+        const decimals = document.createElement("span");
+        decimals.textContent = ".24";
+        n.replaceWith("15", decimals);
+      }
+    }
+    expect(readAuctionForm(form).range).toEqual({ lo: 9.525, hi: 15.24 });
+    // the start slider at 50 of a max of 80: two numbers side by side, 1.6 apart, before the sentence
+    form = open();
+    const [, current, whole, dot, decimals] = nodes(form).filter((n) =>
+      /^(0|131|\.|846)$/.test(n.nodeValue),
+    );
+    current.nodeValue = "50";
+    whole.nodeValue = "80";
+    dot.nodeValue = "";
+    decimals.nodeValue = "";
+    expect(readAuctionForm(form).range).toEqual({ lo: 82.404, hi: 131.846 });
+  });
   it("puts one line under the max price, and Use writes both prices without starting the auction", () => {
     const form = open();
     const read = readAuctionForm(form);

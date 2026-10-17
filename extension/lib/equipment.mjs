@@ -677,7 +677,8 @@ export function createEquipment({
       `This piece: ${escapeHtml(statWords(r))}${r.stats.durability != null ? ` · ${r.stats.durability}% durability` : ""}${r.statRank?.status === "ok" ? ` · ${r.statRank.percentile.toFixed(0)}th percentile among ${r.statRank.n} listed` : ""}`,
     );
     if (value) {
-      const gap = r.price != null ? value.amount - r.price : null;
+      // a card that failed the tax check has no price to measure against
+      const gap = r.price != null && !r.taxBad ? value.amount - r.price : null;
       lines.push(
         `Sells for <b>${fmt(value.amount)} g</b> · ${escapeHtml(value.detail ?? value.label)}${value.low != null ? ` · ${fmt(value.low)}–${fmt(value.high)}` : ""}${value.sellsHours != null ? ` · listed to sold in ${value.sellsHours < 1 ? `${Math.round(value.sellsHours * 60)} min` : `${value.sellsHours.toFixed(1)} h`} (median)` : ""}${gap != null ? ` · against this price <b>${signed(gap)} g</b> (${signed((gap / r.price) * 100, 1)}%)` : ""}`,
       );
@@ -699,7 +700,7 @@ export function createEquipment({
     } else lines.push(`Sells for: ${escapeHtml(salesState)}`);
     if (peers?.n)
       lines.push(
-        `Listed now with these stats: ${peers.n} other${peers.n === 1 ? "" : "s"} from <b>${fmt(peers.cheapest)} g</b>${r.price != null && peers.cheapest > r.price ? ` · this one is ${signed(((peers.cheapest - r.price) / r.price) * 100, 1)}% under the cheapest of them` : ""}`,
+        `Listed now with these stats: ${peers.n} other${peers.n === 1 ? "" : "s"} from <b>${fmt(peers.cheapest)} g</b>${r.price != null && !r.taxBad && peers.cheapest > r.price ? ` · this one is ${signed(((peers.cheapest - r.price) / r.price) * 100, 1)}% under the cheapest of them` : ""}`,
       );
     lines.push(
       `Quote ${book?.at ? escapeHtml(ago(book.at, now())) : "missing"} · ${fresh ? "fresh" : "not fresh: no tag"} · ${r.kind === "auction" ? "the buttons' amounts include your tax" : "displayed price, the market tax is the buyer's"} · read-only`,
@@ -727,7 +728,7 @@ export function createEquipment({
     const scrapRoute =
       r.v.margin != null ? { gain: r.v.margin, pct: r.v.marginPct } : null;
     const sellRoute =
-      value?.matched && r.price > 0
+      value?.matched && r.price > 0 && !r.taxBad
         ? {
             gain: value.amount - r.price,
             pct: (value.amount - r.price) / r.price,
@@ -992,7 +993,7 @@ export function createEquipment({
                 ? "no average yet"
                 : "reading averages…";
       const rank =
-        r.value?.source === "fills" && r.price != null && r.similar
+        r.value?.source === "fills" && r.price != null && !r.taxBad && r.similar
           ? percentileRank(
               r.price,
               (r.value.matched ? r.similar.fills : fillsOf(r.sales)).map(

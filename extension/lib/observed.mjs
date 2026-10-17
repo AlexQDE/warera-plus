@@ -596,7 +596,8 @@ export function windowView(
   );
   const gone = countWorn ? goneAll : goneAll.filter((p) => !p.worn);
   const goneKnown = gone.filter((p) => p.cost != null && p.proceeds != null);
-  // a wooden case is counted where what it gave has a price; one that dropped toolboxes (no price) apart
+  // a wooden case is counted where what it gave has a price; one that dropped toolboxes (no market price) or
+  // a drop without that day's price yet apart
   const woodenAll = history.wooden.filter((w) => inWindow(w.at));
   const wooden = woodenAll.filter((w) => w.value != null);
   const tools = history.tools ?? [];
@@ -632,6 +633,9 @@ export function windowView(
       cost: sum(wooden.map((w) => w.cost)),
     },
     woodenUnpriced: woodenAll.length - wooden.length,
+    woodenToolboxes: woodenAll.filter(
+      (w) => w.value == null && w.code === "toolbox",
+    ).length,
     tools: {
       n: tools.filter((t) => inWindow(t.at)).length,
       scrapped: toolsGone.length,

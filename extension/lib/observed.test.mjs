@@ -474,9 +474,26 @@ describe("tools, toolboxes and wooden-case case drops (v0.27)", () => {
     });
     expect(v.wooden).toEqual({ n: 1, value: 3 * 3.8, cost: 6 });
     expect(v.woodenUnpriced).toBe(1);
+    expect(v.woodenToolboxes).toBe(1);
     expect(v.tools).toEqual({ n: 1, scrapped: 1, proceeds: 1.2 });
     expect(v.opened.n).toBe(0);
     expect(Object.keys(v.cases)).toEqual([]);
+  });
+  it("tells a drop that has no price yet from a toolbox", () => {
+    // bread has no daily price in the history: unpriced, and no toolbox
+    const bread = replayHistory(
+      [{ x: "w9", y: "openCase", a: A(2), c: "bread", q: 10 }],
+      { averages },
+    );
+    const v = windowView(bread, {
+      from: "2026-10-05",
+      to: "2026-10-05",
+      dayOf,
+      valueOf: () => null,
+    });
+    expect(v.wooden.n).toBe(0);
+    expect(v.woodenUnpriced).toBe(1);
+    expect(v.woodenToolboxes).toBe(0);
   });
 });
 

@@ -23,6 +23,18 @@ import { modeSwitch, valueHtml, chosenMark } from "./dialogs.mjs";
 const pct = (v, d = 0) => (v == null ? "–" : `${signed(v * 100, d)}%`);
 const count = (n) => Number(n ?? 0).toLocaleString("en-US");
 const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
+/** Why `n` wooden cases sit outside the result: toolboxes have no market price, any other drop no price yet. */
+const unpricedWooden = (n, toolboxes) =>
+  `${count(n)} wooden case${n === 1 ? "" : "s"} left out of the result: ${[
+    toolboxes
+      ? `${count(toolboxes)} gave toolboxes, which have no market price`
+      : "",
+    n - toolboxes
+      ? `${count(n - toolboxes)} gave a drop without a price yet`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("; ")}`;
 
 const CRAFT_HELP =
   "Cost: the tier's scraps and steel walked through the market asks, for a random craft (a sniper craft, the slot chosen, doubles the steel). Worth: the game's average price of each slot at the game's odds (30% weapon, 14% each armour slot). Profit: worth against cost. Expected values, not promises.";
@@ -282,7 +294,7 @@ export function createCraftDesk({ settings, now = Date.now }) {
         ),
       ...(w.wooden.n || w.woodenUnpriced
         ? [
-            `<span class="lens-chip"${w.woodenUnpriced ? ` title="${esc(`${count(w.woodenUnpriced)} wooden case${w.woodenUnpriced === 1 ? "" : "s"} gave toolboxes: they have no market price, so the result leaves ${w.woodenUnpriced === 1 ? "it" : "them"} out`)}"` : ""}>Wooden <small>${count(w.wooden.n + (w.woodenUnpriced ?? 0))}</small> ${w.wooden.n ? money(w.wooden.value - w.wooden.cost) : "–"}${w.woodenUnpriced ? ` <small>${count(w.woodenUnpriced)} unpriced</small>` : ""}</span>`,
+            `<span class="lens-chip"${w.woodenUnpriced ? ` title="${esc(unpricedWooden(w.woodenUnpriced, w.woodenToolboxes ?? 0))}"` : ""}>Wooden <small>${count(w.wooden.n + (w.woodenUnpriced ?? 0))}</small> ${w.wooden.n ? money(w.wooden.value - w.wooden.cost) : "–"}${w.woodenUnpriced ? ` <small>${count(w.woodenUnpriced)} unpriced</small>` : ""}</span>`,
           ]
         : []),
       // v0.27: tools from toolboxes, for the employees; not tradable, so outside every result

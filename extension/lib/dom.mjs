@@ -438,12 +438,19 @@ export function auctionTokens(el, { buttons = false } = {}) {
   return out;
 }
 
-/** The amount a button carries ("Buy now" 305.72, "Bid" 218.9): its last token, when that is an amount. */
+/**
+ * The amount a button carries ("Buy now" 305.72, "Bid" 218.9): its last token, when that is an amount after a
+ * label (a pager's "2" is no price).
+ */
 function buttonAmount(button) {
   // most of the page's buttons carry no digit at all: they are passed over before any text walk
   if (!/\d/.test(button.textContent || "")) return null;
-  const t = auctionTokens(button, { buttons: true }).at(-1) ?? "";
-  return AMOUNT_RE.test(t) ? { text: t, value: parsePrice(t) } : null;
+  const tokens = auctionTokens(button, { buttons: true });
+  const t = tokens.at(-1) ?? "";
+  return AMOUNT_RE.test(t) &&
+    tokens.slice(0, -1).some((x) => !AMOUNT_RE.test(x))
+    ? { text: t, value: parsePrice(t) }
+    : null;
 }
 
 /**
@@ -456,7 +463,11 @@ function buttonAmount(button) {
 export function readAuctionTokens(tokens) {
   let i = 0;
   while (i < tokens.length && /^\d+%?$/.test(tokens[i])) i++;
-  const cd = tokens.findIndex((t, k) => k > i && COUNTDOWN_RE.test(t));
+  // the countdown comes before the prices: a seller called "24h" after them is not one
+  const first = tokens.findIndex((t, k) => k > i && AMOUNT_RE.test(t));
+  const cd = tokens.findIndex(
+    (t, k) => k > i && (first < 0 || k < first) && COUNTDOWN_RE.test(t),
+  );
   /** @type {Array<{ text: string, value: number }>} */
   const amounts = [];
   for (let k = cd >= 0 ? cd + 1 : i + 1; k < tokens.length; k++) {
@@ -505,6 +516,11 @@ export function auctionRows(
     }
     if (!img || cards.has(card)) continue;
     cards.add(card);
+    // a card shows one piece: an ancestor that shows more is a list, whatever buttons it holds
+    const pieces = [...card.querySelectorAll("img")].filter(
+      (i) => !i.closest("button") && slotFromAlt(i.getAttribute("alt")),
+    );
+    if (pieces.length > 1) continue;
     const priced = [...card.querySelectorAll("button")].filter(
       (b) => !b.closest("[data-lens]") && buttonAmount(b),
     );
@@ -526,6 +542,8 @@ export function auctionRows(
         price: buyAmount?.value ?? null,
         bidText: bidAmount?.text ?? null,
         bid: bidAmount?.value ?? null,
+        // the countdown changes the text every second, not the frame: its read stays (checked below)
+        style: read?.style,
       };
       cache?.rows.set(card, read);
     }
