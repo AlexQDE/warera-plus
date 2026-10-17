@@ -386,12 +386,184 @@ export function offerRows(
 export function offerButtonCount(root = document) {
   let n = 0;
   for (const b of root.querySelectorAll("button"))
+    // the amount follows the word with no space in textContent ("Bid218.9"), so no \b after it
     if (
-      /^\s*(buy|bid)\b/i.test(b.textContent || "") &&
+      /^\s*(buy|bid)(?![a-z])/i.test(b.textContent || "") &&
       !b.closest("[data-lens]")
     )
       n++;
   return n;
+}
+
+// ---------- v0.27: the auction house (dev 2026-10-17) ----------
+
+/** One part of a countdown, or a whole one: "5h", "35m", "28s", "6d23h26m6s". */
+const COUNTDOWN_RE = /^(\d+\s*[dhms]\s*)+$/i;
+/** An amount as the auction cards print it: "199", "277.927", "1,234.5". */
+const AMOUNT_RE = /^\d[\d,]*(\.\d+)?$/;
+
+/**
+ * An element's text as tokens, in page order, without the extension's own
+ * nodes and (unless `buttons`) without the text of the buttons inside it.
+ * What the page prints in pieces is joined: a "%" to the number before it,
+ * a decimal's "." and digits to its whole part ("277", ".", "927" ->
+ * "277.927"), a countdown's units ("5h", "35m", "28s" -> "5h35m28s").
+ * @param {Element} el @param {{ buttons?: boolean }} [options]
+ * @returns {string[]}
+ */
+export function auctionTokens(el, { buttons = false } = {}) {
+  /** @type {string[]} */
+  const out = [];
+  const walk = el.ownerDocument.createTreeWalker(el, 4 /* SHOW_TEXT */);
+  while (walk.nextNode()) {
+    const node = walk.currentNode;
+    const parent = node.parentElement;
+    if (parent?.closest("[data-lens]")) continue;
+    if (!buttons) {
+      const b = parent?.closest("button");
+      if (b && b !== el && el.contains(b)) continue;
+    }
+    const v = String(node.nodeValue ?? "").trim();
+    if (!v) continue;
+    const last = out.at(-1) ?? "";
+    if (v === "%" && out.length) out[out.length - 1] += "%";
+    else if (/^\.\d*$/.test(v) && /^\d[\d,]*$/.test(last))
+      out[out.length - 1] += v;
+    else if (/^\d+$/.test(v) && /^\d[\d,]*\.$/.test(last))
+      out[out.length - 1] += v;
+    else if (COUNTDOWN_RE.test(v) && COUNTDOWN_RE.test(last))
+      out[out.length - 1] += v;
+    else out.push(v);
+  }
+  return out;
+}
+
+/** The amount a button carries ("Buy now" 305.72, "Bid" 218.9): its last token, when that is an amount. */
+function buttonAmount(button) {
+  const t = auctionTokens(button, { buttons: true }).at(-1) ?? "";
+  return AMOUNT_RE.test(t) ? { text: t, value: parsePrice(t) } : null;
+}
+
+/**
+ * What an auction card says, by position (its labels are translated): the
+ * stats before the item's name, the countdown, then two amounts, the start
+ * (the current bid once someone bid) and the max price, both before tax.
+ * Without a countdown the amounts are the first two after the name.
+ * @param {ReadonlyArray<string>} tokens
+ */
+export function readAuctionTokens(tokens) {
+  let i = 0;
+  while (i < tokens.length && /^\d+%?$/.test(tokens[i])) i++;
+  const cd = tokens.findIndex((t, k) => k > i && COUNTDOWN_RE.test(t));
+  /** @type {Array<{ text: string, value: number }>} */
+  const amounts = [];
+  for (let k = cd >= 0 ? cd + 1 : i + 1; k < tokens.length; k++) {
+    if (amounts.length === 2) break;
+    if (AMOUNT_RE.test(tokens[k]))
+      amounts.push({
+        text: tokens[k],
+        value: Number(tokens[k].replace(/,/g, "")),
+      });
+  }
+  return {
+    name: tokens[i] ?? null,
+    ends: cd >= 0 ? tokens[cd] : null,
+    start: amounts[0]?.value ?? null,
+    max: amounts[1]?.value ?? null,
+  };
+}
+
+/**
+ * Every auction card under `root` (v0.27): a card shows an item and carries
+ * exactly two buttons with an amount, buy-now then bid, whose amounts include
+ * the buyer's market tax; the card's own start and max price do not. Rows
+ * have offerRows' shape (row, button, img, alt, tile, border, rarity,
+ * priceText, price = the buy-now amount, lines) plus kind "auction", the bid
+ * button and its amount, start, max, the countdown and the card's tokens. A
+ * card whose native text did not change reuses its read (the cache).
+ */
+export function auctionRows(
+  root = document,
+  palette = RARITY_PALETTE,
+  cache = null,
+) {
+  const out = [];
+  const cards = new Set();
+  for (const button of root.querySelectorAll("button")) {
+    if (button.closest("[data-lens]") || !buttonAmount(button)) continue;
+    let card = button;
+    let img = null;
+    for (let k = 0; k < 10 && card.parentElement; k++) {
+      card = card.parentElement;
+      img =
+        [...card.querySelectorAll("img")].find(
+          (i) => isItemImageAlt(i.getAttribute("alt")) && !i.closest("button"),
+        ) ?? null;
+      if (img) break;
+    }
+    if (!img || cards.has(card)) continue;
+    cards.add(card);
+    const priced = [...card.querySelectorAll("button")].filter(
+      (b) => !b.closest("[data-lens]") && buttonAmount(b),
+    );
+    if (priced.length !== 2) continue;
+    const [buy, bidButton] = priced;
+    const text = nativeRowText(card);
+    let read = cache?.rows.get(card);
+    if (!read || read.text !== text || !read.auction) {
+      if (cache) cache.reads++;
+      const tokens = auctionTokens(card);
+      const buyAmount = buttonAmount(buy);
+      const bidAmount = buttonAmount(bidButton);
+      read = {
+        text,
+        auction: true,
+        tokens,
+        ...readAuctionTokens(tokens),
+        priceText: buyAmount?.text ?? null,
+        price: buyAmount?.value ?? null,
+        bidText: bidAmount?.text ?? null,
+        bid: bidAmount?.value ?? null,
+      };
+      cache?.rows.set(card, read);
+    }
+    if (
+      !read.style ||
+      read.style.epoch !== (cache?.epoch ?? 0) ||
+      read.style.img !== img ||
+      !read.style.tile?.isConnected
+    ) {
+      if (cache) cache.styleReads++;
+      const tile = tileOf(img);
+      read.style = {
+        epoch: cache?.epoch ?? 0,
+        img,
+        tile,
+        border: tile ? getComputedStyle(tile).borderColor : null,
+      };
+    }
+    out.push({
+      kind: "auction",
+      row: card,
+      button: buy,
+      bidButton,
+      img,
+      alt: img.getAttribute("alt"),
+      tile: read.style.tile,
+      border: read.style.border,
+      rarity: rarityFromBorder(read.style.border, palette),
+      tokens: read.tokens,
+      lines: read.tokens,
+      priceText: read.priceText,
+      price: read.price,
+      bidText: read.bidText,
+      bid: read.bid,
+      start: read.start,
+      max: read.max,
+      ends: read.ends,
+    });
+  }
+  return out;
 }
 
 /** The game build the page runs (Next.js buildId), for notices; null when the page does not say. */
