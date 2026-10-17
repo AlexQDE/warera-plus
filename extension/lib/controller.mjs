@@ -750,6 +750,20 @@ export function createController({
     });
   }
 
+  /**
+   * An item's sales cut to the week, kept per item while its read and the minute stay the same: storage hands a
+   * new object each time, and the list's stat slopes (similar.statSlopes) are worked out once per list.
+   */
+  const windows = new Map();
+  const windowOf = (code, sales) => {
+    const minute = Math.floor(now() / 60_000);
+    const held = windows.get(code);
+    if (held && held.at === sales.at && held.minute === minute)
+      return held.fills;
+    const fills = windowFills(sales, now());
+    windows.set(code, { at: sales.at, minute, fills });
+    return fills;
+  };
   /** The replayed history, kept in memory per revision and steel mode (the worker may restart: it is rebuilt from storage). */
   const replayMemo = { key: "", value: null, rows: 0 };
   async function replayed(userId, steelMode) {
@@ -837,7 +851,7 @@ export function createController({
       if (sales?.fills) {
         let fills = fillsOf.get(p.code);
         if (!fills) {
-          fills = windowFills(sales, now());
+          fills = windowOf(p.code, sales);
           fillsOf.set(p.code, fills);
         }
         const v = similarValue(p.code, p.skills, fills, { now: now() });
