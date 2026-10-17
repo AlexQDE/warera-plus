@@ -154,10 +154,25 @@ async function request(fetchImpl, key, url, signal, batch = false) {
       : new ApiError("this needs your API key", "needs-key", {
           status: res.status,
         });
-  if (!res.ok)
-    throw new ApiError(`the API answered ${res.status}`, "http", {
-      status: res.status,
-    });
+  if (!res.ok) {
+    // tRPC names the reason in the body; "No procedure found on path …" means the game removed the procedure
+    let reason = "";
+    try {
+      const body = await res.json();
+      reason = String(body?.error?.message ?? body?.error?.json?.message ?? "");
+    } catch {
+      /* no JSON body: the status says it all */
+    }
+    const gone = res.status === 404 && /no procedure found/i.test(reason);
+    const proc = /\/trpc\/([^?]+)/.exec(String(url))?.[1] ?? "this";
+    throw new ApiError(
+      gone
+        ? `the game no longer serves ${decodeURIComponent(proc)} (a WarEra update?); asked again in an hour`
+        : `the API answered ${res.status}${reason ? `: ${reason.slice(0, 160)}` : ""}`,
+      "http",
+      { status: res.status, gone },
+    );
+  }
   // a keyless call expects the keyless bucket: only a key's answer is verified
   if (key && limit != null && limit <= KEYLESS_LIMIT)
     throw new ApiError(

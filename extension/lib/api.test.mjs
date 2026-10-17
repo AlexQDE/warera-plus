@@ -134,6 +134,32 @@ describe("fetchBook", () => {
     expect(err.message).toContain("boom");
   });
 
+  it("marks a procedure the game removed as gone, with the reason it gives", async () => {
+    const { fetchImpl } = fake({
+      status: 404,
+      body: {
+        error: {
+          message: 'No procedure found on path "tradingOrder.getTopOrders"',
+          code: -32004,
+        },
+      },
+    });
+    const err = await fetchBook(fetchImpl, "k").catch((e) => e);
+    expect(err).toMatchObject({ code: "http", status: 404, gone: true });
+    expect(err.message).toContain(
+      "the game no longer serves tradingOrder.getTopOrders",
+    );
+    const other = fake({
+      status: 404,
+      body: { error: { message: "Itemtradings not found." } },
+    });
+    await expect(fetchBook(other.fetchImpl, "k")).rejects.toMatchObject({
+      code: "http",
+      status: 404,
+      gone: false,
+    });
+  });
+
   it("surfaces other HTTP failures with their status", async () => {
     const { fetchImpl } = fake({ status: 503, body: {} });
     await expect(fetchBook(fetchImpl, "k")).rejects.toMatchObject({

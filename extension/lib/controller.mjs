@@ -93,10 +93,13 @@ export function createController({
       await session.set({ apiHoldUntil: hold });
     }
     const previous = cooldowns.get(token)?.attempt ?? 0;
+    // a procedure the game removed is asked again in an hour, not every minute
     const delay =
       e.code === "key-rejected"
         ? 60_000
-        : Math.min(60_000, 5000 * 2 ** previous) + random() * 1000;
+        : e.gone
+          ? 3_600_000
+          : Math.min(60_000, 5000 * 2 ** previous) + random() * 1000;
     cooldowns.set(token, {
       until: now() + delay,
       attempt: Math.min(previous + 1, 5),

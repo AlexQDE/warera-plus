@@ -241,6 +241,29 @@ describe("background controller", () => {
     await controller.handle({ type: "book" });
     expect(f).toHaveBeenCalledTimes(3);
   });
+  it("parks a read whose procedure the game removed for an hour, instead of every minute", async () => {
+    const gone = vi.fn(async () => ({
+      ok: false,
+      status: 404,
+      headers: new Headers({ "ratelimit-limit": "500" }),
+      json: async () => ({
+        error: {
+          message: 'No procedure found on path "tradingOrder.getTopOrders"',
+        },
+      }),
+    }));
+    const { controller, advance } = setup(gone);
+    const first = await controller.handle({ type: "book" });
+    expect(first.error).toBe("http");
+    expect(first.message).toContain("no longer serves");
+    advance(59 * 60_000);
+    const again = await controller.handle({ type: "book", force: true });
+    expect(again.message).toContain("retry in");
+    expect(gone).toHaveBeenCalledTimes(1);
+    advance(2 * 60_000);
+    await controller.handle({ type: "book", force: true });
+    expect(gone).toHaveBeenCalledTimes(2);
+  });
   it("retains failed average items and their timestamps without declaring a successful refresh", async () => {
     const at = new Date(NOW - 700000).toISOString();
     const f = vi.fn(async (url) => {
