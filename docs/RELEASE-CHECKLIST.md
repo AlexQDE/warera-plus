@@ -1,4 +1,18 @@
-# 3.3.0 release checklist
+# Release checklist
+
+Go through the newest release's section and the manual gate on the live game, with your own account, before publishing. Then [CHROME-WEB-STORE.md](CHROME-WEB-STORE.md).
+
+## 3.6.0 on the live page
+
+3.6.0 was checked on the test suite (unit, worker and jsdom page tests) and in headless Chromium on the synthetic market (`node scripts/jitter.mjs`, `node scripts/store-assets.mjs`). Not seen on the live game. Reload the extension itself first, then the game.
+
+- **Sniper craft, seen.** Open the game's craft window, pick a slot (the button reads CRAFT), craft one. Within ~10 s the Ledger (Today) lists it with ◎ and its cost carries twice the tier's steel (epic: 16 steel, not 8); its title says "picked in the game's craft window". Craft one with CRAFT RANDOM: no ◎, the base steel. A craft whose button press was missed (another device) and that is part of a run of 6 weapons or 5 of one armour piece carries a faint ◎ ("… in a row").
+- **The setting.** Settings, Advanced, How you craft reads Detect for an install that never chose; Always random takes every ◎ away, Always sniper craft puts one on every craft; back to Detect.
+- **The Ledger's list.** All: "1–50 of N" under the table, Older › and » walk to the oldest page, « and ‹ Newer back; Craft / Case / Buy / Loot filter with their counts; a new window or filter starts at the newest page; the list scrolls in its own box and does not jump back to the top when the numbers refresh.
+- **Steady rows.** Reload the equipment market with the network throttled (DevTools, Slow 4G): every row's line appears once with READING and keeps its width while the tag, the game's average and the sales arrive; the game's price and BUY do not move after the line first shows. Load more: the new rows show with their lines at once. Navigate to another game page and back: the lines come within a moment, not after seconds.
+- **Prices.** Details on a top roll whose value rests on similar stats says "brought to these stats"; its value sits above the plain median of the sales listed beside it. A sell-form suggestion and a Ledger held value still follow the sales of the same stats.
+- **Sales refresh.** With DevTools' network panel on the extension's worker (chrome://extensions, the worker link), a refresh of an item's sales five minutes after the first read asks one or two pages of `transaction.getPaginatedTransactions`, not ten.
+- **Store package.** `npm run package`; load the zip's contents unpacked in a fresh profile (unzip it into a folder) and run through the bar, the Ledger and the settings.
 
 ## 3.3.0 on the live page
 
@@ -29,10 +43,12 @@ Checked on the tests and the synthetic page; the picker's DOM was read live on 2
 ## Automated gate
 
 - `npm ci --ignore-scripts`
-- `npm run check`
+- `npm run check` (lint, typecheck, the manifest and store checks, tests, formatting)
+- `npm run package` builds `dist/warera-plus-<version>.zip`; note its SHA-256.
 - Inspect `git diff --check`.
-- Keep `package.json` and `manifest.json` versions aligned.
-- `node scripts/screenshots.mjs` renders the synthetic fixture; compare `docs/screenshots/` at wide and narrow widths.
+- Keep `package.json` and `manifest.json` versions aligned, with a `CHANGELOG.md` entry (the validator checks both).
+- `node scripts/jitter.mjs` and `node scripts/jitter.mjs --late`: no more than one layout shift while the market settles, none added by the extension when the offers are drawn late or on Load more.
+- `node scripts/screenshots.mjs` renders the synthetic fixture; compare `docs/screenshots/` at wide and narrow widths. `node scripts/store-assets.mjs` renders the store's images into `docs/store/`.
 
 ## Manual gate — required before merging/releasing
 

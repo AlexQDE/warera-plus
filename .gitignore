@@ -5,3 +5,6 @@
 node_modules/
 .DS_Store
 Thumbs.db
+
+# The store package built by npm run package
+dist/

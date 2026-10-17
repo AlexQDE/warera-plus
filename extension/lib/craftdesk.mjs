@@ -25,7 +25,7 @@ const count = (n) => Number(n ?? 0).toLocaleString("en-US");
 const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 
 const CRAFT_HELP =
-  "Cost: the tier's scraps and steel walked through the market asks, for a random craft (a chosen slot doubles the steel). Worth: the game's average price of each slot at the game's odds (30% weapon, 14% each armour slot). Profit: worth against cost. Expected values, not promises.";
+  "Cost: the tier's scraps and steel walked through the market asks, for a random craft (a sniper craft, the slot chosen, doubles the steel). Worth: the game's average price of each slot at the game's odds (30% weapon, 14% each armour slot). Profit: worth against cost. Expected values, not promises.";
 
 /** The Ledger's list filters: every piece, or the pieces of one source. */
 const LIST_SOURCES = [
@@ -129,10 +129,10 @@ export function createCraftDesk({ settings, now = Date.now }) {
             ? `<span class="lens-muted">–</span>`
             : `<b class="${cls(gain)}">${signedGold(gain)}</b> <small class="${cls(gain)}">${pct(r.roiRandom)}</small>`;
         const chosen = r.best
-          ? `<span title="${esc(itemLabel(r.best.code))} sells ~${gold(r.best.avg)} g; a chosen slot costs ${r.costChosen.value == null ? "–" : gold(r.costChosen.value)} g">${esc(slotName(r.best.code))} <small class="${cls(r.roiChosen)}">${pct(r.roiChosen)}</small></span>`
+          ? `<span title="${esc(itemLabel(r.best.code))} sells ~${gold(r.best.avg)} g; a sniper craft (the slot chosen) costs ${r.costChosen.value == null ? "–" : gold(r.costChosen.value)} g">${esc(slotName(r.best.code))} <small class="${cls(r.roiChosen)}">${pct(r.roiChosen)}</small></span>`
           : `<span class="lens-muted">–</span>`;
         const isBest = top?.row === r;
-        const main = `<tr class="lens-tier${isBest ? " lens-best" : ""}" data-rarity="${r.rarity}" aria-expanded="${open}"${isBest ? ` title="best now: ${top.mode === "random" ? "a random craft" : "the chosen slot"}"` : ""}><th scope="row"><button type="button" data-action="desk-tier" data-tier="${r.tier}" aria-pressed="${open}"><span aria-hidden="true">${open ? "▾" : "▸"}</span> ${r.rarity}</button></th>${cell(cost)}${cell(ev)}<td class="lens-num">${profit}</td><td>${chosen}</td></tr>`;
+        const main = `<tr class="lens-tier${isBest ? " lens-best" : ""}" data-rarity="${r.rarity}" aria-expanded="${open}"${isBest ? ` title="best now: ${top.mode === "random" ? "a random craft" : "a sniper craft (the slot chosen)"}"` : ""}><th scope="row"><button type="button" data-action="desk-tier" data-tier="${r.tier}" aria-pressed="${open}"><span aria-hidden="true">${open ? "▾" : "▸"}</span> ${r.rarity}</button></th>${cell(cost)}${cell(ev)}<td class="lens-num">${profit}</td><td>${chosen}</td></tr>`;
         if (!open) return main;
         const slots = r.slots
           .map(
@@ -168,7 +168,7 @@ export function createCraftDesk({ settings, now = Date.now }) {
                 : "reading sales…"
             }</p>`
           : "";
-        return `${main}<tr class="lens-tier-detail"><td colspan="5"><div class="lens-chips">${slots}</div><p>${r.scraps} scraps + ${r.steelRandom} steel · chosen slot ${r.steelChosen} steel · ${chosenCost}${reroll}</p>${fillsLine}</td></tr>`;
+        return `${main}<tr class="lens-tier-detail"><td colspan="5"><div class="lens-chips">${slots}</div><p>${r.scraps} scraps + ${r.steelRandom} steel · sniper craft ${r.steelChosen} steel · ${chosenCost}${reroll}</p>${fillsLine}</td></tr>`;
       })
       .join("");
     return `${prices}<table class="lens-board"><thead><tr><th>Tier</th><th class="lens-num">Cost</th><th class="lens-num">Worth</th><th class="lens-num">Profit</th><th>Chosen</th></tr></thead><tbody>${body}</tbody></table>`;

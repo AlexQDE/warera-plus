@@ -15,6 +15,37 @@ assert.equal(
   "Package and manifest versions must match",
 );
 assert.equal(manifest.manifest_version, 3);
+// What the Chrome Web Store refuses at upload, checked before it gets there.
+assert(
+  manifest.description.length <= 132,
+  `The store takes a description of 132 characters at most (${manifest.description.length})`,
+);
+assert(
+  manifest.name.length <= 75,
+  "The store takes a name of 75 characters at most",
+);
+assert(
+  /^(0|[1-9]\d{0,4})(\.(0|[1-9]\d{0,4})){0,3}$/.test(manifest.version) &&
+    manifest.version.split(".").every((n) => Number(n) <= 65535),
+  "A version is one to four dot-separated integers of 0-65535",
+);
+assert(!Object.hasOwn(manifest, "key"), "A store package carries no key field");
+assert(
+  String(manifest.homepage_url ?? "").startsWith("https://"),
+  "The homepage is an https address",
+);
+const icon = await readFile(resolve(extension, manifest.icons["128"]));
+assert(
+  icon.subarray(1, 4).toString() === "PNG" &&
+    icon.readUInt32BE(16) === 128 &&
+    icon.readUInt32BE(20) === 128,
+  "The store icon is a 128x128 PNG",
+);
+const changelog = await readFile(resolve(root, "CHANGELOG.md"), "utf8");
+assert(
+  changelog.includes(`## ${manifest.version}`),
+  `CHANGELOG.md has no entry for ${manifest.version}`,
+);
 // unlimitedStorage: the player's whole transaction history is kept in extension storage (no install warning).
 assert.deepEqual(manifest.permissions, ["storage", "unlimitedStorage"]);
 assert.deepEqual(manifest.host_permissions, ["https://api2.warera.io/*"]);

@@ -194,7 +194,8 @@ export function chosenMark(p) {
 export function pieceHtml(p, mode = "eco") {
   if (!p) return "";
   const stats = statsWords(p.skills);
-  const name = `<span class="lens-piece">${esc(slotName(p.code))}</span>${chosenMark(p)}${stats ? ` <small>${esc(stats)}</small>` : ""}`;
+  // the mark sits inside the piece's name: the list lays a piece out in four columns
+  const name = `<span class="lens-piece">${esc(slotName(p.code))}${chosenMark(p)}</span>${stats ? ` <small>${esc(stats)}</small>` : ""}`;
   if (p.worn && mode !== "war")
     return `${name} <span class="lens-muted">in battle</span>`;
   const v = p.fate === "held" ? p.value : null;
@@ -320,7 +321,7 @@ export function craftHtml({
   const title = !r
     ? ""
     : slot
-      ? `A chosen ${slotName(slot)}: ${r.scraps} scraps + ${r.steelChosen} steel (twice the random fee) at the market asks, against the game's average price of ${itemLabel(slot)}.${random}`
+      ? `A sniper craft of ${slotName(slot)} (the slot chosen): ${r.scraps} scraps + ${r.steelChosen} steel (twice the random fee) at the market asks, against the game's average price of ${itemLabel(slot)}.${random}`
       : `A random craft: ${r.scraps} scraps + ${r.steelRandom} steel at the market asks, against the game's average price of the six slots at the game's odds${r.lossRandom != null ? `. A bad roll scrapped at once gives ${gold(r.scrapsBack)} g back` : ""}.`;
   const total = all
     ? line(`All ${esc(tier)}`, outcomeLine(all, "craft", mode))

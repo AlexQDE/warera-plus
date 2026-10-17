@@ -196,6 +196,7 @@
       const SKINS = {
         jet: "winterJet",
         tank: "desertTank",
+        sniper: "sniper",
         knife: "knife",
         boots5: "dieselBoots",
         helmet4: "miamiHelmet",
@@ -204,18 +205,23 @@
       const BASE = {
         jet: 380,
         tank: 120,
+        sniper: 58,
         knife: 1.2,
         boots5: 130,
         helmet4: 42,
         chest2: 4.6,
       };
-      const STAT = {
-        jet: 270,
-        tank: 180,
-        knife: 12,
-        boots5: 95,
-        helmet4: 60,
-        chest2: 22,
+      // What each item rolls, in its real range (docs/GAME-FACTS.md §4): a weapon its attack and crit, an armour
+      // piece its one stat; printed as the live page does (2026-10-07): "101", "16%", "100%" for a weapon,
+      // "12%" or a bare "46" for armour, then the durability.
+      const ROLLS = {
+        jet: [[221, 300, ""], [41, 50, "%"]],
+        tank: [[141, 170, ""], [26, 35, "%"]],
+        sniper: [[101, 130, ""], [16, 20, "%"]],
+        knife: [[21, 40, ""], [1, 5, "%"]],
+        boots5: [[31, 40, "%"]],
+        helmet4: [[71, 90, "%"]],
+        chest2: [[6, 10, ""]],
       };
       const rarityOf = (code) => {
         const w = WEAPONS.indexOf(code);
@@ -234,10 +240,15 @@
           const code = codes[(offers.children.length + i) % codes.length];
           const rarity = rarityOf(code);
           const price = (BASE[code] ?? 10) * (0.8 + rnd() * 0.5);
-          const stat = Math.round((STAT[code] ?? 50) * (0.85 + rnd() * 0.3));
+          const stats = (ROLLS[code] ?? [[1, 5, ""]])
+            .map(
+              ([lo, hi, unit]) =>
+                `<div class="col"><span>${lo + Math.floor(rnd() * (hi - lo + 1))}${unit}</span><small>stat</small></div>`,
+            )
+            .join("");
           const row = document.createElement("article");
           row.className = "offer";
-          row.innerHTML = `<div class="frame" style="border-color:${BORDER[rarity]}"><img alt="${SKINS[code] ?? code}" src="${IMG}"></div><div class="col"><span>${stat}</span><small>stat</small></div><div class="col"><span>${rnd() > 0.7 ? 60 + Math.round(rnd() * 40) : 100}%</span><small>durability</small></div><div class="col"><span>Trader${Math.round(rnd() * 900)}</span><small>${Math.round(rnd() * 20) + 1}h ago</small></div><div class="price">${price.toFixed(3)}</div><button class="buy" type="button">BUY</button>`;
+          row.innerHTML = `<div class="frame" style="border-color:${BORDER[rarity]}"><img alt="${SKINS[code] ?? code}" src="${IMG}"></div>${stats}<div class="col"><span>${rnd() > 0.7 ? 60 + Math.round(rnd() * 40) : 100}%</span><small>durability</small></div><div class="col"><span>Trader${Math.round(rnd() * 900)}</span><small>${Math.round(rnd() * 20) + 1}h ago</small></div><div class="price">${price.toFixed(3)}</div><button class="buy" type="button">BUY</button>`;
           offers.appendChild(row);
         }
       }

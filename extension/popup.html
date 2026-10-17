@@ -267,10 +267,11 @@
             Optional. Without a key the scrap prices, SNIPE and the game’s
             averages still work, from the API’s free allowance (100 requests a
             minute). Sales by stats, FLIP, the sell price from sales, the Ledger
-            and the Crafted / Sniped filters need one: the API serves sales and
-            your history only with a key. Create it in the game, in your account
-            settings, and paste it here. It is stored only in this browser and
-            sent only to <code>api2.warera.io</code> as the request header.
+            and the picker's Crafted / Bought filters need one: the API serves
+            sales and your history only with a key. Create it in the game, in
+            your account settings, and paste it here. It is stored only in this
+            browser and sent only to <code>api2.warera.io</code> as the request
+            header.
           </p>
           <div id="status" class="status" role="status" aria-live="polite">
             Loading settings…
@@ -292,8 +293,9 @@
               <label for="flipPct">FLIP: value above price (%)</label>
               <input id="flipPct" type="number" min="-50" max="500" step="1" />
               <p class="help">
-                The piece's value (same-roll fills of the last 72 h, else the
-                game's average price) must sit this far above its price.
+                What pieces of its stats sold for in the last 7 days (same or
+                similar stats, brought to its own) must sit this far above its
+                price. The game's average never earns FLIP.
               </p>
             </div>
           </div>

@@ -141,7 +141,7 @@ describe("the craft board", () => {
     expect(detail.textContent).toContain("helmet 30.0 14%");
     const plain = detail.textContent.replace(/\s+/g, " ");
     expect(plain).toContain("162 scraps + 8 steel");
-    expect(plain).toContain("chosen slot 16 steel · 59.6 g");
+    expect(plain).toContain("sniper craft 16 steel · 59.6 g");
     // 162 scraps back at the 0.2 bid = 32.4; the random craft cost 46.82, so a bad roll costs 14.42
     expect(plain).toContain("bad roll scrapped: 32.4 g back, −14.4 g");
     expect(plain).toContain("sniper: 3 sales · median 60.0 · 55.0–65.0");

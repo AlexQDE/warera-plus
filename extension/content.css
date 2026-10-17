@@ -484,7 +484,7 @@
    several times, and the row's own price and BUY must not move under the cursor each time. A longer phrase
    ends in an ellipsis; open Details take the row's whole width. */
 .ss-verdict[data-lens] {
-  width: 25em;
+  width: 27em;
   flex-wrap: nowrap;
 }
 .ss-verdict[data-lens][data-open] {
