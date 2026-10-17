@@ -69,6 +69,18 @@ it("distinguishes near losses, missing depth and stale quotes", () => {
   expect(row.dataset.scrapSniper).toBe("stale");
   expect(row.textContent).not.toContain("SNIPE");
 });
+it("says so when the page shows offer buttons it cannot read", () => {
+  window.history.replaceState({}, "", "/market/auctions");
+  document.body.innerHTML =
+    '<main><div id="tax"><span>10% market tax</span></div><article id="card"><div style="background:rgb(12,12,12)"><img alt="rifle"></div><button id="bid">BID 5</button></article></main>';
+  const r = equipment.render(state);
+  expect(r.count).toBe(0);
+  expect(r.unread).toBe(1);
+  expect(equipment.pulse()).toContain("offers not read");
+  document.body.innerHTML = "<main></main>";
+  expect(equipment.render(state).unread).toBe(0);
+  expect(equipment.pulse()).toBe("");
+});
 it("removes annotations on setup errors and fully restores DOM on cleanup", () => {
   equipment.render(state);
   state.setup = "Add your API key";

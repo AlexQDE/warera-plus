@@ -148,7 +148,14 @@ export function createEquipment({
   let pickerTarget = null;
   let listRoot = null;
   let lastFullScan = 0;
-  let last = { hits: 0, flips: 0, scanned: 0, readable: 0, code: null };
+  let last = {
+    hits: 0,
+    flips: 0,
+    scanned: 0,
+    readable: 0,
+    code: null,
+    unread: 0,
+  };
   const rowCache = dom.createRowCache();
   const rowMemo = new WeakMap(); // annotation element -> the key of what it shows
   const openDetails = new Set(); // offer keys whose Details are open
@@ -595,7 +602,14 @@ export function createEquipment({
     listRoot = null;
     openDetails.clear();
     // the picker is not the market's: it opens on any page and removes itself when its dialog closes
-    last = { hits: 0, flips: 0, scanned: 0, readable: 0, code: null };
+    last = {
+      hits: 0,
+      flips: 0,
+      scanned: 0,
+      readable: 0,
+      code: null,
+      unread: 0,
+    };
   }
   /** One offer's identity across re-renders of the same list: item, price and its own numbers (a duplicate listing gets its ordinal). */
   const rowKey = (r) =>
@@ -953,6 +967,8 @@ export function createEquipment({
       readable: summary.readable,
       code,
       fresh,
+      // offer buttons on the page and no row read: the game changed under the reader
+      unread: rows.length ? 0 : dom.offerButtonCount(),
     };
     return {
       roots: [
@@ -967,7 +983,12 @@ export function createEquipment({
   }
   /** The bar's pulse: the counts of the last scan, one short phrase. */
   function pulse() {
-    if (!last.scanned) return "";
+    if (!last.scanned) {
+      if (!last.unread) return "";
+      const build = dom.buildId();
+      const title = `WarEra Plus could not read the ${last.unread} offer button${last.unread === 1 ? "" : "s"} on this page: the game may have changed${build ? ` (build ${build})` : ""}. Reload the page; if it stays, look for a WarEra Plus update.`;
+      return `<span class="lens-neg" title="${escapeHtml(title)}">⚠ offers not read</span>`;
+    }
     const parts = [
       last.hits ? `<b>${last.hits}</b> snipe${last.hits === 1 ? "" : "s"}` : "",
       last.flips

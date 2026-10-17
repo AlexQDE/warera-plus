@@ -371,6 +371,33 @@ export function offerRows(
   return out;
 }
 
+/**
+ * The game's buttons that look like an offer's (BUY, BUY NOW, BID) on the page: when the page shows some and no
+ * row reads, the game changed under the reader and the bar says so instead of staying silent.
+ * @param {ParentNode} [root]
+ */
+export function offerButtonCount(root = document) {
+  let n = 0;
+  for (const b of root.querySelectorAll("button"))
+    if (
+      /^\s*(buy|bid)\b/i.test(b.textContent || "") &&
+      !b.closest("[data-lens]")
+    )
+      n++;
+  return n;
+}
+
+/** The game build the page runs (Next.js buildId), for notices; null when the page does not say. */
+let buildIdSeen = null;
+export function buildId(root = document) {
+  if (buildIdSeen) return buildIdSeen;
+  const m = /"buildId":"([^"]+)"/.exec(
+    root.getElementById?.("__NEXT_DATA__")?.textContent ?? "",
+  );
+  buildIdSeen = m ? m[1] : null;
+  return buildIdSeen;
+}
+
 /** The smallest element holding every row, or null: the scope later scans start from. */
 export function rowsContainer(rows) {
   if (rows.length < 2) return null; // one row says nothing about where the others will go

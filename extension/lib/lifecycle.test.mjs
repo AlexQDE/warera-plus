@@ -393,6 +393,17 @@ describe("SPA lifecycle and DOM work", () => {
     await settle(5100);
     expect(document.querySelectorAll("#scrap-sniper-bar")).toHaveLength(1);
   });
+  it("mounts the bar on the v0.27 auction page, under its tax notice", async () => {
+    window.history.replaceState({}, "", "/market/auctions");
+    document.body.innerHTML =
+      '<main><div id="tax"><div>Live auctions</div><span>Bids are shown before tax: when you bid, your country adds its 10% market tax. A bid at the max price wins at once.</span></div><div id="offers"></div></main>';
+    app = await startLens(marketRuntime({ panel: "craft" }));
+    await settle();
+    expect(document.querySelectorAll("#scrap-sniper-bar")).toHaveLength(1);
+    expect(bar().nextElementSibling.id).toBe("tax");
+    expect(bar().querySelectorAll('[data-action="tab"]')).toHaveLength(3);
+    expect(bodyText()).toContain("Chosen");
+  });
   it("reads the grid's item and the ledger's held item once each instead of looping between them", async () => {
     window.history.replaceState({}, "", "/market/equipments?item=jet");
     marketFixture();

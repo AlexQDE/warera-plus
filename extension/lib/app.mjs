@@ -19,7 +19,9 @@ import { panel, setHtml, notice, clock } from "./ui.mjs";
 import { createScheduler } from "./scheduler.mjs";
 import { CRAFT_CODES, describeCode } from "./craftdata.mjs";
 
-const ON_EQUIPMENTS = /^\/market\/equipments\/?$/;
+// The equipment market: its offers (v0.26) or, since v0.27, its auctions (dev 2026-10-17: /market/equipments
+// redirects there).
+const ON_MARKET = /^\/market\/(equipments|auctions)\/?$/;
 
 export async function startLens(runtime = chrome.runtime) {
   const state = {
@@ -472,10 +474,10 @@ export async function startLens(runtime = chrome.runtime) {
       state.ledger = null;
       ledgerAsked.rev = -1;
     }
-    const onEquipments = ON_EQUIPMENTS.test(location.pathname);
+    const onMarket = ON_MARKET.test(location.pathname);
     context = {
-      equipment: state.settings.equipment && onEquipments,
-      craft: state.settings.craft && onEquipments,
+      equipment: state.settings.equipment && onMarket,
+      craft: state.settings.craft && onMarket,
       dialog: null,
     };
     const nextRoots = [];
