@@ -440,6 +440,8 @@ export function auctionTokens(el, { buttons = false } = {}) {
 
 /** The amount a button carries ("Buy now" 305.72, "Bid" 218.9): its last token, when that is an amount. */
 function buttonAmount(button) {
+  // most of the page's buttons carry no digit at all: they are passed over before any text walk
+  if (!/\d/.test(button.textContent || "")) return null;
   const t = auctionTokens(button, { buttons: true }).at(-1) ?? "";
   return AMOUNT_RE.test(t) ? { text: t, value: parsePrice(t) } : null;
 }
