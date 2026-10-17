@@ -10,8 +10,7 @@ import {
   sellHintHtml,
 } from "./sellform.mjs";
 import { suggestPrice } from "./pricing.mjs";
-import { comparableFills } from "./resale.mjs";
-import { WINDOW_HOURS } from "./similar.mjs";
+import { windowFills } from "./similar.mjs";
 import { createCraftDesk } from "./craftdesk.mjs";
 import { createDialogs } from "./dialogs.mjs";
 import { casesStripHtml, tripLineHtml } from "./casesview.mjs";
@@ -265,7 +264,7 @@ export async function startLens(runtime = chrome.runtime) {
   let historyBusy = false;
   let historyAgain = false;
   let fastUntil = 0;
-  const ledgerAsked = { rev: -1, window: "", at: 0 };
+  const ledgerAsked = { rev: -1, window: "", page: 0, source: "", at: 0 };
   /** One history step in the worker (it decides whether a poll or a backfill page is due), then the view when it changed. */
   async function syncHistory(force = false) {
     const userId = state.craftsUserId;
@@ -301,13 +300,14 @@ export async function startLens(runtime = chrome.runtime) {
   let ledgerAgain = false;
   /**
    * The worker's view of the history, asked when the history moved, the
-   * window changed, the view is half a minute old, or `force` (the sales it
-   * wanted were just read, the mode changed).
+   * window, the page or the source of the Ledger's list changed, the view is
+   * half a minute old, or `force` (the sales it wanted were just read, the
+   * mode changed).
    */
   async function askLedger(force = false) {
     const userId = state.craftsUserId;
     if (!userId || !state.history || state.setup || disposed) return;
-    const window = desk.window;
+    const { window, page, source } = desk;
     const wanted =
       state.settings.panel === "ledger" ||
       !!context.dialog ||
@@ -318,6 +318,8 @@ export async function startLens(runtime = chrome.runtime) {
       (!force &&
         state.history.rev === ledgerAsked.rev &&
         window === ledgerAsked.window &&
+        page === ledgerAsked.page &&
+        source === ledgerAsked.source &&
         Date.now() - ledgerAsked.at <= 30_000)
     )
       return;
@@ -326,12 +328,14 @@ export async function startLens(runtime = chrome.runtime) {
       return;
     }
     ledgerBusy = true;
-    const v = await send({ type: "ledger", userId, window });
+    const v = await send({ type: "ledger", userId, window, page, source });
     ledgerBusy = false;
     if (v?.ledger && v.ledger.meta?.userId === state.craftsUserId) {
       state.ledger = v.ledger;
       ledgerAsked.rev = v.ledger.meta.rev;
       ledgerAsked.window = window;
+      ledgerAsked.page = page;
+      ledgerAsked.source = source;
       ledgerAsked.at = Date.now();
       for (const code of v.ledger.salesWanted ?? []) requestSales(code);
     }
@@ -348,9 +352,24 @@ export async function startLens(runtime = chrome.runtime) {
     await save({ ledgerMode: mode });
     await askLedger(true);
   }
-  /** A click on the game's own craft or open button: the result is read a moment later, twice, and polled fast for a while. */
+  /**
+   * A click on the game's own craft or open button: the result is read a moment later, twice, and polled fast
+   * for a while. A craft press goes to the worker first with the window's pick (chosen slot or random), which the
+   * history ties to the craft it made: the feed does not say which way a craft was made.
+   */
   const dialogs = createDialogs({
-    onAction: () => {
+    onAction: (kind, pick) => {
+      // the press is the logged-in player's, whichever account the Ledger follows
+      const userId = dom.ownUserId() ?? state.craftsUserId;
+      if (kind === "craft" && pick && userId && state.settings.craft)
+        void send({
+          type: "craftPick",
+          userId,
+          at: Date.now(),
+          tier: pick.tier,
+          chosen: pick.chosen,
+          slot: pick.slot,
+        });
       fastUntil = Date.now() + 120_000;
       setTimeout(() => void syncHistory(true), 2500);
       setTimeout(() => void syncHistory(true), 7000);
@@ -381,24 +400,44 @@ export async function startLens(runtime = chrome.runtime) {
       void askLedger(true);
     }
   }
-  const observer = new MutationObserver((muts) => {
-    if (document.hidden || disposed) return;
+  /** Mutations of the extension's own nodes only: they never call for a scan. */
+  const onlyOwn = (muts) => {
     const own = (n) =>
       !!(
         n?.closest?.("[data-lens]") ||
         n?.parentElement?.closest?.("[data-lens]")
       );
-    if (
-      muts.every(
-        (m) =>
-          own(m.target) ||
-          (m.type === "childList" &&
-            [...m.addedNodes, ...m.removedNodes].every(own)),
-      )
-    )
-      return;
+    return muts.every(
+      (m) =>
+        own(m.target) ||
+        (m.type === "childList" &&
+          [...m.addedNodes, ...m.removedNodes].every(own)),
+    );
+  };
+  const observer = new MutationObserver((muts) => {
+    if (document.hidden || disposed || onlyOwn(muts)) return;
     sched.schedule();
   });
+  // Discovery: for a while after the page starts, its address changes or a click, any node the game adds calls
+  // for a scan, so what it draws late (the offer list after its own read, a dialog, the next page) is found at
+  // once and gets its lines in the frame it first shows in, instead of on the next five-second tick. Ends by itself.
+  let discoverUntil = 0;
+  let discovering = false;
+  const discovery = new MutationObserver((muts) => {
+    if (disposed) return;
+    if (Date.now() > discoverUntil) {
+      discovery.disconnect();
+      discovering = false;
+      return;
+    }
+    if (!document.hidden && !onlyOwn(muts)) sched.schedule();
+  });
+  function discover(ms) {
+    discoverUntil = Math.max(discoverUntil, Date.now() + ms);
+    if (discovering || disposed) return;
+    discovery.observe(document, { childList: true, subtree: true });
+    discovering = true;
+  }
   function observe(next) {
     next = [...new Set(next.filter((n) => n?.isConnected))];
     if (next.length === roots.length && next.every((n, i) => n === roots[i]))
@@ -665,14 +704,7 @@ export async function startLens(runtime = chrome.runtime) {
                     ? suggestPrice({
                         code: it.code,
                         skills: it.skills,
-                        fills: sales
-                          ? comparableFills(sales.fills, {
-                              code: it.code,
-                              hours: WINDOW_HOURS,
-                              now,
-                              state: null,
-                            })
-                          : [],
+                        fills: sales ? windowFills(sales, now) : [],
                         asks: equipment.asks(it.code),
                         now,
                         game: read.game,
@@ -720,6 +752,7 @@ export async function startLens(runtime = chrome.runtime) {
     if (!document.hidden) {
       applySettings(await send({ type: "getSettings" }));
       if (href !== location.href || Date.now() - lastScan > 30_000) {
+        if (href !== location.href) discover(10_000);
         href = location.href;
         scan();
       }
@@ -746,10 +779,14 @@ export async function startLens(runtime = chrome.runtime) {
   // watch: a scan shortly after any click finds them now instead of on the next tick. Clicks are user-rate.
   let clickTimer;
   const afterClick = () => {
+    discover(3000);
     clearTimeout(clickTimer);
     clickTimer = setTimeout(() => sched.schedule(), 300);
   };
   document.addEventListener("click", afterClick, true);
+  // Back and forward move the game's address without a click.
+  const onPop = () => discover(10_000);
+  window.addEventListener("popstate", onPop);
   const dispose = () => {
     disposed = true;
     clearTimeout(timer);
@@ -762,8 +799,13 @@ export async function startLens(runtime = chrome.runtime) {
     for (const el of document.querySelectorAll(".ss-trip")) el.remove();
     document.removeEventListener("visibilitychange", visible);
     document.removeEventListener("click", afterClick, true);
+    window.removeEventListener("popstate", onPop);
+    discovery.disconnect();
+    discovering = false;
     clearTimeout(clickTimer);
   };
+  // The page may still be drawing what we annotate (the game reads its offers after it starts).
+  discover(15_000);
   await tick();
   metrics.equipment = equipment.metrics;
   return { dispose, metrics, scan };

@@ -303,6 +303,66 @@ describe("background controller", () => {
         .error,
     ).toBe("bad-item");
   });
+  it("brings an item's sales up to date by reading only the new ones, the rest kept inside the week", async () => {
+    // the feed of one item, newest first, pages of two: ids are numbers here
+    const feed = { rows: [] };
+    const sale = (n, hoursAgo, price = 100) => ({
+      _id: `s${n}`,
+      money: price,
+      itemCode: "jet",
+      quantity: 1,
+      transactionType: "itemMarket",
+      item: {
+        code: "jet",
+        state: 100,
+        skills: { attack: 250, criticalChance: 45 },
+      },
+      createdAt: new Date(NOW - hoursAgo * 3600e3).toISOString(),
+    });
+    const pages = [];
+    const f = vi.fn(async (url) => {
+      const input = JSON.parse(new URL(url).searchParams.get("input"));
+      const page = input.cursor ? Number(input.cursor.slice(1)) : 0;
+      pages.push(page);
+      return response({
+        items: feed.rows.slice(page * 2, page * 2 + 2),
+        nextCursor: feed.rows.length > (page + 1) * 2 ? `p${page + 1}` : null,
+      });
+    });
+    const { controller, advance } = setup(f);
+    feed.rows = [
+      sale(5, 1),
+      sale(4, 2),
+      sale(3, 30),
+      sale(2, 100),
+      sale(1, 160),
+    ];
+    const first = await controller.handle({ type: "sales", itemCode: "jet" });
+    expect(first.sales.fills.map((x) => x.id)).toEqual([
+      "s5",
+      "s4",
+      "s3",
+      "s2",
+      "s1",
+    ]);
+    expect(pages).toEqual([0, 1, 2]);
+    // ten minutes on, two new sales: one page, down to the first sale held; the oldest has left the week
+    advance(10 * 60_000);
+    feed.rows = [sale(7, 0.05), sale(6, 0.1), ...feed.rows];
+    pages.length = 0;
+    advance(8 * 3600e3); // s1 (160 h + 8 h) is now older than the week
+    const next = await controller.handle({ type: "sales", itemCode: "jet" });
+    expect(pages).toEqual([0, 1]); // the second page holds s5, the first it knew
+    expect(next.sales.fills.map((x) => x.id)).toEqual([
+      "s7",
+      "s6",
+      "s5",
+      "s4",
+      "s3",
+      "s2",
+    ]);
+    expect(next.sales.complete).toBe(true);
+  });
   const ME = "697b55e4bcecf3b37667e0d1";
   const OTHER = "69b4b8113af735a990a8070e";
   const oid = (n) => n.toString(16).padStart(24, "0");
@@ -561,5 +621,192 @@ describe("background controller", () => {
       .ledger;
     expect(war.mode).toBe("war");
     expect(war.windows.all.tiers.legendary).toMatchObject({ n: 2, worn: 1 });
+  });
+  const craftRow = (n, secondsAgo, code = "sniper", quantity = 162) => ({
+    _id: oid(n),
+    itemCode: "scraps",
+    quantity,
+    sellerId: ME,
+    buyerId: ME,
+    transactionType: "craftItem",
+    item: {
+      _id: oid(200000 + n),
+      code,
+      skills: { attack: 120, criticalChance: 18 },
+      state: 100,
+    },
+    createdAt: new Date(NOW - secondsAgo * 1000).toISOString(),
+  });
+  it("ties a press of the game's CRAFT button to the craft it made, writes the pick on the row and charges a chosen slot twice the steel", async () => {
+    // this machine's clock is 40 s ahead of the server's: each craft is stamped 39.5 s before its press here
+    const ref = {
+      rows: [
+        craftRow(3, 19.5, "boots4"),
+        craftRow(2, 29.5),
+        craftRow(1, 39.5),
+        craftRow(9, 7200, "sniper"), // two hours ago, no press seen
+      ],
+    };
+    const { f } = historyApi(ref);
+    const { controller, storage, advance } = setup(f);
+    // a refused press: no such tier, no such player
+    expect(
+      (
+        await controller.handle({
+          type: "craftPick",
+          userId: ME,
+          tier: "shiny",
+          chosen: true,
+        })
+      ).error,
+    ).toBe("bad-pick");
+    expect(
+      (
+        await controller.handle({
+          type: "craftPick",
+          userId: "x",
+          tier: "epic",
+        })
+      ).error,
+    ).toBe("bad-user");
+    // two chosen snipers and a random craft, ten seconds apart, reported as they happen
+    const press = (chosen, slot, tier = "epic") =>
+      controller.handle({
+        type: "craftPick",
+        userId: ME,
+        tier,
+        chosen,
+        slot,
+        at: NOW,
+      });
+    expect(await press(true, "sniper")).toEqual({ ok: true });
+    advance(10_000);
+    await controller.handle({
+      type: "craftPick",
+      userId: ME,
+      tier: "epic",
+      chosen: true,
+      slot: "sniper",
+      at: NOW + 10_000,
+    });
+    advance(10_000);
+    // a random craft has no slot, and a tank is not epic: the slot is dropped
+    await controller.handle({
+      type: "craftPick",
+      userId: ME,
+      tier: "epic",
+      chosen: false,
+      slot: "tank",
+      at: NOW + 20_000,
+    });
+    // a legendary press that made nothing
+    await press(false, null, "legendary");
+    const picks = storage.data[`hist:${ME}:picks`];
+    expect(picks.list.map((p) => [p.r, p.c, p.s ?? null])).toEqual([
+      ["epic", true, "sniper"],
+      ["epic", true, "sniper"],
+      ["epic", false, null],
+      ["legendary", false, null],
+    ]);
+    // and one whose page clock is far from the worker's (the same machine): the worker's clock is kept
+    await controller.handle({
+      type: "craftPick",
+      userId: ME,
+      tier: "legendary",
+      chosen: false,
+      at: NOW - 3_600_000,
+    });
+    expect(storage.data[`hist:${ME}:picks`].list[4].t).toBe(NOW + 20_000);
+    advance(10_000);
+    await controller.handle({ type: "history", userId: ME });
+    const month = storage.data[`hist:${ME}:2026-09`];
+    const p = Object.fromEntries(month.map((r) => [r.x, r.p ?? null]));
+    expect(p).toEqual({
+      [oid(1)]: "c",
+      [oid(2)]: "c",
+      [oid(3)]: "r",
+      [oid(9)]: null,
+    });
+    // the tied presses are spent; the two that made nothing wait
+    expect(storage.data[`hist:${ME}:picks`].list).toHaveLength(2);
+    const v = (
+      await controller.handle({ type: "ledger", userId: ME, window: "all" })
+    ).ledger;
+    const piece = (n) => v.rows.find((r) => r.id === oid(200000 + n));
+    expect(piece(1)).toMatchObject({ chosen: true, chosenBy: "seen" });
+    expect(piece(1).cost).toBeCloseTo(162 * 0.25 + 16 * 1.8, 6);
+    expect(piece(3)).toMatchObject({ chosen: false, chosenBy: "seen" });
+    expect(piece(3).cost).toBeCloseTo(162 * 0.25 + 8 * 1.8, 6);
+    expect(piece(9)).toMatchObject({ chosen: false, chosenBy: "default" });
+    expect(v.windows.all.tiers.epic).toMatchObject({ n: 4, chosen: 2 });
+    expect(v.steelMode).toBe("auto");
+    // the setting forces one way for every craft
+    await controller.handle(
+      { type: "saveSettings", settings: { craftSteelMode: "random" } },
+      { trusted: true },
+    );
+    const forced = (
+      await controller.handle({ type: "ledger", userId: ME, window: "all" })
+    ).ledger;
+    expect(forced.rows.every((r) => r.chosen === false)).toBe(true);
+    expect(forced.steelMode).toBe("random");
+    // a poll a quarter of an hour after the presses that made nothing drops them
+    advance(16 * 60_000);
+    await controller.handle({ type: "history", userId: ME, force: true });
+    expect(storage.data[`hist:${ME}:picks`].list).toHaveLength(0);
+  });
+  it("pages the window's pieces newest first and filters them by how they came", async () => {
+    const ref = {
+      rows: [
+        ...Array.from({ length: 10 }, (_, i) => craftRow(5000 + i, 60 + i)),
+        ...Array.from({ length: 120 }, (_, i) => openRow(i + 1, 10 + i)),
+      ].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
+    };
+    const { f } = historyApi(ref);
+    const { controller } = setup(f);
+    await controller.handle({ type: "history", userId: ME });
+    await controller.handle({ type: "history", userId: ME });
+    const view = async (msg) =>
+      (
+        await controller.handle({
+          type: "ledger",
+          userId: ME,
+          window: "all",
+          ...msg,
+        })
+      ).ledger;
+    const first = await view({});
+    expect(first).toMatchObject({
+      page: 0,
+      pages: 3,
+      pageSize: 50,
+      rowsTotal: 130,
+      source: "all",
+      sources: { all: 130, crafted: 10, opened: 120, bought: 0, looted: 0 },
+    });
+    expect(first.rows).toHaveLength(50);
+    // newest first: the crafts are a minute old, the openings ten minutes and more
+    expect(first.rows[0].source).toBe("crafted");
+    const times = first.rows.map((r) => Date.parse(r.goneAt ?? r.at));
+    expect([...times].sort((a, b) => b - a)).toEqual(times);
+    const last = await view({ page: 2 });
+    expect(last.rows).toHaveLength(30);
+    expect(last.page).toBe(2);
+    expect((await view({ page: 99 })).page).toBe(2);
+    expect((await view({ page: -3 })).page).toBe(0);
+    const crafts = await view({ source: "crafted", page: 1 });
+    expect(crafts).toMatchObject({
+      source: "crafted",
+      rowsTotal: 10,
+      pages: 1,
+      page: 0,
+    });
+    expect(crafts.rows.every((r) => r.source === "crafted")).toBe(true);
+    expect((await view({ source: "nonsense" })).source).toBe("all");
+    // every page of the window together is the whole window, once each
+    const ids = new Set();
+    for (let page = 0; page < 3; page++)
+      for (const r of (await view({ page })).rows) ids.add(r.id);
+    expect(ids.size).toBe(130);
   });
 });

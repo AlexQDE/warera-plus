@@ -20,23 +20,213 @@
 //   price  a code's price on a day: the game's daily average when on record,
 //          else the median unit price of the player's own trades that day,
 //          else the nearest day on record, flagged approximate
+//   slot   a craft with its slot chosen burns twice the steel, and the feed
+//          does not say which way a craft was made: the extension's own
+//          sighting of the game's button (the row's `p`), else a streak of
+//          the same slot too long for a random craft, else random
 import { craftRecipe, SCRAP_LADDER } from "./ladder.mjs";
 import { describeCode } from "./craftdata.mjs";
 
-/** @typedef {{ x: string, y: string, a: string, c?: string, q?: number, m?: number, d?: number, i?: string, ic?: string, k?: Record<string, number>, la?: string, l?: string }} Row */
+/** @typedef {{ x: string, y: string, a: string, c?: string, q?: number, m?: number, d?: number, i?: string, ic?: string, k?: Record<string, number>, la?: string, l?: string, p?: "c" | "r" }} Row */
 /** How close a piece's "acquired at" must be to an acquisition's time to be that piece. */
 export const ACQUIRED_WITHIN_MS = 5000;
 /** @typedef {Record<string, Record<string, number>>} Averages code -> UTC day -> average price */
 /** @typedef {"crafted" | "opened" | "bought" | "looted" | "unknown"} Source */
+/** How a craft's slot is known: the setting, the press seen in the game's window, a streak, or the random default. @typedef {"setting" | "seen" | "streak" | "default"} ChosenBy */
 /**
  * @typedef {{
  *   id: string, code: string, rarity: string | null, slot: string | null, tier: number | null,
  *   skills: Record<string, number> | null, source: Source, via: string | null, at: string | null,
  *   cost: number | null, approx: boolean,
  *   fate: "held" | "sold" | "scrapped", proceeds: number | null, goneAt: string | null, sellsHours: number | null,
- *   worn: boolean
+ *   worn: boolean, chosen: boolean | null, chosenBy: ChosenBy | null, streak: number | null
  * }} Piece
  */
+/** How the ledger charges a craft's steel: "auto" tells each craft apart, the other two force one way. @typedef {"auto" | "random" | "chosen"} SteelMode */
+
+/**
+ * A run of crafts of one tier giving the same slot this long is taken for a
+ * chosen slot when the extension did not see the craft made. A random craft
+ * gives a weapon 30% of the time and each armour slot 14%
+ * (RANDOM_SLOT_ODDS): six weapons in a row come by chance after 0.07% of
+ * random crafts (0.3^6), five of one armour slot after 0.005% (0.14^5), so
+ * about half a percent of random crafts fall in such a run and are charged
+ * the doubled steel; a chosen run shorter than this is charged the random fee.
+ */
+export const CHOSEN_STREAK = Object.freeze({ weapon: 6, armour: 5 });
+
+/**
+ * Whether each craft row chose its slot, and how that is known: the setting
+ * forces one way; else the press the extension saw in the game's craft
+ * window (`p`: "c" chosen, "r" random); else a streak of the tier's crafts
+ * giving the same slot (CHOSEN_STREAK); else random, the game's default.
+ * @param {ReadonlyArray<Row>} crafts craft rows, oldest first
+ * @param {SteelMode} [steelMode]
+ * @returns {Map<string, { chosen: boolean, by: ChosenBy, streak: number | null }>} by transaction id
+ */
+export function craftModes(crafts, steelMode = "auto") {
+  /** @type {Map<string, { chosen: boolean, by: ChosenBy, streak: number | null }>} */
+  const modes = new Map();
+  if (steelMode !== "auto") {
+    for (const r of crafts)
+      modes.set(r.x, {
+        chosen: steelMode === "chosen",
+        by: "setting",
+        streak: null,
+      });
+    return modes;
+  }
+  /** @type {Map<string, Row[]>} each tier's crafts in order: a streak is counted within its tier */
+  const byTier = new Map();
+  for (const r of crafts) {
+    const rarity = describeCode(r.ic ?? "")?.rarity ?? "?";
+    let list = byTier.get(rarity);
+    if (!list) byTier.set(rarity, (list = []));
+    list.push(r);
+  }
+  for (const list of byTier.values())
+    for (let i = 0; i < list.length;) {
+      let j = i;
+      while (j < list.length && list[j].ic === list[i].ic) j++;
+      const length = j - i;
+      const slot = describeCode(list[i].ic ?? "")?.slot;
+      const streak =
+        length >=
+        (slot === "weapon" ? CHOSEN_STREAK.weapon : CHOSEN_STREAK.armour);
+      for (const r of list.slice(i, j))
+        modes.set(
+          r.x,
+          r.p === "c" || r.p === "r"
+            ? { chosen: r.p === "c", by: "seen", streak: null }
+            : streak
+              ? { chosen: true, by: "streak", streak: length }
+              : { chosen: false, by: "default", streak: null },
+        );
+      i = j;
+    }
+  return modes;
+}
+
+/** A press of the game's CRAFT button as the worker keeps it: when (the page's clock), the tier, chosen or random, the slot read off the window. @typedef {{ n?: number, t: number, r: string, c: boolean, s?: string | null }} Pick */
+/** How far from a press its craft row is looked for while the clocks' offset is measured. */
+export const OFFSET_SEARCH_MS = 300_000;
+/** The offset is read as the gap most presses agree on, within this width (the server's own delay varies). */
+const OFFSET_WINDOW_MS = 1000;
+/** The newest presses the offset is read from. */
+const OFFSET_PICKS = 300;
+/** How close a craft row must be to a press, once the offset is taken off, to be the press's craft. */
+export const MATCH_WITHIN_MS = 20_000;
+/** A press whose slot is not the craft's counts as this much further away (the slot is read off a tile, the button says chosen or random). */
+const SLOT_MISMATCH_MS = 10_000;
+
+/**
+ * The first index of `list` (sorted by `key`) whose key is at least `t`.
+ * @template T @param {ReadonlyArray<T>} list @param {number} t @param {(x: T) => number} key
+ */
+function lowerBound(list, t, key) {
+  let lo = 0;
+  let hi = list.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (key(list[mid]) < t) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/**
+ * Ties presses of the game's CRAFT button to the craft rows they made. A
+ * press carries the page's clock, a row the server's, and the two can be
+ * apart by more than the time between two clicks: the offset is the gap
+ * (craft time - press time, pairs of one tier within OFFSET_SEARCH_MS) that
+ * the most pairs agree on within OFFSET_WINDOW_MS, the smaller one on a tie.
+ * Each craft, oldest first, then takes the unmatched press of its tier
+ * closest to it once the offset is taken off, within MATCH_WITHIN_MS; a
+ * press that read another slot counts SLOT_MISMATCH_MS further away. A press
+ * that made no craft (a failed click) is left over.
+ * @param {ReadonlyArray<{ x: string, t: number, rarity: string | null | undefined, code: string }>} crafts
+ * @param {ReadonlyArray<Pick>} picks
+ * @returns {{ matches: Map<string, number>, offset: number | null }} craft id -> index of its press in `picks`
+ */
+export function matchPicks(crafts, picks) {
+  /** @type {Map<string, number>} */
+  const matches = new Map();
+  const ordered = crafts
+    .filter((c) => c.rarity && Number.isFinite(c.t))
+    .sort((a, b) => a.t - b.t);
+  /** @type {Map<string, number[]>} each tier's craft times, in order */
+  const timesOf = new Map();
+  for (const c of ordered) {
+    const tier = /** @type {string} */ (c.rarity);
+    let list = timesOf.get(tier);
+    if (!list) timesOf.set(tier, (list = []));
+    list.push(c.t);
+  }
+  /** @type {number[]} */
+  const gaps = [];
+  for (const p of picks.slice(-OFFSET_PICKS)) {
+    const times = timesOf.get(p.r) ?? [];
+    for (
+      let k = lowerBound(times, p.t - OFFSET_SEARCH_MS, (t) => t);
+      k < times.length && times[k] <= p.t + OFFSET_SEARCH_MS;
+      k++
+    )
+      gaps.push(times[k] - p.t);
+  }
+  gaps.sort((a, b) => a - b);
+  /** @type {number | null} */
+  let offset = null;
+  let most = 0;
+  for (let i = 0, j = 0; i < gaps.length; i++) {
+    while (j < gaps.length && gaps[j] - gaps[i] <= OFFSET_WINDOW_MS) j++;
+    if (j - i < most) continue;
+    // the window's median, the gaps being in order
+    const mid = (i + j - 1) / 2;
+    const center = (gaps[Math.floor(mid)] + gaps[Math.ceil(mid)]) / 2;
+    if (j - i > most || Math.abs(center) < Math.abs(offset ?? Infinity)) {
+      most = j - i;
+      offset = center;
+    }
+  }
+  if (offset == null) return { matches, offset: null };
+  /** @type {Map<string, Array<{ t: number, i: number }>>} each tier's presses, in order */
+  const picksOf = new Map();
+  picks.forEach((p, i) => {
+    if (!Number.isFinite(p.t)) return;
+    let list = picksOf.get(p.r);
+    if (!list) picksOf.set(p.r, (list = []));
+    list.push({ t: p.t, i });
+  });
+  for (const list of picksOf.values()) list.sort((a, b) => a.t - b.t);
+  const used = new Set();
+  for (const c of ordered) {
+    const list = picksOf.get(/** @type {string} */ (c.rarity)) ?? [];
+    const at = c.t - offset;
+    let best = -1;
+    let cost = Infinity;
+    for (
+      let k = lowerBound(list, at - MATCH_WITHIN_MS, (x) => x.t);
+      k < list.length && list[k].t <= at + MATCH_WITHIN_MS;
+      k++
+    ) {
+      const { t, i } = list[k];
+      if (used.has(i)) continue;
+      const p = picks[i];
+      const away =
+        Math.abs(at - t) +
+        (p.c && p.s && p.s !== c.code ? SLOT_MISMATCH_MS : 0);
+      if (away <= MATCH_WITHIN_MS && away < cost) {
+        cost = away;
+        best = i;
+      }
+    }
+    if (best >= 0) {
+      used.add(best);
+      matches.set(c.x, best);
+    }
+  }
+  return { matches, offset };
+}
 
 /** The UTC day of an ISO time, the day the game's averages are keyed by. @param {unknown} iso */
 export const dayOf = (iso) => String(iso ?? "").slice(0, 10);
@@ -99,13 +289,14 @@ export function makePricer(averages, rows) {
  * latest acquisition of that item id before it that has none yet; a fate
  * with no acquisition on record becomes a piece of source "unknown" (its
  * proceeds still count, it has no cost). A piece scrapped for fewer scraps
- * than its tier's ladder was worn in battle (`worn`).
+ * than its tier's ladder was worn in battle (`worn`). A craft's steel is
+ * doubled when its slot was chosen (`chosen`, told as craftModes says).
  * @param {ReadonlyArray<Row>} rows
- * @param {{ averages?: Averages | null, steelMode?: "random" | "chosen" }} [options]
+ * @param {{ averages?: Averages | null, steelMode?: SteelMode }} [options]
  */
 export function replayHistory(
   rows,
-  { averages = {}, steelMode = "random" } = {},
+  { averages = {}, steelMode = "auto" } = {},
 ) {
   const price = makePricer(averages, rows);
   // Rows are replayed oldest first, so every piece on record was got at or before the row at hand.
@@ -113,6 +304,10 @@ export function replayHistory(
     .map((r) => ({ r, t: Date.parse(r.a) }))
     .sort((x, y) => x.t - y.t)
     .map((x) => x.r);
+  const modes = craftModes(
+    sorted.filter((r) => r.y === "craftItem"),
+    steelMode,
+  );
   /** @type {Piece[]} */
   const pieces = [];
   /** @type {Map<Piece, { t: number, stats: string }>} when each piece was got and its stats, read once */
@@ -152,6 +347,9 @@ export function replayHistory(
       goneAt: null,
       sellsHours: null,
       worn: false,
+      chosen: null,
+      chosenBy: null,
+      streak: null,
     });
     pieces.push(piece);
     keyOf.set(piece, {
@@ -217,8 +415,13 @@ export function replayHistory(
     const day = dayOf(r.a);
     if (r.y === "craftItem") {
       const rarity = describe(r.ic ?? "").rarity;
+      const mode = modes.get(r.x) ?? {
+        chosen: steelMode === "chosen",
+        by: steelMode === "auto" ? "default" : "setting",
+        streak: null,
+      };
       const recipe = rarity
-        ? craftRecipe(rarity, { chosen: steelMode === "chosen" })
+        ? craftRecipe(rarity, { chosen: mode.chosen })
         : null;
       const s = price("scraps", day);
       const t = price("steel", day);
@@ -227,7 +430,12 @@ export function replayHistory(
         recipe && scraps != null && s.value != null && t.value != null
           ? scraps * s.value + recipe.steel * t.value
           : null;
-      acquire(r, "crafted", cost, s.approx || t.approx, null);
+      const piece = acquire(r, "crafted", cost, s.approx || t.approx, null);
+      if (piece) {
+        piece.chosen = mode.chosen;
+        piece.chosenBy = /** @type {ChosenBy} */ (mode.by);
+        piece.streak = mode.streak;
+      }
     } else if (r.y === "openCase") {
       if (r.i) {
         const p = price(r.c ?? "", day);
@@ -284,6 +492,7 @@ const sum = (xs) => xs.reduce((/** @type {number} */ s, x) => s + (x ?? 0), 0);
  * "realized" counts the pieces that are gone, "estimated" adds the held
  * ones at what they sell for. Gear worn in battle is left out unless
  * `countWorn` (fighting gear is spent, not traded); `worn` says how many.
+ * `chosen` counts the crafts charged the chosen slot's doubled steel.
  * @param {ReadonlyArray<Piece>} all @param {(p: Piece) => number | null} valueOf
  * @param {{ countWorn?: boolean }} [options]
  */
@@ -313,6 +522,7 @@ export function outcome(all, valueOf, { countWorn = true } = {}) {
       realized + sum(heldKnown.map((x) => (x.v ?? 0) - (x.p.cost ?? 0))),
     estimatedKnown: goneKnown.length + heldKnown.length,
     worn,
+    chosen: pieces.filter((p) => p.chosen === true).length,
   };
 }
 

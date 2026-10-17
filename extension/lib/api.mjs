@@ -201,15 +201,23 @@ export async function fetchBook(
 
 /**
  * Walk one item's market fills back `hours` (default 72), at most `maxPages`
- * pages of 100. Resolves { fills: [{ price, at, state, code }], pages,
- * complete } where `complete` says the window was covered (or the feed ended)
- * rather than the page cap being hit.
+ * pages of 100. Resolves { fills: [{ id, price, at, state, code, skills,
+ * listedAt }], pages, complete, met } where `complete` says the window was
+ * covered (or the feed ended) rather than the page cap being hit. With
+ * `known` (the ids of the fills a last read holds) the walk stops at the
+ * first of them (`met`): only what is newer is read, usually one page.
  */
 export async function fetchSales(
   fetchImpl,
   key,
   itemCode,
-  { hours = 72, maxPages = 5, now = Date.now(), timeoutMs = TIMEOUT_MS } = {},
+  {
+    hours = 72,
+    maxPages = 5,
+    now = Date.now(),
+    timeoutMs = TIMEOUT_MS,
+    known = null,
+  } = {},
 ) {
   const k = requireKey(key);
   const cutoff = now - hours * 3600e3;
@@ -217,6 +225,7 @@ export async function fetchSales(
   let cursor;
   let pages = 0;
   let complete = false;
+  let met = false;
   const cursors = new Set();
   const ids = new Set();
   while (pages < maxPages) {
@@ -240,10 +249,15 @@ export async function fetchSales(
         complete = true;
         break;
       }
+      if (known && it._id && known.has(it._id)) {
+        met = true;
+        break;
+      }
       const code = it.item?.code ?? it.itemCode;
       if (code !== itemCode || (it._id && ids.has(it._id))) continue;
       if (it._id) ids.add(it._id);
       fills.push({
+        id: typeof it._id === "string" ? it._id : null,
         price,
         at: it.createdAt,
         state: it.item?.state ?? null,
@@ -254,7 +268,7 @@ export async function fetchSales(
           typeof it.offerCreatedAt === "string" ? it.offerCreatedAt : null,
       });
     }
-    if (complete) break;
+    if (complete || met) break;
     if (!data?.nextCursor || items.length === 0) {
       complete = true;
       break;
@@ -264,7 +278,7 @@ export async function fetchSales(
     cursor = data.nextCursor;
     cursors.add(cursor);
   }
-  return { fills, pages, complete };
+  return { fills, pages, complete, met };
 }
 
 /** An item's stat object with numeric values only; null when the row carries none. */

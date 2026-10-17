@@ -32,6 +32,7 @@ import {
   rowSkills,
   listedPeers,
   spanWords,
+  windowFills,
   WINDOW_HOURS,
   STAT_SHORT,
   PERCENT,
@@ -79,16 +80,23 @@ const FULL_SCAN_EVERY = 30_000;
  * which never earns a tag), else the game's average price for the item.
  * null when neither is known.
  */
-export function valueOf({ code, stats, sales, avg, avgAt, now }) {
+export function valueOf({ code, stats, sales, avg, avgAt, now, similar }) {
   const skills = rowSkills(code, stats?.stats);
   if (sales?.fills) {
-    const fills = comparableFills(sales.fills, {
-      code,
-      hours: WINDOW_HOURS,
-      now,
-      state: null,
-    });
-    const v = similarValue(code, skills, fills, { now });
+    // the row's stat-matched value when the scan already worked it out, else here
+    const v =
+      similar ??
+      similarValue(
+        code,
+        skills,
+        comparableFills(sales.fills, {
+          code,
+          hours: WINDOW_HOURS,
+          now,
+          state: null,
+        }),
+        { now },
+      );
     if (v.value != null)
       return {
         amount: v.value,
@@ -667,7 +675,7 @@ export function createEquipment({
     const { open, value, salesState } = ctx;
     const why =
       kind === "loading"
-        ? "reading scrap quote"
+        ? "reading"
         : kind === "error"
           ? "quote unavailable"
           : !r.rarity
@@ -744,12 +752,17 @@ export function createEquipment({
     const book = state.book;
     const fresh =
       !state.error && freshness(book?.at, s.intervalSec * 1000) === "fresh";
-    const loading = !book && !!state.busy;
+    // no quote yet and no failed read: it is being read, from the very first scan (the reads start right after it)
+    const loading = !book && !state.error;
     const setup = state.setup;
     const salesByCode = state.salesByCode ?? {};
     const salesErrors = state.salesErrors ?? {};
     const avgValues = state.avg?.values ?? {};
     const avgTimes = state.avg?.times ?? {};
+    // One clock for the scan; per item one list of comparable sales, kept across scans for a minute per read
+    // (similar.windowFills), so every row of an item shares it and the worth of its stats is read once.
+    const t = now();
+    const fillsOf = (sales) => windowFills(sales, t);
     const valuations = rows.map((r) => {
       // Trust the row first; a just-changed grid selection can precede replacement of the list.
       const rarity =
@@ -768,6 +781,12 @@ export function createEquipment({
         minMarginPct: s.minMarginPct,
       });
       const sales = rowCode ? (salesByCode[rowCode] ?? null) : null;
+      const skills = rowSkills(rowCode, stats.stats);
+      // the row's value from the sales of its stats, worked out once and used by the line, the label and the rank
+      const similar =
+        rowCode && sales?.fills
+          ? similarValue(rowCode, skills, fillsOf(sales), { now: t })
+          : null;
       const value = rowCode
         ? valueOf({
             code: rowCode,
@@ -775,7 +794,8 @@ export function createEquipment({
             sales,
             avg: avgValues[rowCode],
             avgAt: avgTimes[rowCode] ?? state.avg?.at,
-            now: now(),
+            now: t,
+            similar: similar ?? undefined,
           })
         : null;
       // Only a value resting on sales of these stats can call a listing cheap.
@@ -790,7 +810,8 @@ export function createEquipment({
         slot,
         code: rowCode,
         stats,
-        skills: rowSkills(rowCode, stats.stats),
+        skills,
+        similar,
         ageMin: rowAge(r.lines),
         q,
         v,
@@ -850,46 +871,20 @@ export function createEquipment({
         ? "item unknown"
         : salesErrors[r.code] && !r.sales
           ? "sales read failed"
-          : r.sales
-            ? similarValue(
-                r.code,
-                r.skills,
-                comparableFills(r.sales.fills, {
-                  code: r.code,
-                  hours: WINDOW_HOURS,
-                  now: now(),
-                  state: null,
-                }),
-                { now: now() },
-              ).label
+          : r.similar
+            ? r.similar.label
             : state.salesReading === r.code
               ? "reading sales…"
               : state.avg
                 ? "no average yet"
                 : "reading averages…";
       const rank =
-        r.value?.source === "fills" && r.price != null
+        r.value?.source === "fills" && r.price != null && r.similar
           ? percentileRank(
               r.price,
-              (r.value.matched
-                ? similarValue(
-                    r.code,
-                    r.skills,
-                    comparableFills(r.sales.fills, {
-                      code: r.code,
-                      hours: WINDOW_HOURS,
-                      now: now(),
-                      state: null,
-                    }),
-                    { now: now() },
-                  ).fills
-                : comparableFills(r.sales.fills, {
-                    code: r.code,
-                    hours: WINDOW_HOURS,
-                    now: now(),
-                    state: null,
-                  })
-              ).map((f) => f.price),
+              (r.value.matched ? r.similar.fills : fillsOf(r.sales)).map(
+                (f) => f.price,
+              ),
             )
           : null;
       const peers = r.code
@@ -905,6 +900,9 @@ export function createEquipment({
       }
       if (r.row.dataset.scrapSniper !== kind) r.row.dataset.scrapSniper = kind;
       el.dataset.ssKey = key;
+      // open Details take the row's whole width; closed, the line keeps one width whatever it says
+      if (open) el.dataset.open = "";
+      else delete el.dataset.open;
       const memo = [
         kind,
         book?.at ?? "",

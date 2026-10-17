@@ -232,6 +232,32 @@ describe("fetchSales", () => {
     expect(r.complete).toBe(false);
   });
 
+  it("reads only what is newer than a last read: it stops at the first fill it holds", async () => {
+    const { fetchImpl, calls } = pagedFake([
+      { items: [fill(0.5, 401), fill(1, 383.8), fill(20, 390)], next: "c2" },
+      { items: [fill(60, 379.2)], next: "c3" },
+    ]);
+    const r = await fetchSales(fetchImpl, "k", "jet", {
+      hours: 168,
+      now: NOW,
+      maxPages: 10,
+      known: new Set([fill(1, 383.8)._id]),
+    });
+    expect(calls).toHaveLength(1);
+    expect(r.met).toBe(true);
+    expect(r.fills.map((f) => [f.id, f.price])).toEqual([
+      [fill(0.5, 401)._id, 401],
+    ]);
+    // without one, the whole window as before, each fill with its id
+    const full = await fetchSales(
+      pagedFake([{ items: [fill(1, 2)] }]).fetchImpl,
+      "k",
+      "jet",
+      { now: NOW },
+    );
+    expect(full).toMatchObject({ met: false, complete: true });
+    expect(full.fills[0].id).toBe(fill(1, 2)._id);
+  });
   it("needs a key, and rejects a keyless-bucket answer to a wrong one", async () => {
     const { fetchImpl, calls } = pagedFake([
       { items: [fill(1, 1)], next: null },

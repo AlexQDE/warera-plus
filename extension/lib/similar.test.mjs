@@ -5,6 +5,9 @@ import {
   statDistance,
   spanWords,
   listedPeers,
+  statSlopes,
+  windowFills,
+  MIN_SLOPE_PAIRS,
 } from "./similar.mjs";
 import { STAT_RANGES } from "./stats.mjs";
 
@@ -241,5 +244,77 @@ describe("listedPeers", () => {
       n: 0,
       cheapest: null,
     });
+  });
+});
+
+describe("what a stat is worth, and sales brought to the piece's stats", () => {
+  // A week of jet sales: attack 221-300 pays (the whole range is worth e^0.6, +82%), crit pays nothing.
+  const jets = (n, worth = (atk) => 300 * Math.exp(0.6 * ((atk - 221) / 79))) =>
+    Array.from({ length: n }, (_, i) => {
+      const attack = 221 + ((i * 37) % 80);
+      const crit = 41 + ((i * 7) % 10);
+      return {
+        price: worth(attack),
+        at: iso(i * 0.4),
+        code: "jet",
+        skills: { attack, criticalChance: crit },
+      };
+    });
+  it("reads each stat's worth off pairs of sales: attack pays here, crit does not", () => {
+    const slopes = statSlopes("jet", jets(120));
+    expect(slopes.attack).toBeCloseTo(0.6, 6);
+    expect(slopes.criticalChance).toBeCloseTo(0, 6);
+    // the same list is worked out once
+    const fills = jets(120);
+    expect(statSlopes("jet", fills)).toBe(statSlopes("jet", fills));
+  });
+  it("prices a top roll by the lower rolls it is grouped with no more: each sale is brought to its stats", () => {
+    const fills = jets(120);
+    const top = { attack: 300, criticalChance: 45 };
+    const worth = 300 * Math.exp(0.6);
+    const plain = sv("jet", top, fills, { adjust: false });
+    const adjusted = sv("jet", top, fills);
+    expect(plain.level).toBe(adjusted.level);
+    expect(plain.value).toBeLessThan(worth * 0.97); // the sales alike are lower rolls, on the whole
+    expect(adjusted.value).toBeCloseTo(worth, 6);
+    expect(adjusted.adjusted).toBe(true);
+    expect(adjusted.detail).toContain("brought to these stats");
+    // and a bottom roll by the higher ones it is grouped with
+    const bottom = sv("jet", { attack: 221, criticalChance: 45 }, fills);
+    expect(bottom.value).toBeCloseTo(300, 6);
+  });
+  it("adjusts nothing on a market where stats do not pay, on a thin one, or where a better roll sold for less", () => {
+    const flat = jets(120, () => 400);
+    expect(statSlopes("jet", flat)).toEqual({ attack: 0, criticalChance: 0 });
+    const piece = { attack: 290, criticalChance: 45 };
+    expect(sv("jet", piece, flat)).toMatchObject({
+      value: 400,
+      adjusted: false,
+    });
+    // fewer pairs than MIN_SLOPE_PAIRS: no worth is read
+    const thin = jets(6);
+    expect(MIN_SLOPE_PAIRS).toBeGreaterThan(15);
+    expect(statSlopes("jet", thin).attack).toBe(0);
+    // better rolls selling for less is noise, never a reason to price a better roll down
+    const odd = jets(120, (atk) => 600 - atk);
+    expect(statSlopes("jet", odd).attack).toBe(0);
+    // the item's own median (any stats) is never adjusted
+    const any = sv("jet", { attack: 300, criticalChance: 50 }, jets(5));
+    expect(any).toMatchObject({ level: "item", adjusted: false });
+  });
+  it("cuts an item's sales read to the week once a minute, shared by every caller", () => {
+    const sales = {
+      code: "jet",
+      fills: [
+        { price: 1, at: iso(1), code: "jet" },
+        { price: 2, at: iso(200), code: "jet" },
+        { price: 3, at: iso(2), code: "tank" },
+      ],
+    };
+    const a = windowFills(sales, NOW);
+    expect(a.map((f) => f.price)).toEqual([1]);
+    expect(windowFills(sales, NOW + 30_000)).toBe(a);
+    expect(windowFills(sales, NOW + 61_000)).not.toBe(a);
+    expect(windowFills(null, NOW)).toEqual([]);
   });
 });

@@ -18,7 +18,30 @@ describe("preferences", () => {
     expect(
       preferences({ minMarginPct: 0, schemaVersion: 5 }).minMarginPct,
     ).toBe(0);
-    expect(preferences({}).schemaVersion).toBe(5);
+    expect(preferences({}).schemaVersion).toBe(6);
+  });
+  it("tells each craft apart by default, and lifts the old default (random) once, never a chosen value", () => {
+    expect(preferences({}).craftSteelMode).toBe("auto");
+    // "random" stored by 3.5 and earlier was the default every save wrote, not a choice
+    expect(
+      preferences({ craftSteelMode: "random", schemaVersion: 5 })
+        .craftSteelMode,
+    ).toBe("auto");
+    expect(preferences({ craftSteelMode: "random" }).craftSteelMode).toBe(
+      "auto",
+    );
+    // the chosen slot was always a choice; "random" saved under the new schema is one too
+    expect(
+      preferences({ craftSteelMode: "chosen", schemaVersion: 5 })
+        .craftSteelMode,
+    ).toBe("chosen");
+    expect(
+      preferences({ craftSteelMode: "random", schemaVersion: 6 })
+        .craftSteelMode,
+    ).toBe("random");
+    expect(
+      preferences({ craftSteelMode: "auto", schemaVersion: 6 }).craftSteelMode,
+    ).toBe("auto");
   });
   it("defaults to the bar alone, both market modules on, no player id set", () => {
     expect(preferences({})).toMatchObject({
@@ -32,7 +55,7 @@ describe("preferences", () => {
       travel: true,
       picker: true,
       userId: null,
-      craftSteelMode: "random",
+      craftSteelMode: "auto",
       sellFrom: "epic",
     });
     expect(PANELS).toEqual(["none", "market", "craft", "ledger"]);
@@ -58,7 +81,7 @@ describe("preferences", () => {
     });
     expect(
       preferences({ userId: "../settings", craftSteelMode: "x" }),
-    ).toMatchObject({ userId: null, craftSteelMode: "random" });
+    ).toMatchObject({ userId: null, craftSteelMode: "auto" });
     expect(preferences({ userId: 42 }).userId).toBeNull();
   });
   it("counts the ledger as eco (gear worn in battle left out) unless war is chosen", () => {

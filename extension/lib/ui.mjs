@@ -3,7 +3,19 @@ import { escapeHtml, ago } from "./format.mjs";
 const lastHtml = new WeakMap();
 /** What makes a control the same control after a rewrite: its action or field plus the code, id or type it carries. */
 const controlKey = (node) =>
-  ["action", "field", "code", "id", "type", "tab", "tier", "window"]
+  [
+    "action",
+    "field",
+    "code",
+    "id",
+    "type",
+    "tab",
+    "tier",
+    "window",
+    "mode",
+    "page",
+    "source",
+  ]
     .map((k) => node.dataset[k] ?? "")
     .join("\u0000");
 /** Age labels ("12s ago") are kept current by clock(); a passing second must not count as new markup. */
@@ -23,7 +35,20 @@ export function setHtml(el, html) {
     active && typeof active.selectionStart === "number"
       ? [active.selectionStart, active.selectionEnd]
       : null;
+  // A box that scrolls on its own keeps its place when it is the same box (the same data-scroll) after the rewrite.
+  const scrolled = [...el.querySelectorAll("[data-scroll]")]
+    .filter((n) => n.scrollTop || n.scrollLeft)
+    .map((n) => [n.dataset.scroll, n.scrollTop, n.scrollLeft]);
   el.innerHTML = html;
+  for (const [key, top, left] of scrolled) {
+    const next = [...el.querySelectorAll("[data-scroll]")].find(
+      (n) => n.dataset.scroll === key,
+    );
+    if (next) {
+      next.scrollTop = top;
+      next.scrollLeft = left;
+    }
+  }
   if (focused) {
     const next = [...el.querySelectorAll("[data-action], [data-field]")].find(
       (node) => controlKey(node) === focused,

@@ -8,10 +8,15 @@
 // stats come before similar ones, and a value rests on the 50 newest sales
 // alike at most. A piece that reaches none has no stat-matched value, only
 // the item's any-stats median (widened the same way), and that never earns
-// a tag. Pure; equipment.mjs, craftdesk.mjs and the worker render the result.
+// a tag. Each sale alike is first brought to the piece's own stats by what
+// a stat is worth on this item's market (statSlopes), so a piece at the top
+// of its range is not priced down by the lower rolls it is grouped with, nor
+// one at the bottom up. Pure; equipment.mjs, craftdesk.mjs and the worker
+// render the result.
 import { STAT_RANGES } from "./stats.mjs";
 import { WEAPONS } from "./items.mjs";
 import { positive } from "./quality.mjs";
+import { comparableFills } from "./resale.mjs";
 
 /** Sales within a tenth of every stat's range: "same stats". */
 export const SAME_DISTANCE = 0.1;
@@ -48,7 +53,130 @@ export const PERCENT = new Set([
 ]);
 
 /** @typedef {{ price: number, at: string, skills?: Record<string, number> | null, listedAt?: string | null }} Fill */
-/** @typedef {{ value: number | null, level: "same" | "similar" | "item" | null, n: number, matched: boolean, span: Record<string, [number, number]>, low: number | null, high: number | null, sellsHours: number | null, hours: number | null, label: string, detail: string, fills: Fill[] }} SimilarValue */
+/** @typedef {{ value: number | null, level: "same" | "similar" | "item" | null, n: number, matched: boolean, span: Record<string, [number, number]>, low: number | null, high: number | null, sellsHours: number | null, hours: number | null, label: string, detail: string, fills: Fill[], adjusted: boolean }} SimilarValue */
+
+/** The newest sales a stat's worth is read from. */
+export const SLOPE_SALES = 200;
+/** Two sales tell a stat's worth only when they sold this close in time (the market moves) ... */
+export const SLOPE_PAIR_HOURS = 48;
+/** ... and their other stats sit this close (a share of each one's range). */
+export const SLOPE_OTHER = 0.3;
+/** Pairs needed before a stat's worth adjusts anything. */
+export const MIN_SLOPE_PAIRS = 40;
+/** At most this much log price over a stat's whole range: the top roll at most e^2 = 7.4 times the bottom one. */
+export const MAX_SLOPE = 2;
+
+/** Where a stat sits in its range, 0 at the bottom and 1 at the top. @param {readonly [number, number]} range @param {number} v */
+const share = ([lo, hi], v) => (v - lo) / Math.max(1, hi - lo);
+
+/** @type {WeakMap<object, Map<string, Record<string, number>>>} */
+const slopeCache = new WeakMap();
+
+/**
+ * What each stat is worth on an item's market: for each stat, the median over
+ * pairs of sales (of the newest SLOPE_SALES; sold within SLOPE_PAIR_HOURS of
+ * each other; the other stats within SLOPE_OTHER) of the change in log price
+ * per share of the stat's range (a Theil-Sen slope, robust to odd sales;
+ * for a weapon, over prices taken back by the other stat's worth).
+ * Never below 0 (a better roll is not worth less) nor above MAX_SLOPE; 0
+ * while fewer than MIN_SLOPE_PAIRS pairs tell it, so a thin market adjusts
+ * nothing. Worked out once per list of fills (with the default settings;
+ * `tune` overrides them, for the backtest).
+ * @param {string} code @param {ReadonlyArray<Fill> | null | undefined} fills
+ * @param {{ sales?: number, pairHours?: number, other?: number, minPairs?: number, max?: number }} [tune]
+ * @returns {Record<string, number>}
+ */
+export function statSlopes(code, fills, tune = undefined) {
+  const ranges = STAT_RANGES[code];
+  if (!ranges || !fills?.length) return {};
+  const {
+    sales: most = SLOPE_SALES,
+    pairHours = SLOPE_PAIR_HOURS,
+    other = SLOPE_OTHER,
+    minPairs = MIN_SLOPE_PAIRS,
+    max = MAX_SLOPE,
+  } = tune ?? {};
+  let byCode = tune ? undefined : slopeCache.get(fills);
+  const hit = byCode?.get(code);
+  if (hit) return hit;
+  const keys = Object.keys(ranges);
+  /** @type {Array<{ lp: number, t: number, z: number[] }>} */
+  const sales = [];
+  for (const f of fills) {
+    if (sales.length >= most) break;
+    const t = Date.parse(f?.at);
+    if (positive(f?.price) == null || !Number.isFinite(t)) continue;
+    const z = keys.map((k) => Number(f.skills?.[k]));
+    if (z.some((v) => !Number.isFinite(v))) continue;
+    sales.push({
+      lp: Math.log(f.price),
+      t,
+      z: keys.map((k, i) => share(ranges[k], z[i])),
+    });
+  }
+  /** The slope of stat `s` over log prices `lps`: the median over the pairs that tell it, clamped. @param {number} s @param {number[]} lps */
+  const slopeOf = (s, lps) => {
+    /** @type {number[]} */
+    const slopes = [];
+    for (let i = 0; i < sales.length; i++)
+      for (let j = i + 1; j < sales.length; j++) {
+        const a = sales[i];
+        const b = sales[j];
+        const dz = a.z[s] - b.z[s];
+        if (dz === 0 || Math.abs(a.t - b.t) > pairHours * 3600e3) continue;
+        if (a.z.some((v, o) => o !== s && Math.abs(v - b.z[o]) > other))
+          continue;
+        slopes.push((lps[i] - lps[j]) / dz);
+      }
+    const m = slopes.length >= minPairs ? median(slopes) : null;
+    return m == null ? 0 : Math.min(max, Math.max(0, m));
+  };
+  // A weapon's two stats: each one's slope is read again over prices taken back by the other's, so whatever
+  // the other stat explains does not leak into it (backfitting; three rounds settle it).
+  const raw = sales.map((x) => x.lp);
+  let slopes = keys.map((_, s) => slopeOf(s, raw));
+  for (let round = 1; round < (keys.length > 1 ? 3 : 1); round++)
+    slopes = keys.map((_, s) =>
+      slopeOf(
+        s,
+        sales.map(
+          (x) =>
+            x.lp -
+            slopes.reduce((d, b, o) => (o === s ? d : d + b * x.z[o]), 0),
+        ),
+      ),
+    );
+  /** @type {Record<string, number>} */
+  const out = Object.fromEntries(keys.map((k, s) => [k, slopes[s]]));
+  if (tune) return out;
+  if (!byCode) slopeCache.set(fills, (byCode = new Map()));
+  byCode.set(code, out);
+  return out;
+}
+
+/** @type {WeakMap<object, { minute: number, fills: Fill[] }>} */
+const windowCache = new WeakMap();
+/**
+ * An item's sales read (the worker's `sales:<code>`), cut to the WINDOW_HOURS
+ * the values are read over, newest first; worked out once a minute per read,
+ * so every row and line of the item shares one list (and its stat slopes).
+ * @param {{ code?: string, fills?: ReadonlyArray<any> } | null | undefined} sales @param {number} [now]
+ * @returns {Fill[]}
+ */
+export function windowFills(sales, now = Date.now()) {
+  if (!sales?.fills) return [];
+  const minute = Math.floor(now / 60_000);
+  const hit = windowCache.get(sales);
+  if (hit && hit.minute === minute) return hit.fills;
+  const fills = comparableFills(sales.fills, {
+    code: sales.code ?? null,
+    hours: WINDOW_HOURS,
+    now,
+    state: null,
+  });
+  windowCache.set(sales, { minute, fills });
+  return fills;
+}
 
 /** @param {ReadonlyArray<number>} xs */
 const median = (xs) => {
@@ -112,14 +240,36 @@ export function statDistance(ranges, a, b) {
  * the newest MAX_SALES sales within SAME_DISTANCE of its stats when there
  * are MIN_SAME of them, else within SIMILAR_DISTANCE when there are
  * MIN_SIMILAR; no window has enough: the item's newest sales in the
- * narrowest window holding MIN_ITEM ("any stats", not matched). Every
+ * narrowest window holding MIN_ITEM ("any stats", not matched). A sale alike
+ * counts at the price it would have fetched with the piece's own stats, by
+ * what each stat is worth on this item's market (statSlopes; `adjust: false`
+ * takes the prices as they are); the item's own median never is. Every
  * answer names the sales it rests on and the window.
  * @param {string} code @param {Record<string, number> | null | undefined} skills @param {ReadonlyArray<Fill> | null | undefined} fills
- * @param {{ now?: number }} [options]
+ * @param {{ now?: number, adjust?: boolean, slopes?: Record<string, number> }} [options] `slopes`: the stats' worth worked out elsewhere
  * @returns {SimilarValue}
  */
-export function similarValue(code, skills, fills, { now = Date.now() } = {}) {
+export function similarValue(
+  code,
+  skills,
+  fills,
+  { now = Date.now(), adjust = true, slopes: given = undefined } = {},
+) {
   const ranges = STAT_RANGES[code] ?? null;
+  const slopes =
+    adjust && ranges && skills ? (given ?? statSlopes(code, fills)) : {};
+  const moves = Object.values(slopes).some((b) => b > 0);
+  /** The price a sale alike would have fetched with the piece's own stats. @param {Fill} f */
+  const atPiece = (f) => {
+    let d = 0;
+    for (const [k, b] of Object.entries(slopes)) {
+      const x = skills?.[k];
+      const y = f.skills?.[k];
+      if (b && ranges && typeof x === "number" && typeof y === "number")
+        d += b * (share(ranges[k], x) - share(ranges[k], y));
+    }
+    return f.price * Math.exp(d);
+  };
   const last = WINDOWS[WINDOWS.length - 1];
   // newest first, each with its age in hours; older than the widest window never counts
   const priced = (fills ?? [])
@@ -144,10 +294,12 @@ export function similarValue(code, skills, fills, { now = Date.now() } = {}) {
       ? `${priced.length} sales of this item in 7 d, too few with these stats`
       : "no sales of this item in 7 d",
     fills: [],
+    adjusted: false,
   });
   /** @param {Fill[]} list @param {"same" | "similar" | "item"} level @param {number} hours */
   const answer = (list, level, hours) => {
     const prices = list.map((f) => f.price);
+    const adjusted = moves && level !== "item";
     /** @type {Record<string, [number, number]>} */
     const span = {};
     if (ranges && level !== "item")
@@ -162,7 +314,7 @@ export function similarValue(code, skills, fills, { now = Date.now() } = {}) {
       .filter((h) => Number.isFinite(h) && h >= 0);
     const when = windowWords(hours);
     return /** @type {SimilarValue} */ ({
-      value: median(prices),
+      value: median(adjusted ? list.map(atPiece) : prices),
       level,
       n: list.length,
       matched: level !== "item",
@@ -172,8 +324,9 @@ export function similarValue(code, skills, fills, { now = Date.now() } = {}) {
       sellsHours: median(waits),
       hours,
       label: `${list.length} ${level === "item" ? "any" : level} · ${when}`,
-      detail: `${list.length} sales · ${level === "item" ? "any stats" : spanWords(span)} · ${when}`,
+      detail: `${list.length} sales · ${level === "item" ? "any stats" : spanWords(span)} · ${when}${adjusted ? " · brought to these stats" : ""}`,
       fills: list,
+      adjusted,
     });
   };
   /** @param {Array<{ f: Fill, age: number }>} list @param {number} hours */

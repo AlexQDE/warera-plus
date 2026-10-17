@@ -18,22 +18,37 @@ import { itemLabel, slotName, rarityFromItemCode } from "./dom.mjs";
 import { comparableFills } from "./resale.mjs";
 import { localDayOf } from "./observed.mjs";
 import { spanWords, WINDOW_HOURS } from "./similar.mjs";
-import { modeSwitch, valueHtml } from "./dialogs.mjs";
+import { modeSwitch, valueHtml, chosenMark } from "./dialogs.mjs";
 
 const pct = (v, d = 0) => (v == null ? "–" : `${signed(v * 100, d)}%`);
 const count = (n) => Number(n ?? 0).toLocaleString("en-US");
 const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 
 const CRAFT_HELP =
-  "Cost: the tier's scraps and steel walked through the market asks, for a random craft (a chosen slot doubles the steel). Worth: the game's average price of each slot at the game's odds (30% weapon, 14% each armour slot). Profit: worth against cost. Expected values, not promises.";
+  "Cost: the tier's scraps and steel walked through the market asks, for a random craft (a sniper craft, the slot chosen, doubles the steel). Worth: the game's average price of each slot at the game's odds (30% weapon, 14% each armour slot). Profit: worth against cost. Expected values, not promises.";
+
+/** The Ledger's list filters: every piece, or the pieces of one source. */
+const LIST_SOURCES = [
+  ["all", "All"],
+  ["crafted", "Craft"],
+  ["opened", "Case"],
+  ["bought", "Buy"],
+  ["looted", "Loot"],
+];
 
 export function createCraftDesk({ settings, now = Date.now }) {
   let tier = null; // the tier whose slots are opened on the craft board
   let craftWindow = "today"; // the Ledger's window: today, week, month or all (local days)
+  let page = 0; // the page of the Ledger's list asked for, newest first
+  let source = "all"; // the Ledger's list: every piece, or one source's
+  let pages = 1; // how many pages the last view had
 
   function reset() {
     tier = null;
     craftWindow = "today";
+    page = 0;
+    source = "all";
+    pages = 1;
   }
   function clear() {
     reset();
@@ -52,6 +67,25 @@ export function createCraftDesk({ settings, now = Date.now }) {
       craftWindow = ["today", "week", "month", "all"].includes(t.dataset.window)
         ? t.dataset.window
         : "today";
+      page = 0;
+      return true;
+    }
+    if (a === "desk-source") {
+      source = LIST_SOURCES.some(([k]) => k === t.dataset.source)
+        ? t.dataset.source
+        : "all";
+      page = 0;
+      return true;
+    }
+    if (a === "desk-page") {
+      const to = {
+        first: 0,
+        prev: page - 1,
+        next: page + 1,
+        last: pages - 1,
+      }[t.dataset.page];
+      if (to == null) return false;
+      page = Math.max(0, Math.min(pages - 1, to));
       return true;
     }
     return false;
@@ -95,10 +129,10 @@ export function createCraftDesk({ settings, now = Date.now }) {
             ? `<span class="lens-muted">–</span>`
             : `<b class="${cls(gain)}">${signedGold(gain)}</b> <small class="${cls(gain)}">${pct(r.roiRandom)}</small>`;
         const chosen = r.best
-          ? `<span title="${esc(itemLabel(r.best.code))} sells ~${gold(r.best.avg)} g; a chosen slot costs ${r.costChosen.value == null ? "–" : gold(r.costChosen.value)} g">${esc(slotName(r.best.code))} <small class="${cls(r.roiChosen)}">${pct(r.roiChosen)}</small></span>`
+          ? `<span title="${esc(itemLabel(r.best.code))} sells ~${gold(r.best.avg)} g; a sniper craft (the slot chosen) costs ${r.costChosen.value == null ? "–" : gold(r.costChosen.value)} g">${esc(slotName(r.best.code))} <small class="${cls(r.roiChosen)}">${pct(r.roiChosen)}</small></span>`
           : `<span class="lens-muted">–</span>`;
         const isBest = top?.row === r;
-        const main = `<tr class="lens-tier${isBest ? " lens-best" : ""}" data-rarity="${r.rarity}" aria-expanded="${open}"${isBest ? ` title="best now: ${top.mode === "random" ? "a random craft" : "the chosen slot"}"` : ""}><th scope="row"><button type="button" data-action="desk-tier" data-tier="${r.tier}" aria-pressed="${open}"><span aria-hidden="true">${open ? "▾" : "▸"}</span> ${r.rarity}</button></th>${cell(cost)}${cell(ev)}<td class="lens-num">${profit}</td><td>${chosen}</td></tr>`;
+        const main = `<tr class="lens-tier${isBest ? " lens-best" : ""}" data-rarity="${r.rarity}" aria-expanded="${open}"${isBest ? ` title="best now: ${top.mode === "random" ? "a random craft" : "a sniper craft (the slot chosen)"}"` : ""}><th scope="row"><button type="button" data-action="desk-tier" data-tier="${r.tier}" aria-pressed="${open}"><span aria-hidden="true">${open ? "▾" : "▸"}</span> ${r.rarity}</button></th>${cell(cost)}${cell(ev)}<td class="lens-num">${profit}</td><td>${chosen}</td></tr>`;
         if (!open) return main;
         const slots = r.slots
           .map(
@@ -134,7 +168,7 @@ export function createCraftDesk({ settings, now = Date.now }) {
                 : "reading sales…"
             }</p>`
           : "";
-        return `${main}<tr class="lens-tier-detail"><td colspan="5"><div class="lens-chips">${slots}</div><p>${r.scraps} scraps + ${r.steelRandom} steel · chosen slot ${r.steelChosen} steel · ${chosenCost}${reroll}</p>${fillsLine}</td></tr>`;
+        return `${main}<tr class="lens-tier-detail"><td colspan="5"><div class="lens-chips">${slots}</div><p>${r.scraps} scraps + ${r.steelRandom} steel · sniper craft ${r.steelChosen} steel · ${chosenCost}${reroll}</p>${fillsLine}</td></tr>`;
       })
       .join("");
     return `${prices}<table class="lens-board"><thead><tr><th>Tier</th><th class="lens-num">Cost</th><th class="lens-num">Worth</th><th class="lens-num">Profit</th><th>Chosen</th></tr></thead><tbody>${body}</tbody></table>`;
@@ -181,7 +215,22 @@ export function createCraftDesk({ settings, now = Date.now }) {
     all: "all time",
   };
   const TIERS = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
-  const ROWS_SHOWN = 30;
+  /** What a craft's cost charges for the steel, by the craft mode the view was made with. */
+  const STEEL_WORDS = {
+    auto: "the base steel for a random craft, twice it for a sniper craft (the slot chosen; ◎: picked in the game's craft window when the extension saw the press, faint when told by a streak of the same slot too long for a random craft)",
+    random: "every craft at the random fee (Advanced settings)",
+    chosen:
+      "every craft as a sniper craft, twice the steel (Advanced settings)",
+  };
+  /** "13:05", or the day before it outside today, the year too outside this one. */
+  const whenWords = (when) => {
+    const time = `${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`;
+    if (craftWindow === "today") return time;
+    const day = localDayOf(when.toISOString());
+    const sameYear =
+      day.slice(0, 4) === localDayOf(new Date(now()).toISOString()).slice(0, 4);
+    return `<small>${esc(sameYear ? day.slice(5) : day)}</small> ${time}`;
+  };
 
   function ledgerHtml(state) {
     const id = state.craftsUserId ?? null;
@@ -206,7 +255,8 @@ export function createCraftDesk({ settings, now = Date.now }) {
     const who = meta.username
       ? esc(meta.username)
       : `player …${esc(String(id).slice(-6))}`;
-    const legend = `Your whole history, read once with your key, kept in this browser and updated every minute. Cost: a craft is its recipe at that day's scrap and steel prices (${state.settings?.craftSteelMode === "chosen" ? "chosen slot" : "random craft"}), a case its price that day, a buy what you paid, loot nothing. A held piece counts at what pieces of its stats sold for in 7 days (≈: any stats or the game's average). Eco leaves gear worn in battle out; War counts it.${v.approxBefore ? ` The game keeps 30 days of prices: costs before ${v.approxBefore} are approximate (≈).` : ""}`;
+    const steelMode = v.steelMode ?? state.settings?.craftSteelMode ?? "auto";
+    const legend = `Your whole history, read once with your key, kept in this browser and updated every minute. Cost: a craft is its recipe at that day's scrap and steel prices, ${STEEL_WORDS[steelMode] ?? STEEL_WORDS.auto}; a case its price that day, a buy what you paid, loot nothing. A held piece counts at what pieces of its stats sold for in 7 days (≈: any stats or the game's average). Eco leaves gear worn in battle out; War counts it. The list holds every piece got or gone in the window, ${count(v.pageSize ?? 50)} a page.${v.approxBefore ? ` The game keeps 30 days of prices: costs before ${v.approxBefore} are approximate (≈).` : ""}`;
     const m = w.money;
     const total = SOURCES.reduce((s, [k]) => s + (w[k]?.estimated ?? 0), 0);
     const pieces = SOURCES.reduce((s, [k]) => s + (w[k]?.n ?? 0), 0);
@@ -228,7 +278,7 @@ export function createCraftDesk({ settings, now = Date.now }) {
         .sort((a, b) => TIERS.indexOf(a[0]) - TIERS.indexOf(b[0]))
         .map(
           ([t, o]) =>
-            `<span class="lens-chip" data-rarity="${esc(t)}">${esc(cap(t))} <small>${count(o.n)}</small> ${money(o.estimatedKnown ? o.estimated : null)}</span>`,
+            `<span class="lens-chip" data-rarity="${esc(t)}">${esc(cap(t))} <small>${count(o.n)}</small>${o.chosen ? ` <small class="lens-pick" title="${esc(`${count(o.chosen)} of ${count(o.n)} sniper crafts (slot chosen): twice the steel`)}">◎${count(o.chosen)}</small>` : ""} ${money(o.estimatedKnown ? o.estimated : null)}</span>`,
         ),
       ...(w.wooden.n
         ? [
@@ -236,12 +286,11 @@ export function createCraftDesk({ settings, now = Date.now }) {
           ]
         : []),
     ].join("");
-    const all = v.rows ?? [];
-    const rows = all.slice(0, ROWS_SHOWN).map((p) => {
+    const rows = (v.rows ?? []).map((p) => {
       const approx = p.approx ? "≈" : "";
       const src = SOURCE_TAGS[p.source];
       const got = src
-        ? `${sourceTag(p.source, p.via === "case2" ? "elite case" : "")}${p.source === "looted" ? "" : ` ${gold(p.cost)}${approx}`}`
+        ? `${sourceTag(p.source, p.via === "case2" ? "elite case" : p.source === "crafted" ? (p.chosen ? "Crafted: sniper craft (slot chosen)" : "Crafted: random craft") : "")}${chosenMark(p)}${p.source === "looted" ? "" : ` ${gold(p.cost)}${approx}`}`
         : `<span class="lens-muted" title="got before your history starts">–</span>`;
       const inBattle = p.worn && mode !== "war";
       const nowCell =
@@ -256,16 +305,40 @@ export function createCraftDesk({ settings, now = Date.now }) {
       const pnl =
         !inBattle && back != null && p.cost != null ? back - p.cost : null;
       const when = new Date(p.goneAt ?? p.at ?? Date.now());
-      const time = `${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`;
       const stats = statsWords(p.skills);
-      return `<tr data-fate="${p.fate}" data-source="${p.source}"><td>${craftWindow === "today" ? "" : `<small>${esc(localDayOf(when.toISOString()).slice(5))}</small> `}${time}</td><td>${esc(itemLabel(p.code))}${stats ? ` <small>${esc(stats)}</small>` : ""}</td><td class="lens-num">${got}</td><td class="lens-num">${nowCell}</td><td class="lens-num">${pnl == null ? "" : money(pnl)}</td></tr>`;
+      return `<tr data-fate="${p.fate}" data-source="${p.source}"><td>${whenWords(when)}</td><td>${esc(itemLabel(p.code))}${stats ? ` <small>${esc(stats)}</small>` : ""}</td><td class="lens-num">${got}</td><td class="lens-num">${nowCell}</td><td class="lens-num">${pnl == null ? "" : money(pnl)}</td></tr>`;
     });
-    const more = (v.rowsTotal ?? all.length) - rows.length;
+    // the whole window, a page at a time: what the worker answered (it may still be answering a click)
+    const listTotal = v.rowsTotal ?? rows.length;
+    const size = v.pageSize ?? 50;
+    const shown = v.page ?? 0;
+    pages = Math.max(1, v.pages ?? Math.ceil(listTotal / size));
+    page = Math.min(page, pages - 1);
+    const listed = v.source ?? "all";
+    const counts = v.sources ?? null;
+    const filters = counts
+      ? `<div class="lens-filters" role="group" aria-label="Pieces by source">${LIST_SOURCES.filter(
+          ([k]) => k === "all" || counts[k] || k === source,
+        )
+          .map(
+            ([k, label]) =>
+              `<button type="button" data-action="desk-source" data-source="${k}" aria-pressed="${source === k}">${label} <small>${count(counts[k] ?? 0)}</small></button>`,
+          )
+          .join("")}</div>`
+      : "";
+    const pageButton = (to, label, name, disabled) =>
+      `<button type="button" data-action="desk-page" data-page="${to}" aria-label="${name}" title="${name}"${disabled ? " disabled" : ""}>${label}</button>`;
+    const first = shown * size + 1;
+    const last = Math.min(listTotal, (shown + 1) * size);
+    const pager =
+      listTotal > size
+        ? `<nav class="lens-pager" aria-label="Pages of pieces">${pageButton("first", "«", "Newest page", shown === 0)}${pageButton("prev", "‹ Newer", "Newer page", shown === 0)}<span>${count(first)}–${count(last)} <small>of ${count(listTotal)}</small></span>${pageButton("next", "Older ›", "Older page", shown >= pages - 1)}${pageButton("last", "»", "Oldest page", shown >= pages - 1)}</nav>`
+        : "";
     const list = rows.length
-      ? `<table class="lens-crafts"><thead><tr><th>When</th><th>Piece</th><th class="lens-num">Cost</th><th class="lens-num">Now</th><th class="lens-num">±</th></tr></thead><tbody>${rows.join("")}</tbody></table>${more > 0 ? `<p class="lens-muted">+${count(more)} more</p>` : ""}`
-      : `<p class="lens-muted">Nothing in this window.</p>`;
+      ? `<div class="lens-scroll" data-scroll="${esc(`ledger:${craftWindow}:${listed}:${shown}`)}"><table class="lens-crafts"><thead><tr><th>When</th><th>Piece</th><th class="lens-num">Cost</th><th class="lens-num">Now</th><th class="lens-num">±</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>${pager}`
+      : `<p class="lens-muted">${listed === "all" ? "Nothing in this window." : "None of these in this window."}</p>`;
     return own(
-      `${head}${tiles}${chips ? `<div class="lens-chips">${chips}</div>` : ""}${list}`,
+      `${head}${tiles}${chips ? `<div class="lens-chips">${chips}</div>` : ""}${filters}${list}`,
     );
   }
 
@@ -286,6 +359,12 @@ export function createCraftDesk({ settings, now = Date.now }) {
     pulse,
     get window() {
       return craftWindow;
+    },
+    get page() {
+      return page;
+    },
+    get source() {
+      return source;
     },
   };
 }

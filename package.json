@@ -1,7 +1,7 @@
 {
   "name": "warera-plus",
-  "version": "3.5.1",
-  "description": "WarEra Plus: read-only decision support for WarEra (SNIPE and FLIP tags on equipment offers, a craft board at live prices, your whole crafting, case and trading history with live estimates in the game's craft and case windows, cases, travel) with depth-aware quotes and explicit uncertainty.",
+  "version": "3.6.0",
+  "description": "WarEra Plus: an unofficial, read-only companion for the WarEra browser game (SNIPE and FLIP tags on equipment offers, craft and case values at live prices, a ledger of the player's own crafting, case and trading history).",
   "type": "module",
   "private": true,
   "scripts": {
@@ -9,9 +9,10 @@
     "lint": "eslint extension scripts --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "validate": "node scripts/validate.mjs",
-    "format": "prettier --write extension scripts README.md docs package.json tsconfig.json eslint.config.mjs vitest.config.js .github/workflows/ci.yml",
-    "format:check": "prettier --check extension scripts README.md docs package.json tsconfig.json eslint.config.mjs vitest.config.js .github/workflows/ci.yml",
-    "check": "npm run lint && npm run typecheck && npm run validate && npm test && npm run format:check"
+    "format": "prettier --write extension scripts README.md CHANGELOG.md docs package.json tsconfig.json eslint.config.mjs vitest.config.js .github/workflows/ci.yml",
+    "format:check": "prettier --check extension scripts README.md CHANGELOG.md docs package.json tsconfig.json eslint.config.mjs vitest.config.js .github/workflows/ci.yml",
+    "check": "npm run lint && npm run typecheck && npm run validate && npm test && npm run format:check",
+    "package": "node scripts/package.mjs"
   },
   "engines": {
     "node": ">=24"

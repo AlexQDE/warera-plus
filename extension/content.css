@@ -394,6 +394,59 @@
 [data-lens] .lens-crafts tr[data-fate="scrapped"] td:first-child {
   color: var(--lens-muted);
 }
+/* the Ledger's list: every piece of the window, by source, a page at a time in a box of its own */
+[data-lens] .lens-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin: 0 0 4px;
+}
+[data-lens] .lens-filters button,
+[data-lens] .lens-pager button {
+  min-height: 22px;
+  padding: 1px 8px;
+  font-size: 11px;
+}
+[data-lens] .lens-filters small {
+  font-size: 10px;
+}
+[data-lens] .lens-scroll {
+  max-height: min(60vh, 460px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-bottom: 1px solid var(--lens-line);
+}
+[data-lens] .lens-scroll .lens-crafts {
+  margin: 0;
+}
+[data-lens] .lens-scroll .lens-crafts thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--lens-bg) !important;
+}
+[data-lens] .lens-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 6px;
+  margin: 6px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+[data-lens] .lens-pager > span {
+  padding: 0 4px;
+}
+/* a craft charged the chosen slot's doubled steel; faint when a streak tells it, not the craft window */
+[data-lens] .lens-pick {
+  color: var(--lens-warn);
+  font-size: 11px;
+  margin-left: 3px;
+  cursor: help;
+}
+[data-lens] .lens-pick[data-guess] {
+  opacity: 0.6;
+}
 
 /* Offer rows */
 [data-scrap-sniper="hit"] {
@@ -426,6 +479,32 @@
 .ss-verdict[data-lens] > button,
 .ss-verdict[data-lens] .lens-details {
   pointer-events: auto;
+}
+/* One width whatever the line says: while the quote, the averages and the sales are read its words change
+   several times, and the row's own price and BUY must not move under the cursor each time. A longer phrase
+   ends in an ellipsis; open Details take the row's whole width. */
+.ss-verdict[data-lens] {
+  width: 27em;
+  flex-wrap: nowrap;
+}
+.ss-verdict[data-lens][data-open] {
+  width: 100%;
+  flex-wrap: wrap;
+}
+.ss-verdict[data-lens] > .lens-tag {
+  flex: none;
+  min-width: 7.6em;
+  text-align: center;
+}
+.ss-verdict[data-lens] > .lens-kv {
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+}
+.ss-verdict[data-lens] > .lens-kv > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 [data-lens] .lens-tag {
   font-size: 9.5px;
