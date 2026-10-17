@@ -480,6 +480,32 @@
 .ss-verdict[data-lens] .lens-details {
   pointer-events: auto;
 }
+/* One width whatever the line says: while the quote, the averages and the sales are read its words change
+   several times, and the row's own price and BUY must not move under the cursor each time. A longer phrase
+   ends in an ellipsis; open Details take the row's whole width. */
+.ss-verdict[data-lens] {
+  width: 25em;
+  flex-wrap: nowrap;
+}
+.ss-verdict[data-lens][data-open] {
+  width: 100%;
+  flex-wrap: wrap;
+}
+.ss-verdict[data-lens] > .lens-tag {
+  flex: none;
+  min-width: 7.6em;
+  text-align: center;
+}
+.ss-verdict[data-lens] > .lens-kv {
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+}
+.ss-verdict[data-lens] > .lens-kv > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 [data-lens] .lens-tag {
   font-size: 9.5px;
   font-weight: 800;

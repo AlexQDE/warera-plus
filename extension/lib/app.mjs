@@ -401,24 +401,44 @@ export async function startLens(runtime = chrome.runtime) {
       void askLedger(true);
     }
   }
-  const observer = new MutationObserver((muts) => {
-    if (document.hidden || disposed) return;
+  /** Mutations of the extension's own nodes only: they never call for a scan. */
+  const onlyOwn = (muts) => {
     const own = (n) =>
       !!(
         n?.closest?.("[data-lens]") ||
         n?.parentElement?.closest?.("[data-lens]")
       );
-    if (
-      muts.every(
-        (m) =>
-          own(m.target) ||
-          (m.type === "childList" &&
-            [...m.addedNodes, ...m.removedNodes].every(own)),
-      )
-    )
-      return;
+    return muts.every(
+      (m) =>
+        own(m.target) ||
+        (m.type === "childList" &&
+          [...m.addedNodes, ...m.removedNodes].every(own)),
+    );
+  };
+  const observer = new MutationObserver((muts) => {
+    if (document.hidden || disposed || onlyOwn(muts)) return;
     sched.schedule();
   });
+  // Discovery: for a while after the page starts, its address changes or a click, any node the game adds calls
+  // for a scan, so what it draws late (the offer list after its own read, a dialog, the next page) is found at
+  // once and gets its lines in the frame it first shows in, instead of on the next five-second tick. Ends by itself.
+  let discoverUntil = 0;
+  let discovering = false;
+  const discovery = new MutationObserver((muts) => {
+    if (disposed) return;
+    if (Date.now() > discoverUntil) {
+      discovery.disconnect();
+      discovering = false;
+      return;
+    }
+    if (!document.hidden && !onlyOwn(muts)) sched.schedule();
+  });
+  function discover(ms) {
+    discoverUntil = Math.max(discoverUntil, Date.now() + ms);
+    if (discovering || disposed) return;
+    discovery.observe(document, { childList: true, subtree: true });
+    discovering = true;
+  }
   function observe(next) {
     next = [...new Set(next.filter((n) => n?.isConnected))];
     if (next.length === roots.length && next.every((n, i) => n === roots[i]))
@@ -740,6 +760,7 @@ export async function startLens(runtime = chrome.runtime) {
     if (!document.hidden) {
       applySettings(await send({ type: "getSettings" }));
       if (href !== location.href || Date.now() - lastScan > 30_000) {
+        if (href !== location.href) discover(10_000);
         href = location.href;
         scan();
       }
@@ -766,10 +787,14 @@ export async function startLens(runtime = chrome.runtime) {
   // watch: a scan shortly after any click finds them now instead of on the next tick. Clicks are user-rate.
   let clickTimer;
   const afterClick = () => {
+    discover(3000);
     clearTimeout(clickTimer);
     clickTimer = setTimeout(() => sched.schedule(), 300);
   };
   document.addEventListener("click", afterClick, true);
+  // Back and forward move the game's address without a click.
+  const onPop = () => discover(10_000);
+  window.addEventListener("popstate", onPop);
   const dispose = () => {
     disposed = true;
     clearTimeout(timer);
@@ -782,8 +807,13 @@ export async function startLens(runtime = chrome.runtime) {
     for (const el of document.querySelectorAll(".ss-trip")) el.remove();
     document.removeEventListener("visibilitychange", visible);
     document.removeEventListener("click", afterClick, true);
+    window.removeEventListener("popstate", onPop);
+    discovery.disconnect();
+    discovering = false;
     clearTimeout(clickTimer);
   };
+  // The page may still be drawing what we annotate (the game reads its offers after it starts).
+  discover(15_000);
   await tick();
   metrics.equipment = equipment.metrics;
   return { dispose, metrics, scan };

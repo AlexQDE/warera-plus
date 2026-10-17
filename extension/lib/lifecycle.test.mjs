@@ -576,6 +576,31 @@ describe("SPA lifecycle and DOM work", () => {
     expect(after.slice(saved + 1).some((m) => m.type === "ledger")).toBe(true);
     expect(runtime.info.settings.ledgerMode).toBe("war");
   });
+  it("finds the market the game draws after the app starts at once, not on the next tick, and stops looking after a while", async () => {
+    window.history.replaceState({}, "", "/market/equipments");
+    document.body.innerHTML = "<main></main>";
+    const runtime = marketRuntime({});
+    app = await startLens(runtime);
+    await settle(300);
+    expect(bar()).toBeNull();
+    // the game draws the market after its own read
+    marketFixture();
+    await settle(40); // a frame or two: far less than the five-second tick
+    expect(bar()).not.toBeNull();
+    // fifteen seconds on, a change outside what the bar watches no longer calls for a scan by itself
+    await settle(16_000);
+    const scans = app.metrics.scans;
+    document.body.appendChild(document.createElement("p"));
+    await settle(40);
+    expect(app.metrics.scans).toBe(scans);
+    // a click looks again for a few seconds
+    document.body.click();
+    await settle(400);
+    const after = app.metrics.scans;
+    document.body.appendChild(document.createElement("p"));
+    await settle(40);
+    expect(app.metrics.scans).toBeGreaterThan(after);
+  });
   it("hands a press of the game's CRAFT button to the worker with the window's pick, and asks the worker for the Ledger's other pages", async () => {
     window.history.replaceState({}, "", "/market/equipments");
     marketFixture();
@@ -860,6 +885,30 @@ describe("SPA lifecycle and DOM work", () => {
     app.dispose();
     expect(count()).toBe(0);
     expect(vi.getTimerCount()).toBe(0);
+  });
+  it("runs before the next paint after a quiet spell, at most once a delay while the page keeps changing", async () => {
+    const run = vi.fn();
+    const s = createScheduler(run);
+    s.schedule();
+    await settle(33); // the next frame, two at most
+    expect(run).toHaveBeenCalledTimes(1);
+    // busy: the next run waits out the delay since the last one
+    s.schedule();
+    await settle(50);
+    expect(run).toHaveBeenCalledTimes(1);
+    await settle(60);
+    expect(run).toHaveBeenCalledTimes(2);
+    // quiet again: the next frame
+    await settle(500);
+    s.schedule();
+    await settle(33);
+    expect(run).toHaveBeenCalledTimes(3);
+    // without frames (a test page, an old browser) the timer does it
+    const plain = vi.fn();
+    const t = createScheduler(plain, { frame: null });
+    t.schedule();
+    await settle(1);
+    expect(plain).toHaveBeenCalledTimes(1);
   });
   it("does not starve under continuous mutations, and cancels on dispose", async () => {
     const run = vi.fn();
