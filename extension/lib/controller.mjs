@@ -22,7 +22,7 @@ import {
   OFFSET_SEARCH_MS,
 } from "./observed.mjs";
 import { describeCode } from "./craftdata.mjs";
-import { GEAR_CODES, RARITIES } from "./items.mjs";
+import { GEAR_CODES, RARITIES, CASE_DROP_CODES } from "./items.mjs";
 import { similarValue, windowFills } from "./similar.mjs";
 import { positive } from "./quality.mjs";
 
@@ -426,8 +426,15 @@ export function createController({
       for (const r of rows) {
         if (!meta.oldestAt || r.a < meta.oldestAt) meta.oldestAt = r.a;
         if (!meta.newestAt || r.a > meta.newestAt) meta.newestAt = r.a;
-        // a wooden case gives a resource: its price is needed to value it
-        if (r.y === "openCase" && !r.i && r.c && !meta.resources.includes(r.c))
+        // a wooden case gives a resource: its price is needed to value it (the cases it can drop since v0.27
+        // are priced with the cases, and a toolbox has no price history at all: asking for it answers 404)
+        if (
+          r.y === "openCase" &&
+          !r.i &&
+          r.c &&
+          !CASE_DROP_CODES.includes(r.c) &&
+          !meta.resources.includes(r.c)
+        )
           meta.resources = [...meta.resources, r.c];
       }
       meta.rev++;
@@ -698,7 +705,12 @@ export function createController({
           !meta.averagesAt ||
           now() - Date.parse(meta.averagesAt) > AVERAGES_TTL
         ) {
-          const codes = [...PRICE_CODES, ...meta.resources.slice(0, 20)];
+          const codes = [
+            ...PRICE_CODES,
+            ...meta.resources
+              .filter((c) => !CASE_DROP_CODES.includes(c))
+              .slice(0, 20),
+          ];
           const { averages } = await fetchInputAverages(fetchImpl, key, codes);
           for (const [code, table] of Object.entries(averages))
             meta.averages[code] = { ...(meta.averages[code] ?? {}), ...table };

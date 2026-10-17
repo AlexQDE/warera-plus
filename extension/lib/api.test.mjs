@@ -6,6 +6,7 @@ import {
   fetchBook,
   fetchSales,
   fetchHistoryPage,
+  fetchInputAverages,
   salesUrl,
   holdUntil,
 } from "./api.mjs";
@@ -139,6 +140,38 @@ describe("fetchBook", () => {
       code: "http",
       status: 503,
     });
+  });
+});
+
+describe("fetchInputAverages", () => {
+  // dev 2026-10-17: itemTrading.getItemTrading answers 404 "Itemtradings not found." for a code it keeps no
+  // history for (the non-tradable toolbox a wooden case drops since v0.27)
+  it("skips a code the game keeps no price history for, and reads the rest", async () => {
+    const fetchImpl = async (url) => {
+      const code = JSON.parse(new URL(url).searchParams.get("input")).itemCode;
+      if (code === "toolbox")
+        return {
+          ok: false,
+          status: 404,
+          headers: new Headers({ "ratelimit-limit": "500" }),
+          json: async () => ({ error: { message: "Itemtradings not found." } }),
+        };
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ "ratelimit-limit": "500" }),
+        json: async () => ({
+          result: {
+            data: { values: [{ valueAt: "2026-10-17", avgValue: 0.25 }] },
+          },
+        }),
+      };
+    };
+    const { averages } = await fetchInputAverages(fetchImpl, "k", [
+      "scraps",
+      "toolbox",
+    ]);
+    expect(averages).toEqual({ scraps: { "2026-10-17": 0.25 } });
   });
 });
 

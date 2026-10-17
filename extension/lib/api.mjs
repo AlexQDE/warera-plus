@@ -394,7 +394,16 @@ export async function fetchInputAverages(
   const k = cleanKey(key);
   const averages = {};
   for (const code of codes) {
-    const { data } = await call(fetchImpl, k, tradingUrl(code), { timeoutMs });
+    let data;
+    try {
+      ({ data } = await call(fetchImpl, k, tradingUrl(code), { timeoutMs }));
+    } catch (e) {
+      // a code the game keeps no price history for answers 404 ("Itemtradings not found.", the non-tradable
+      // toolbox on dev 2026-10-17): left out, the other codes are still read
+      if (e instanceof ApiError && e.code === "http" && e.status === 404)
+        continue;
+      throw e;
+    }
     if (!Array.isArray(data?.values))
       throw new ApiError("Unexpected item trading schema", "schema");
     const table = {};

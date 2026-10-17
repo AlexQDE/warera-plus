@@ -280,9 +280,15 @@ export function createCraftDesk({ settings, now = Date.now }) {
           ([t, o]) =>
             `<span class="lens-chip" data-rarity="${esc(t)}">${esc(cap(t))} <small>${count(o.n)}</small>${o.chosen ? ` <small class="lens-pick" title="${esc(`${count(o.chosen)} of ${count(o.n)} sniper crafts (slot chosen): twice the steel`)}">◎${count(o.chosen)}</small>` : ""} ${money(o.estimatedKnown ? o.estimated : null)}</span>`,
         ),
-      ...(w.wooden.n
+      ...(w.wooden.n || w.woodenUnpriced
         ? [
-            `<span class="lens-chip">Wooden <small>${count(w.wooden.n)}</small> ${money(w.wooden.value - w.wooden.cost)}</span>`,
+            `<span class="lens-chip"${w.woodenUnpriced ? ` title="${esc(`${count(w.woodenUnpriced)} wooden case${w.woodenUnpriced === 1 ? "" : "s"} gave toolboxes: they have no market price, so the result leaves ${w.woodenUnpriced === 1 ? "it" : "them"} out`)}"` : ""}>Wooden <small>${count(w.wooden.n + (w.woodenUnpriced ?? 0))}</small> ${w.wooden.n ? money(w.wooden.value - w.wooden.cost) : "–"}${w.woodenUnpriced ? ` <small>${count(w.woodenUnpriced)} unpriced</small>` : ""}</span>`,
+          ]
+        : []),
+      // v0.27: tools from toolboxes, for the employees; not tradable, so outside every result
+      ...(w.tools?.n || w.tools?.scrapped
+        ? [
+            `<span class="lens-chip" title="Tools from toolboxes, for your employees: not tradable and without a market price, so no result counts them. ♻ what the scrapped ones gave.">Toolbox <small>${count(w.tools.n)}</small>${w.tools.scrapped ? ` <small>♻ ${gold(w.tools.proceeds)}</small>` : ""}</span>`,
           ]
         : []),
     ].join("");
