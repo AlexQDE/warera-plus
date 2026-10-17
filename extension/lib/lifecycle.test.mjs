@@ -404,6 +404,20 @@ describe("SPA lifecycle and DOM work", () => {
     expect(bar().querySelectorAll('[data-action="tab"]')).toHaveLength(3);
     expect(bodyText()).toContain("Chosen");
   });
+  it("puts a start and max price in the v0.27 Start an auction form once a piece is picked", async () => {
+    window.history.replaceState({}, "", "/market/auctions");
+    document.body.innerHTML =
+      '<main><div id="tax"><span>Bids are shown before tax: your country adds its 10% market tax.</span></div></main><div role="dialog"><div>Start an auction</div><div class="tile" style="background-image: linear-gradient(45deg, red, black)"><img alt="sniper"><div>123</div><div>16<b>%</b></div><div>100<b>%</b></div></div><label><span>Start price</span><input name="startPrice" value="0"></label><label><span>Max price (instant buy)</span><input name="maxPrice" value="131.846"></label><span>A bid at it buys the item at once. From <span>82.404</span> to <span>131.846</span>, 100% to 160% of the estimated value.</span><button>Close</button><button type="submit">Start auction</button></div>';
+    const runtime = marketRuntime({ panel: "none" });
+    app = await startLens(runtime);
+    await settle(3000);
+    const hint = document.querySelector('[role="dialog"] .ss-auction');
+    expect(hint).not.toBeNull();
+    expect(hint.previousElementSibling.querySelector("input").name).toBe(
+      "maxPrice",
+    );
+    expect(salesCalls(runtime, "sniper")).toBeGreaterThanOrEqual(1);
+  });
   it("reads the grid's item and the ledger's held item once each instead of looping between them", async () => {
     window.history.replaceState({}, "", "/market/equipments?item=jet");
     marketFixture();
