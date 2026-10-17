@@ -8,6 +8,8 @@ import {
   outcomeLine,
   craftHtml,
   caseHtml,
+  chosenMark,
+  pieceHtml,
   PANEL_CLASS,
 } from "./dialogs.mjs";
 
@@ -383,11 +385,84 @@ describe("annotating them", () => {
     );
     open.addEventListener("click", gameClick);
     open.click();
-    expect(onAction).toHaveBeenCalledWith("case");
+    expect(onAction).toHaveBeenCalledWith("case", null);
     expect(gameClick).toHaveBeenCalledTimes(1);
     d.dispose();
     open.click();
     expect(onAction).toHaveBeenCalledTimes(1);
+  });
+  it("hands a press of CRAFT over with the window's pick: chosen by the button's label, the slot by its marked tile", () => {
+    const press = (picked) => {
+      slotDialog(picked);
+      const onAction = vi.fn();
+      const d = createDialogs({ onAction });
+      [...document.querySelectorAll("button")]
+        .find((b) => /^craft/i.test(b.textContent))
+        .click();
+      d.dispose();
+      return onAction.mock.calls[0];
+    };
+    expect(press("boots")).toEqual([
+      "craft",
+      { tier: "common", chosen: true, slot: "boots1" },
+    ]);
+    expect(press("knife")).toEqual([
+      "craft",
+      { tier: "common", chosen: true, slot: "knife" },
+    ]);
+    expect(press(null)).toEqual([
+      "craft",
+      { tier: "common", chosen: false, slot: null },
+    ]);
+    // the button says CRAFT but no tile reads as marked: still a chosen slot, which one unknown
+    slotDialog(null);
+    const button = [...document.querySelectorAll("button")].find((b) =>
+      /^craft/i.test(b.textContent),
+    );
+    button.textContent = "CRAFT";
+    const onAction = vi.fn();
+    const d = createDialogs({ onAction });
+    button.click();
+    d.dispose();
+    expect(onAction).toHaveBeenCalledWith("craft", {
+      tier: "common",
+      chosen: true,
+      slot: null,
+    });
+  });
+  it("marks a craft charged the chosen slot's doubled steel, faint when a streak tells it", () => {
+    const sniper = {
+      code: "sniper",
+      source: "crafted",
+      skills: { attack: 120, criticalChance: 18 },
+      fate: "held",
+      cost: 60,
+      value: { value: 70, level: "same", hours: 24 },
+    };
+    expect(chosenMark({ ...sniper, chosen: false })).toBe("");
+    expect(chosenMark({ ...sniper, source: "bought", chosen: true })).toBe("");
+    const title = (html) => {
+      const box = document.createElement("div");
+      box.innerHTML = html;
+      return box.querySelector(".lens-pick")?.title ?? "";
+    };
+    const seen = chosenMark({ ...sniper, chosen: true, chosenBy: "seen" });
+    expect(seen).toContain("◎");
+    expect(title(seen)).toBe(
+      "Sniper craft (slot chosen), twice the steel: picked in the game's craft window",
+    );
+    expect(seen).not.toContain("data-guess");
+    const streak = chosenMark({
+      ...sniper,
+      chosen: true,
+      chosenBy: "streak",
+      streak: 12,
+    });
+    expect(title(streak)).toContain("12 snipers in a row");
+    expect(streak).toContain("data-guess");
+    expect(pieceHtml({ ...sniper, chosen: true, chosenBy: "seen" })).toContain(
+      "◎",
+    );
   });
   it("says the player's own results need the API key instead of waiting for a history that cannot come", () => {
     const craft = craftHtml({ tier: "epic", ledger: null, needsKey: true });

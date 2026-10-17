@@ -29,7 +29,7 @@ function show(p) {
   for (const [id, key] of Object.entries(numbers)) $(id).value = p[key];
   $("sellFrom").value = SELL_FROM.includes(p.sellFrom) ? p.sellFrom : "epic";
   $("userId").value = p.userId ?? "";
-  $("craftSteelMode").value = p.craftSteelMode ?? "random";
+  $("craftSteelMode").value = p.craftSteelMode ?? "auto";
   for (const field of toggles) $(field).checked = p[field];
 }
 async function load() {

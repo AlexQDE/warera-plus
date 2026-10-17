@@ -416,6 +416,115 @@ describe("the ledger", () => {
     render("ledger");
     expect(text()).toContain("last read failed");
   });
+  it("pages the whole window's pieces and filters them by source, the pager acting on the worker's pages", () => {
+    state.craftsUserId = ME;
+    const sniper = (i, chosenBy) => ({
+      id: `s${i}`,
+      code: "sniper",
+      rarity: "epic",
+      skills: { attack: 120, criticalChance: 18 },
+      source: "crafted",
+      at: iso(i * 60e3),
+      cost: chosenBy ? 56.4 : 43.6,
+      approx: false,
+      fate: "held",
+      proceeds: null,
+      goneAt: null,
+      sellsHours: null,
+      chosen: !!chosenBy,
+      chosenBy: chosenBy ?? "default",
+      streak: chosenBy === "streak" ? 9 : null,
+      value: { value: 60, level: "same", hours: 24 },
+    });
+    const ledger = (page, source = "all") => ({
+      ...view(),
+      mode: "eco",
+      steelMode: "auto",
+      rows: Array.from({ length: page === 2 ? 30 : 50 }, (_, i) =>
+        sniper(page * 50 + i, i % 2 ? "seen" : i % 4 ? null : "streak"),
+      ),
+      rowsTotal: 130,
+      page,
+      pages: 3,
+      pageSize: 50,
+      source,
+      sources: { all: 130, crafted: 10, opened: 120, bought: 0, looted: 0 },
+    });
+    state.ledger = ledger(0);
+    render("ledger");
+    const plain = () => text().replace(/\s+/g, " ");
+    expect(body.querySelectorAll(".lens-crafts tbody tr")).toHaveLength(50);
+    expect(plain()).toContain("1–50 of 130");
+    const pager = (to) =>
+      body.querySelector(`[data-action="desk-page"][data-page="${to}"]`);
+    expect(pager("prev").disabled).toBe(true);
+    expect(pager("first").disabled).toBe(true);
+    expect(pager("next").disabled).toBe(false);
+    // the list scrolls in a box of its own, keyed by what it shows
+    expect(body.querySelector(".lens-scroll").dataset.scroll).toBe(
+      "ledger:today:all:0",
+    );
+    click('[data-action="desk-page"][data-page="next"]');
+    expect(desk.page).toBe(1);
+    state.ledger = ledger(1);
+    render("ledger");
+    expect(plain()).toContain("51–100 of 130");
+    click('[data-action="desk-page"][data-page="last"]');
+    expect(desk.page).toBe(2);
+    state.ledger = ledger(2);
+    render("ledger");
+    expect(plain()).toContain("101–130 of 130");
+    expect(pager("next").disabled).toBe(true);
+    click('[data-action="desk-page"][data-page="first"]');
+    expect(desk.page).toBe(0);
+    // the sources with pieces, with their counts; one picked starts at the newest page
+    click('[data-action="desk-page"][data-page="last"]');
+    const filters = [
+      ...body.querySelectorAll('[data-action="desk-source"]'),
+    ].map((b) => b.textContent.replace(/\s+/g, " ").trim());
+    expect(filters).toEqual(["All 130", "Craft 10", "Case 120"]);
+    click('[data-action="desk-source"][data-source="crafted"]');
+    expect(desk.source).toBe("crafted");
+    expect(desk.page).toBe(0);
+    expect(
+      body
+        .querySelector('[data-action="desk-source"][data-source="crafted"]')
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    // a new window starts at the newest page too
+    click('[data-action="desk-page"][data-page="next"]');
+    click('[data-action="desk-window"][data-window="all"]');
+    expect(desk.page).toBe(0);
+    // a craft charged the chosen slot's steel carries ◎: plain when the craft window was seen, faint for a streak
+    const marks = [...body.querySelectorAll(".lens-crafts .lens-pick")];
+    expect(marks.length).toBeGreaterThan(0);
+    expect(marks.some((m) => m.hasAttribute("data-guess"))).toBe(true);
+    expect(marks.some((m) => !m.hasAttribute("data-guess"))).toBe(true);
+    expect(body.querySelector(".lens-help").title).toContain(
+      "twice it for a sniper craft",
+    );
+    // a window with one page has no pager
+    state.ledger = {
+      ...ledger(0),
+      rows: ledger(0).rows.slice(0, 5),
+      rowsTotal: 5,
+      pages: 1,
+    };
+    render("ledger");
+    expect(body.querySelector(".lens-pager")).toBeNull();
+  });
+  it("counts a tier's crafts charged the chosen slot's steel on its chip", () => {
+    state.craftsUserId = ME;
+    const v = view();
+    v.windows.today.tiers.legendary.chosen = 2;
+    state.ledger = { ...v, mode: "eco" };
+    render("ledger");
+    const chip = body.querySelector('.lens-chip[data-rarity="legendary"]');
+    expect(chip.textContent).toContain("◎2");
+    expect(chip.querySelector(".lens-pick").title).toBe(
+      "2 of 2 sniper crafts (slot chosen): twice the steel",
+    );
+  });
   it("says the ledger needs the API key when there is none, instead of reading forever", () => {
     state.craftsUserId = ME;
     state.ledger = null;

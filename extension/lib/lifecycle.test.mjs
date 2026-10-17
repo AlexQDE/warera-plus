@@ -188,6 +188,23 @@ describe("SPA lifecycle and DOM work", () => {
     expect(el.firstChild).toBe(button);
   });
 
+  it("keeps a scrolling box's place and the focused control across a rewrite, a new box starting at the top", () => {
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    const html = (key, n) =>
+      `<div class="box" data-scroll="${key}"><p>${n}</p></div><button data-action="desk-page" data-page="first">«</button><button data-action="desk-page" data-page="next">›</button>`;
+    setHtml(el, html("ledger:all:all:0", 1));
+    el.querySelector(".box").scrollTop = 120;
+    el.querySelector('[data-page="next"]').focus();
+    setHtml(el, html("ledger:all:all:0", 2));
+    expect(el.querySelector(".box").scrollTop).toBe(120);
+    expect(document.activeElement.dataset.page).toBe("next");
+    // another page is another box
+    setHtml(el, html("ledger:all:all:1", 3));
+    expect(el.querySelector(".box").scrollTop).toBe(0);
+    el.remove();
+  });
+
   const marketFixture = () => {
     document.body.innerHTML =
       '<main><div id="tax"><span>Market tax 5%</span></div><div><div id="item-code-selector-jet" style="z-index:1;border-color:rgb(57,15,16)"></div><div id="item-code-selector-boots5" style="border-color:rgb(43,43,18)"></div></div><div id="offers"></div></main>';
@@ -558,6 +575,90 @@ describe("SPA lifecycle and DOM work", () => {
     expect(saved).toBeGreaterThanOrEqual(0);
     expect(after.slice(saved + 1).some((m) => m.type === "ledger")).toBe(true);
     expect(runtime.info.settings.ledgerMode).toBe("war");
+  });
+  it("hands a press of the game's CRAFT button to the worker with the window's pick, and asks the worker for the Ledger's other pages", async () => {
+    window.history.replaceState({}, "", "/market/equipments");
+    marketFixture();
+    const runtime = marketRuntime({ userId: ME, panel: "ledger" });
+    const base = runtime.sendMessage.getMockImplementation();
+    runtime.sendMessage.mockImplementation(async (msg) => {
+      const r = await base(msg);
+      if (msg.type === "ledger")
+        Object.assign(r.ledger, {
+          rows: [
+            {
+              id: "a",
+              code: "sniper",
+              rarity: "epic",
+              source: "crafted",
+              at: new Date().toISOString(),
+              cost: 56,
+              fate: "held",
+              chosen: true,
+              chosenBy: "seen",
+              value: null,
+            },
+          ],
+          rowsTotal: 130,
+          page: msg.page ?? 0,
+          pages: 3,
+          pageSize: 50,
+          source: msg.source ?? "all",
+          sources: { all: 130, crafted: 130 },
+        });
+      if (msg.type === "craftPick") return { ok: true };
+      return r;
+    });
+    app = await startLens(runtime);
+    await settle(300);
+    const asked = () =>
+      runtime.sendMessage.mock.calls
+        .filter(([m]) => m.type === "ledger")
+        .map(([m]) => m)
+        .at(-1);
+    expect(asked()).toMatchObject({ page: 0, source: "all" });
+    bar().querySelector('[data-action="desk-page"][data-page="next"]').click();
+    await settle(300);
+    expect(asked()).toMatchObject({ page: 1, source: "all", window: "today" });
+    expect(bodyText()).toContain("51–100");
+    bar()
+      .querySelector('[data-action="desk-source"][data-source="crafted"]')
+      .click();
+    await settle(300);
+    expect(asked()).toMatchObject({ page: 0, source: "crafted" });
+    // the game's craft window on the epic tier, a slot picked: the button reads CRAFT
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    dialog.innerHTML = `<div>CRAFT ITEMS\nMythic\n1.46K\n32\nLegendary\n486\n16\nEpic\n162\n8\nRare\n54\n4\nUncommon\n18\n2\nCommon\n6\n1\nEpic\n?</div><div><button>CLOSE</button><button>CRAFT</button></div>`;
+    document.body.appendChild(dialog);
+    await settle(400);
+    const game = vi.fn();
+    const craft = [...dialog.querySelectorAll("button")].at(-1);
+    craft.addEventListener("click", game);
+    craft.click();
+    await settle(100);
+    expect(game).toHaveBeenCalledTimes(1); // the game's own click goes on
+    const picks = runtime.sendMessage.mock.calls.filter(
+      ([m]) => m.type === "craftPick",
+    );
+    expect(picks).toHaveLength(1);
+    expect(picks[0][0]).toMatchObject({
+      userId: ME,
+      tier: "epic",
+      chosen: true,
+      slot: null,
+    });
+    expect(Math.abs(picks[0][0].at - Date.now())).toBeLessThan(1000);
+    // the history is read again soon after, to find the craft
+    const before = runtime.sendMessage.mock.calls.filter(
+      ([m]) => m.type === "history" && m.force,
+    ).length;
+    await settle(3000);
+    expect(
+      runtime.sendMessage.mock.calls.filter(
+        ([m]) => m.type === "history" && m.force,
+      ).length,
+    ).toBeGreaterThan(before);
   });
   it("reads the craft window's tier first, today's crafts of it before the other slots, ahead of the market's queue", async () => {
     window.history.replaceState({}, "", "/market/equipments?item=jet");

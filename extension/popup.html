@@ -347,14 +347,23 @@
           </p>
           <label for="craftSteelMode">How you craft (for the Ledger)</label>
           <select id="craftSteelMode">
-            <option value="random">
-              Random slot (default): the base steel fee, the game picks the slot
+            <option value="auto">
+              Detect each craft (default): random or sniper craft
             </option>
-            <option value="chosen">Chosen slot: twice the steel</option>
+            <option value="random">Always random: the base steel</option>
+            <option value="chosen">
+              Always sniper craft (slot chosen): twice the steel
+            </option>
           </select>
           <p class="help">
-            The steel charged to your observed crafts; the game does not record
-            which way a craft was made.
+            A sniper craft (the slot picked in the game's craft window, CRAFT
+            instead of CRAFT RANDOM) burns twice the steel; the scraps are the
+            same. The game does not record which way a craft was made. Detect
+            takes the pick off the craft window when you press CRAFT with the
+            extension on; for crafts it did not see (before it was installed, on
+            another device) a run of 6 weapons or 5 of one armour piece in a
+            row, too many for a random craft. Sniper crafts carry ◎ in the
+            Ledger.
           </p>
           <label for="userId">Your player id (optional)</label>
           <input

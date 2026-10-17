@@ -265,7 +265,7 @@ export async function startLens(runtime = chrome.runtime) {
   let historyBusy = false;
   let historyAgain = false;
   let fastUntil = 0;
-  const ledgerAsked = { rev: -1, window: "", at: 0 };
+  const ledgerAsked = { rev: -1, window: "", page: 0, source: "", at: 0 };
   /** One history step in the worker (it decides whether a poll or a backfill page is due), then the view when it changed. */
   async function syncHistory(force = false) {
     const userId = state.craftsUserId;
@@ -301,13 +301,14 @@ export async function startLens(runtime = chrome.runtime) {
   let ledgerAgain = false;
   /**
    * The worker's view of the history, asked when the history moved, the
-   * window changed, the view is half a minute old, or `force` (the sales it
-   * wanted were just read, the mode changed).
+   * window, the page or the source of the Ledger's list changed, the view is
+   * half a minute old, or `force` (the sales it wanted were just read, the
+   * mode changed).
    */
   async function askLedger(force = false) {
     const userId = state.craftsUserId;
     if (!userId || !state.history || state.setup || disposed) return;
-    const window = desk.window;
+    const { window, page, source } = desk;
     const wanted =
       state.settings.panel === "ledger" ||
       !!context.dialog ||
@@ -318,6 +319,8 @@ export async function startLens(runtime = chrome.runtime) {
       (!force &&
         state.history.rev === ledgerAsked.rev &&
         window === ledgerAsked.window &&
+        page === ledgerAsked.page &&
+        source === ledgerAsked.source &&
         Date.now() - ledgerAsked.at <= 30_000)
     )
       return;
@@ -326,12 +329,14 @@ export async function startLens(runtime = chrome.runtime) {
       return;
     }
     ledgerBusy = true;
-    const v = await send({ type: "ledger", userId, window });
+    const v = await send({ type: "ledger", userId, window, page, source });
     ledgerBusy = false;
     if (v?.ledger && v.ledger.meta?.userId === state.craftsUserId) {
       state.ledger = v.ledger;
       ledgerAsked.rev = v.ledger.meta.rev;
       ledgerAsked.window = window;
+      ledgerAsked.page = page;
+      ledgerAsked.source = source;
       ledgerAsked.at = Date.now();
       for (const code of v.ledger.salesWanted ?? []) requestSales(code);
     }
@@ -348,9 +353,24 @@ export async function startLens(runtime = chrome.runtime) {
     await save({ ledgerMode: mode });
     await askLedger(true);
   }
-  /** A click on the game's own craft or open button: the result is read a moment later, twice, and polled fast for a while. */
+  /**
+   * A click on the game's own craft or open button: the result is read a moment later, twice, and polled fast
+   * for a while. A craft press goes to the worker first with the window's pick (chosen slot or random), which the
+   * history ties to the craft it made: the feed does not say which way a craft was made.
+   */
   const dialogs = createDialogs({
-    onAction: () => {
+    onAction: (kind, pick) => {
+      // the press is the logged-in player's, whichever account the Ledger follows
+      const userId = dom.ownUserId() ?? state.craftsUserId;
+      if (kind === "craft" && pick && userId && state.settings.craft)
+        void send({
+          type: "craftPick",
+          userId,
+          at: Date.now(),
+          tier: pick.tier,
+          chosen: pick.chosen,
+          slot: pick.slot,
+        });
       fastUntil = Date.now() + 120_000;
       setTimeout(() => void syncHistory(true), 2500);
       setTimeout(() => void syncHistory(true), 7000);

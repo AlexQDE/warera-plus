@@ -33,14 +33,22 @@ export const DEFAULTS = Object.freeze({
   craft: true,
   /** The player's own id for the ledger; null means "read it off the game page's own-profile links". */
   userId: /** @type {string | null} */ (null),
-  /** How the player crafts: "random" lets the game pick the slot at the base steel fee, "chosen" doubles the steel. */
-  craftSteelMode: /** @type {"random" | "chosen"} */ ("random"),
+  /**
+   * The steel the ledger charges a craft: "auto" tells each craft apart (the slot picked in the game's craft
+   * window when the extension saw the press, else a streak of the same slot), "random" charges every craft the
+   * base fee, "chosen" twice it.
+   */
+  craftSteelMode: /** @type {"auto" | "random" | "chosen"} */ ("auto"),
   /** "eco" leaves gear worn in battle out of the ledger's results; "war" counts it (contracts, bounties). */
   ledgerMode: /** @type {"eco" | "war"} */ ("eco"),
-  schemaVersion: 5,
+  schemaVersion: 6,
 });
 /** Settings saved before this schema wrote the old SNIPE default (0) with every save: it was not a choice. */
 const OLD_MIN_MARGIN_SCHEMA = 5;
+/** Settings saved before this schema wrote the old craft default ("random") with every save: it was not a choice either. */
+const OLD_STEEL_SCHEMA = 6;
+/** The fields a save from the settings page carries as the player's own choice, read under the current schema. */
+export const CHOICE_FIELDS = Object.freeze(["minMarginPct", "craftSteelMode"]);
 /** @param {unknown} value @param {number} min @param {number} max @param {number} fallback */
 const clamp = (value, min, max, fallback) =>
   value !== "" && value !== null && Number.isFinite(Number(value))
@@ -55,9 +63,10 @@ const flag = (value, fallback) =>
 export function preferences(input = {}) {
   if (!input || typeof input !== "object" || Array.isArray(input)) input = {};
   const panel = String(input.panel ?? "");
+  const schema = Number(input.schemaVersion) || 0;
   const oldDefault =
-    (Number(input.schemaVersion) || 0) < OLD_MIN_MARGIN_SCHEMA &&
-    Number(input.minMarginPct) === 0;
+    schema < OLD_MIN_MARGIN_SCHEMA && Number(input.minMarginPct) === 0;
+  const steel = String(input.craftSteelMode ?? "");
   return {
     ...DEFAULTS,
     minMarginPct: oldDefault
@@ -81,7 +90,10 @@ export function preferences(input = {}) {
     userId: /^[0-9a-f]{24}$/.test(String(input.userId ?? "").trim())
       ? String(input.userId).trim()
       : null,
-    craftSteelMode: input.craftSteelMode === "chosen" ? "chosen" : "random",
+    craftSteelMode:
+      steel === "chosen" || (steel === "random" && schema >= OLD_STEEL_SCHEMA)
+        ? /** @type {"random" | "chosen"} */ (steel)
+        : "auto",
     ledgerMode: input.ledgerMode === "war" ? "war" : "eco",
   };
 }

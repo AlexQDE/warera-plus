@@ -7,6 +7,8 @@ import {
   dayOf,
   localDayOf,
   memoDay,
+  craftModes,
+  matchPicks,
 } from "./observed.mjs";
 
 // Compact rows as the history store keeps them (api.reduceRow), ids shortened.
@@ -516,5 +518,199 @@ describe("memoDay", () => {
     expect(day(A(0))).toBe("2026-10-05");
     expect(day(null)).toBe("");
     expect(calls).toBe(1);
+  });
+});
+
+describe("the slot of a craft: chosen (twice the steel) or random", () => {
+  // epic crafts a minute apart; `p` is what the extension saw in the game's craft window
+  const craft = (n, code, p, minutes = n) => ({
+    x: `k${n}`,
+    y: "craftItem",
+    a: A(minutes / 60),
+    c: "scraps",
+    q: { tank: 486, boots5: 486 }[code] ?? 162,
+    i: `piece${n}`,
+    ic: code,
+    ...(p ? { p } : {}),
+  });
+  const ids = (modes, by) =>
+    [...modes].filter(([, m]) => m.by === by).map(([x]) => x);
+  it("takes six weapons or five of one armour piece in a row for a chosen slot, fewer for chance", () => {
+    const six = [1, 2, 3, 4, 5, 6].map((n) => craft(n, "sniper"));
+    const modes = craftModes(six);
+    expect(ids(modes, "streak")).toEqual(six.map((r) => r.x));
+    expect(modes.get("k1")).toEqual({ chosen: true, by: "streak", streak: 6 });
+    const five = craftModes(six.slice(0, 5));
+    expect(
+      [...five.values()].every((m) => !m.chosen && m.by === "default"),
+    ).toBe(true);
+    const boots = [1, 2, 3, 4, 5].map((n) => craft(n, "boots4"));
+    expect([...craftModes(boots).values()].every((m) => m.chosen)).toBe(true);
+    expect([...craftModes(boots.slice(1)).values()].some((m) => m.chosen)).toBe(
+      false,
+    );
+    // a streak is counted within its tier: a legendary craft between two snipers does not break it
+    const mixed = [
+      ...[1, 2, 3].map((n) => craft(n, "sniper")),
+      craft(4, "tank"),
+      ...[5, 6, 7].map((n) => craft(n, "sniper")),
+      craft(8, "helmet4"),
+      craft(9, "sniper"),
+    ];
+    const m = craftModes(mixed);
+    expect(ids(m, "streak")).toEqual(["k1", "k2", "k3", "k5", "k6", "k7"]);
+    expect(m.get("k9")).toMatchObject({ chosen: false, by: "default" });
+    expect(m.get("k4")).toMatchObject({ chosen: false, by: "default" });
+  });
+  it("takes what the craft window showed over a streak, and the setting over both", () => {
+    const rows = [
+      craft(1, "sniper", "c"),
+      craft(2, "boots4", "r"),
+      ...[3, 4, 5, 6, 7, 8].map((n) =>
+        craft(n, "sniper", n === 5 ? "r" : null),
+      ),
+    ];
+    const m = craftModes(rows);
+    expect(m.get("k1")).toEqual({ chosen: true, by: "seen", streak: null });
+    expect(m.get("k2")).toEqual({ chosen: false, by: "seen", streak: null });
+    expect(m.get("k5")).toEqual({ chosen: false, by: "seen", streak: null });
+    expect(m.get("k3")).toMatchObject({ chosen: true, by: "streak" });
+    const random = craftModes(rows, "random");
+    expect(
+      [...random.values()].every((x) => !x.chosen && x.by === "setting"),
+    ).toBe(true);
+    const chosen = craftModes(rows, "chosen");
+    expect(
+      [...chosen.values()].every((x) => x.chosen && x.by === "setting"),
+    ).toBe(true);
+  });
+  it("charges a chosen craft twice the steel and says how it is known, a random one the base fee", () => {
+    const rows = [
+      ...[1, 2, 3, 4, 5, 6].map((n) => craft(n, "sniper")),
+      craft(7, "chest4"),
+      craft(8, "sniper", "c"),
+    ];
+    const h = replayHistory(rows, { averages });
+    const by = (id) => h.pieces.find((p) => p.id === id);
+    const random = 162 * 0.2 + 8 * 1.5;
+    const chosen = 162 * 0.2 + 16 * 1.5;
+    expect(by("piece1").cost).toBeCloseTo(chosen, 6);
+    expect(by("piece1")).toMatchObject({
+      chosen: true,
+      chosenBy: "streak",
+      streak: 6,
+    });
+    expect(by("piece7").cost).toBeCloseTo(random, 6);
+    expect(by("piece7")).toMatchObject({ chosen: false, chosenBy: "default" });
+    expect(by("piece8").cost).toBeCloseTo(chosen, 6);
+    expect(by("piece8")).toMatchObject({ chosen: true, chosenBy: "seen" });
+    // the old way: every craft at the random fee, a false profit of 8 steel on each chosen sniper
+    const forced = replayHistory(rows, { averages, steelMode: "random" });
+    expect(forced.pieces.find((p) => p.id === "piece1").cost).toBeCloseTo(
+      random,
+      6,
+    );
+    // a piece that is not crafted carries no slot
+    const bought = replayHistory(
+      [{ x: "b", y: "itemMarket", a: A(0), m: 50, d: 1, i: "s", ic: "sniper" }],
+      { averages },
+    ).pieces[0];
+    expect(bought).toMatchObject({ chosen: null, chosenBy: null });
+    // the tier's outcome counts the chosen crafts
+    const o = outcome(
+      h.pieces.filter((p) => p.rarity === "epic"),
+      () => null,
+    );
+    expect(o).toMatchObject({ n: 8, chosen: 7 });
+  });
+});
+
+describe("matchPicks", () => {
+  const T0 = Date.parse("2026-10-17T10:00:00Z");
+  const pick = (s, tier, chosen, slot = null) => ({
+    n: s,
+    t: T0 + s * 1000,
+    r: tier,
+    c: chosen,
+    ...(slot ? { s: slot } : {}),
+  });
+  const row = (x, s, code, rarity = "epic") => ({
+    x,
+    t: T0 + s * 1000,
+    rarity,
+    code,
+  });
+  it("measures the offset between the page's clock and the server's, and ties each craft to its press", () => {
+    // the server is 40 s ahead of this machine and answers half a second after the press
+    const picks = [
+      pick(0, "epic", false),
+      pick(2, "epic", false),
+      pick(4, "epic", true, "sniper"),
+      pick(6, "epic", true, "sniper"),
+    ];
+    const crafts = [
+      row("a", 40.5, "boots4"),
+      row("b", 42.5, "sniper"),
+      row("c", 44.5, "sniper"),
+      row("d", 46.5, "sniper"),
+    ];
+    const { matches, offset } = matchPicks(crafts, picks);
+    expect(offset).toBeCloseTo(40_500, -2);
+    expect(Object.fromEntries(matches)).toEqual({ a: 0, b: 1, c: 2, d: 3 });
+  });
+  it("leaves a press that made no craft, keeps tiers apart and ties nothing too far away", () => {
+    const picks = [
+      pick(0, "epic", true, "sniper"),
+      pick(1, "epic", true, "sniper"), // a click that failed
+      pick(3, "legendary", false),
+      pick(10, "epic", true, "sniper"),
+    ];
+    const crafts = [
+      row("a", 0.4, "sniper"),
+      row("b", 10.4, "sniper"),
+      row("c", 3.4, "tank", "legendary"),
+      row("old", -900, "sniper"),
+    ];
+    const { matches } = matchPicks(crafts, picks);
+    expect(Object.fromEntries(matches)).toEqual({ a: 0, c: 2, b: 3 });
+    expect(matchPicks([row("a", 900, "sniper")], picks)).toEqual({
+      matches: new Map(),
+      offset: null,
+    });
+    expect(matchPicks(crafts, []).matches.size).toBe(0);
+  });
+  it("finds the offset in a session of quick, uneven clicks, the server answering after a varying delay", () => {
+    // 40 presses 0.8 to 2 s apart, random crafts first and chosen snipers after the 25th; the 12th made nothing;
+    // this machine's clock is 25 s behind the server, which answers 0.2 to 0.9 s after each press
+    let seed = 7;
+    const rnd = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+    const picks = [];
+    const crafts = [];
+    let t = 0;
+    for (let k = 0; k < 40; k++) {
+      t += 0.8 + rnd() * 1.2;
+      const chosen = k >= 25;
+      picks.push(pick(t, "epic", chosen, chosen ? "sniper" : null));
+      if (k === 12) continue;
+      const code = chosen ? "sniper" : ["boots4", "sniper", "chest4"][k % 3];
+      crafts.push(row(`r${k}`, t + 25 + 0.2 + rnd() * 0.7, code));
+    }
+    const { matches, offset } = matchPicks(crafts, picks);
+    expect(offset).toBeGreaterThan(25_000);
+    expect(offset).toBeLessThan(26_000);
+    expect(matches.size).toBe(39);
+    for (const [x, i] of matches) expect(x).toBe(`r${i}`);
+  });
+  it("prefers the press that read the craft's slot when two are as close", () => {
+    const picks = [pick(0, "epic", true, "helmet4"), pick(1, "epic", false)];
+    const { matches } = matchPicks(
+      [row("a", 0.5, "sniper"), row("b", 0.6, "helmet4")],
+      picks,
+    );
+    // the sniper takes the random press; the helmet the press that read the helmet
+    expect(Object.fromEntries(matches)).toEqual({ a: 1, b: 0 });
   });
 });

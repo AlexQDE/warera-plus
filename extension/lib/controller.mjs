@@ -11,9 +11,18 @@ import {
 } from "./api.mjs";
 import { CASE_CODES, WOODEN_CODES, ALL_GEAR_CODES } from "./cases.mjs";
 import { makeSingleFlight } from "./flight.mjs";
-import { preferences, DEFAULTS } from "./settings.mjs";
+import { preferences, DEFAULTS, CHOICE_FIELDS } from "./settings.mjs";
 import { CACHE_VERSION, TTL, freshness } from "./quality.mjs";
-import { replayHistory, windowView, localDayOf, memoDay } from "./observed.mjs";
+import {
+  replayHistory,
+  windowView,
+  localDayOf,
+  memoDay,
+  matchPicks,
+  OFFSET_SEARCH_MS,
+} from "./observed.mjs";
+import { describeCode } from "./craftdata.mjs";
+import { GEAR_CODES, RARITIES } from "./items.mjs";
 import { similarValue, WINDOW_HOURS } from "./similar.mjs";
 import { comparableFills } from "./resale.mjs";
 import { positive } from "./quality.mjs";
@@ -36,6 +45,16 @@ export const FAST_POLL_MS = 15_000;
 /** Codes whose daily prices cost the history: the craft inputs and the cases. */
 const PRICE_CODES = ["scraps", "steel", "case1", "case2", "woodenCase"];
 const AVERAGES_TTL = 600_000;
+/** Presses of the game's CRAFT button waiting for their craft row: at most this many are kept. */
+export const PICKS_KEPT = 2000;
+/** A press no craft row answered by a poll this long after it made no craft (a failed click): it is dropped. */
+export const PICK_DEAD_MS = 15 * 60_000;
+/** A press older than this is dropped whatever the history says. */
+const PICK_MAX_AGE_MS = 7 * 86400_000;
+/** The pieces of the Ledger's list sent to the page at a time. */
+export const LEDGER_PAGE = 50;
+/** The Ledger's list filters, by how a piece came. */
+const LEDGER_SOURCES = ["all", "crafted", "opened", "bought", "looted"];
 const errorResult = (e) => ({
   error: e.code ?? "internal",
   message: e.message ?? "Request failed",
@@ -249,11 +268,11 @@ export function createController({
         (savesKey &&
           rejectedAuthRevision === (Number(settings.authRevision) || 0));
       const next = {
-        // a threshold in the patch is the player's choice: read it under the current schema
+        // a threshold or a craft mode in the patch is the player's choice: read it under the current schema
         ...preferences({
           ...settings,
           ...patch,
-          ...(Object.hasOwn(patch, "minMarginPct")
+          ...(CHOICE_FIELDS.some((k) => Object.hasOwn(patch, k))
             ? { schemaVersion: DEFAULTS.schemaVersion }
             : {}),
         }),
@@ -408,6 +427,133 @@ export function createController({
       at: meta.at,
     };
 
+  // ---- the slot the player picks in the game's craft window ----
+  // The feed does not say whether a craft's slot was chosen (twice the steel). The page reports each press of
+  // the game's CRAFT button with the window's pick; the presses wait under hist:<userId>:picks until a history
+  // step ties each to the craft row it made and writes the pick on that row (`p`), where it stays.
+  const picksKey = (u) => `hist:${u}:picks`;
+  const tierCodes = (rarity) => [
+    GEAR_CODES[rarity].weapon,
+    ...GEAR_CODES[rarity].gear,
+  ];
+  const isPick = (p) =>
+    !!p &&
+    Number.isFinite(p.n) &&
+    Number.isFinite(p.t) &&
+    RARITIES.includes(p.r) &&
+    typeof p.c === "boolean";
+  async function recordPick(msg) {
+    if (!isId(msg.userId))
+      return { error: "bad-user", message: "Unknown player id" };
+    const r = String(msg.tier ?? "");
+    if (!RARITIES.includes(r))
+      return { error: "bad-pick", message: "Unknown craft tier" };
+    const c = msg.chosen === true;
+    const s =
+      c && tierCodes(r).includes(String(msg.slot ?? ""))
+        ? String(msg.slot)
+        : null;
+    // the page's clock at the press, unless it is far from the worker's (the same machine): then the worker's
+    const sent = Number(msg.at);
+    const t =
+      Number.isFinite(sent) && Math.abs(sent - now()) <= 60_000 ? sent : now();
+    return serial(async () => {
+      const key = picksKey(msg.userId);
+      const stored = (await storage.get([key]))[key];
+      const seq = (Number(stored?.seq) || 0) + 1;
+      const list = Array.isArray(stored?.list) ? stored.list : [];
+      await storage.set({
+        [key]: {
+          seq,
+          list: [...list, { n: seq, t, r, c, ...(s ? { s } : {}) }].slice(
+            -PICKS_KEPT,
+          ),
+        },
+      });
+      return { ok: true };
+    });
+  }
+  /**
+   * Tie the presses waiting for this player to the craft rows they made (observed.matchPicks) and write each
+   * press's pick on its row: `p` "c" for a chosen slot, "r" for a random craft. A tied press is spent; a press
+   * that a poll PICK_DEAD_MS after it did not answer (no gap left) made no craft and is dropped. Returns whether
+   * a row changed (the caller saves the meta with its revision raised).
+   */
+  async function bakePicks(meta) {
+    const key = picksKey(meta.userId);
+    const stored = (await storage.get([key]))[key];
+    const picks = (Array.isArray(stored?.list) ? stored.list : []).filter(
+      isPick,
+    );
+    if (!picks.length) return false;
+    const times = picks.map((p) => p.t);
+    const from = monthOf(
+      new Date(Math.min(...times) - OFFSET_SEARCH_MS).toISOString(),
+    );
+    const to = monthOf(
+      new Date(Math.max(...times) + OFFSET_SEARCH_MS).toISOString(),
+    );
+    const months = meta.months.filter((m) => m >= from && m <= to);
+    const chunks = await storage.get(
+      months.map((m) => chunkKey(meta.userId, m)),
+    );
+    const crafts = [];
+    for (const m of months)
+      for (const row of chunks[chunkKey(meta.userId, m)] ?? [])
+        if (row.y === "craftItem" && row.ic && !row.p)
+          crafts.push({
+            x: row.x,
+            t: Date.parse(row.a),
+            rarity: describeCode(row.ic)?.rarity,
+            code: row.ic,
+            row,
+            month: m,
+          });
+    const { matches } = matchPicks(crafts, picks);
+    const touched = new Set();
+    for (const craft of crafts) {
+      const i = matches.get(craft.x);
+      if (i == null) continue;
+      craft.row.p = picks[i].c ? "c" : "r";
+      touched.add(craft.month);
+    }
+    if (touched.size)
+      await storage.set(
+        Object.fromEntries(
+          [...touched].map((m) => [
+            chunkKey(meta.userId, m),
+            chunks[chunkKey(meta.userId, m)],
+          ]),
+        ),
+      );
+    const spent = new Set([...matches.values()].map((i) => picks[i].n));
+    const polled = meta.at && !meta.gap ? Date.parse(meta.at) : -Infinity;
+    const drop = new Set(
+      picks
+        .filter(
+          (p) =>
+            spent.has(p.n) ||
+            p.t < now() - PICK_MAX_AGE_MS ||
+            polled - p.t > PICK_DEAD_MS,
+        )
+        .map((p) => p.n),
+    );
+    if (drop.size)
+      await serial(async () => {
+        // presses recorded meanwhile are kept: only the ones read above are judged
+        const current = (await storage.get([key]))[key];
+        await storage.set({
+          [key]: {
+            seq: Number(current?.seq) || 0,
+            list: (Array.isArray(current?.list) ? current.list : []).filter(
+              (p) => isPick(p) && !drop.has(p.n),
+            ),
+          },
+        });
+      });
+    return touched.size > 0;
+  }
+
   /**
    * One step of the player's history: a poll from the newest row down to the
    * first one already held (at most every POLL_MS, FAST_POLL_MS while a game
@@ -524,6 +670,8 @@ export function createController({
           meta.cursor = pg.next;
           if (!pg.next) meta.done = true;
         }
+        // the presses of the game's CRAFT button seen since: each craft row they made learns its pick
+        if (await bakePicks(meta)) meta.rev++;
         // the daily prices that cost the history, kept as they are read (the game serves 30 days)
         if (
           !meta.averagesAt ||
@@ -607,16 +755,24 @@ export function createController({
   /**
    * What the Ledger and the game's dialogs show, computed here so the page
    * never receives the whole history: the result by activity for today, 7
-   * days, 30 days and everything, per case and per crafted tier; the recent
-   * pieces; the last crafted and opened piece; the codes whose sales would
-   * price the held pieces; today's crafts, newest first. A held piece is
-   * valued at the sales of its own stats when its item's sales were read,
-   * else at the game's average. In "eco" mode gear worn in battle is left
-   * out of the results; "war" counts it.
+   * days, 30 days and everything, per case and per crafted tier; one page of
+   * the window's pieces, newest first, all of them or one source's
+   * (LEDGER_PAGE a page, with the counts per source); the last crafted and
+   * opened piece; the codes whose sales would price the held pieces; today's
+   * crafts, newest first. A held piece is valued at the sales of its own
+   * stats when its item's sales were read, else at the game's average. In
+   * "eco" mode gear worn in battle is left out of the results; "war" counts
+   * it.
    */
   async function ledgerView(
     userId,
-    { steelMode = "random", window = "today", mode = "eco" } = {},
+    {
+      steelMode = "auto",
+      window = "today",
+      mode = "eco",
+      page = 0,
+      source = "all",
+    } = {},
   ) {
     const r = await replayed(userId, steelMode);
     if (!r) return { ledger: null };
@@ -720,6 +876,9 @@ export function createController({
         goneAt: p.goneAt,
         sellsHours: p.sellsHours,
         worn: p.worn,
+        chosen: p.chosen,
+        chosenBy: p.chosenBy,
+        streak: p.streak,
         value: p.fate === "held" ? valueDetail(p) : null,
       };
     const recent = history.pieces
@@ -727,15 +886,37 @@ export function createController({
       .map((p) => ({ p, t: Date.parse(p.goneAt ?? p.at ?? "") }))
       .sort((x, y) => y.t - x.t)
       .map((x) => x.p);
+    /** @type {Record<string, number>} */
+    const sources = Object.fromEntries(LEDGER_SOURCES.map((s) => [s, 0]));
+    for (const p of recent) {
+      sources.all++;
+      if (Object.hasOwn(sources, p.source)) sources[p.source]++;
+    }
+    const filter = LEDGER_SOURCES.includes(source) ? source : "all";
+    const listed =
+      filter === "all" ? recent : recent.filter((p) => p.source === filter);
+    const pages = Math.max(1, Math.ceil(listed.length / LEDGER_PAGE));
+    const shown = Math.min(
+      pages - 1,
+      Math.max(0, Math.floor(Number(page)) || 0),
+    );
     return {
       ledger: {
         meta: publicMeta(meta),
         mode: countWorn ? "war" : "eco",
+        steelMode,
         windows,
         craftsToday: craftsToday.slice(0, 60).map(describe),
         craftsTodayTotal: craftsToday.length,
-        rows: recent.slice(0, 80).map(describe),
-        rowsTotal: recent.length,
+        rows: listed
+          .slice(shown * LEDGER_PAGE, (shown + 1) * LEDGER_PAGE)
+          .map(describe),
+        rowsTotal: listed.length,
+        page: shown,
+        pages,
+        pageSize: LEDGER_PAGE,
+        source: filter,
+        sources,
         lastCrafted: describe(lastCrafted),
         lastOpened: describe(lastOpened),
         held: { n: [...heldCount.values()].reduce((a, b) => a + b, 0) },
@@ -835,8 +1016,11 @@ export function createController({
           steelMode: preferences(settings).craftSteelMode,
           mode: preferences(settings).ledgerMode,
           window: String(msg.window ?? "today"),
+          page: Number(msg.page) || 0,
+          source: String(msg.source ?? "all"),
         });
       }
+      if (msg?.type === "craftPick") return recordPick(msg);
       if (["book", "cases", "avg", "sales"].includes(msg?.type)) {
         if (msg.type === "sales" && !ITEM_CODES.has(msg.itemCode))
           return { error: "bad-item", message: "Unknown equipment item" };

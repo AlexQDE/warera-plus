@@ -167,6 +167,25 @@ export function valueHtml(v) {
   return `<span title="${esc(v.detail ?? v.label ?? "")}"${faint ? ' class="lens-muted"' : ""}>${level === "same" ? "" : "≈"}${gold(v.value)}${when ? ` <small>${when}</small>` : ""}</span>`;
 }
 
+/** "snipers", "knives", "boots": a slot's name for several pieces. */
+const plural = (name) =>
+  name === "knife" ? "knives" : /s$/.test(name) ? name : `${name}s`;
+
+/**
+ * The mark of a craft charged the chosen slot's doubled steel, with how that
+ * is known; nothing for a random craft or another source.
+ */
+export function chosenMark(p) {
+  if (p?.source !== "crafted" || !p.chosen) return "";
+  const how =
+    p.chosenBy === "seen"
+      ? "picked in the game's craft window"
+      : p.chosenBy === "streak"
+        ? `${p.streak ?? "several"} ${plural(slotName(p.code))} in a row: too many for a random craft`
+        : "set in the extension's settings";
+  return `<span class="lens-pick"${p.chosenBy === "seen" ? "" : ' data-guess=""'} title="${esc(`Sniper craft (slot chosen), twice the steel: ${how}`)}">◎</span>`;
+}
+
 /**
  * One piece: its slot and stats, then what it sells for (held), sold for or
  * scrapped for, and the result against its cost. In eco mode a piece worn
@@ -175,7 +194,7 @@ export function valueHtml(v) {
 export function pieceHtml(p, mode = "eco") {
   if (!p) return "";
   const stats = statsWords(p.skills);
-  const name = `<span class="lens-piece">${esc(slotName(p.code))}</span>${stats ? ` <small>${esc(stats)}</small>` : ""}`;
+  const name = `<span class="lens-piece">${esc(slotName(p.code))}</span>${chosenMark(p)}${stats ? ` <small>${esc(stats)}</small>` : ""}`;
   if (p.worn && mode !== "war")
     return `${name} <span class="lens-muted">in battle</span>`;
   const v = p.fate === "held" ? p.value : null;
@@ -319,17 +338,30 @@ export function createDialogs({ onAction = () => {}, onMode = () => {} } = {}) {
     e.stopPropagation();
     onMode(button.dataset.mode === "war" ? "war" : "eco");
   };
-  /** The game's own button was clicked: observe only, the click goes on to the game. */
+  /**
+   * The game's own button was clicked: observe only, the click goes on to the game. A craft press carries the
+   * window's pick: chosen or random by the button's label (CRAFT or CRAFT RANDOM), the slot by its marked tile.
+   */
   const onClick = (e) => {
     const button = e.target?.closest?.("button");
     if (!button || button.closest("[data-lens]")) return;
     const found = findDialog();
+    const label = linesOf(button)[0] ?? "";
     if (
       found &&
       found.dialog.contains(button) &&
-      /^(open|craft)\b/i.test(linesOf(button)[0] ?? "")
+      /^(open|craft)\b/i.test(label)
     )
-      onAction(found.kind);
+      onAction(
+        found.kind,
+        found.kind === "craft"
+          ? {
+              tier: found.tier,
+              chosen: !/^craft random/i.test(label),
+              slot: found.slot,
+            }
+          : null,
+      );
   };
   document.addEventListener("click", onClick, true);
   function clear() {
