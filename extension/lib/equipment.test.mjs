@@ -69,6 +69,32 @@ it("distinguishes near losses, missing depth and stale quotes", () => {
   expect(row.dataset.scrapSniper).toBe("stale");
   expect(row.textContent).not.toContain("SNIPE");
 });
+it("takes the rarity from the item code before the frame colour", () => {
+  // a rare rifle in a frame painted like a mythic one: the code decides
+  row.querySelector("img").setAttribute("alt", "rifle");
+  row.querySelector("div").style.borderColor = "rgb(88, 27, 29)";
+  equipment.render(state);
+  // 54 scraps at 0.2: a rare's floor; a mythic's would be 291.6 (printed 292)
+  expect(row.textContent).toContain("scrap 10.8");
+  expect(row.textContent).not.toContain("scrap 292");
+});
+it("keeps the palette read off the grid after the grid closes (v0.27 shows it in a modal)", () => {
+  // a skin names no rarity: the frame does, in a colour only the grid's calibration knows
+  row.querySelector("img").setAttribute("alt", "winterJet");
+  row.querySelector("div").style.borderColor = "rgb(200, 100, 50)";
+  document.getElementById("item-code-selector-jet").style.borderColor =
+    "rgb(200, 100, 50)";
+  price = 200;
+  equipment.render(state);
+  expect(row.dataset.scrapSniper).toBe("hit"); // read as mythic: 1458 scraps at 0.2
+  expect(row.textContent).toContain("scrap 292");
+  document.getElementById("item-code-selector-jet").remove();
+  vi.advanceTimersByTime(31_000);
+  state.book.at = new Date().toISOString();
+  equipment.render(state);
+  expect(row.dataset.scrapSniper).toBe("hit");
+  expect(row.textContent).toContain("scrap 292");
+});
 it("says so when the page shows offer buttons it cannot read", () => {
   window.history.replaceState({}, "", "/market/auctions");
   document.body.innerHTML =

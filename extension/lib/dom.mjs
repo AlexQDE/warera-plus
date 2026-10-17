@@ -52,6 +52,13 @@ export const RARITY_PALETTE = [
   sample("uncommon", [10, 44, 28], 12),
   sample("common", [28, 46, 49], 12),
   sample("epic", [49, 20, 44], 12), // pink850, colorblind epic
+  // v0.27 frame border (dev 2026-10-17, read off the 36 tiles of the "Select an item" modal)
+  sample("mythic", [88, 27, 29], 12),
+  sample("legendary", [53, 54, 16], 12),
+  sample("epic", [59, 35, 95], 12),
+  sample("rare", [23, 48, 101], 12),
+  sample("uncommon", [10, 61, 40], 12),
+  sample("common", [26, 56, 62], 12),
   // hovered frame: theme 700
   sample("mythic", [113, 31, 32], 12),
   sample("legendary", [86, 87, 36], 12),

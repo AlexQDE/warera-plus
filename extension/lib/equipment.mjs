@@ -757,7 +757,8 @@ export function createEquipment({
     if (grid !== nextGrid || now() - calibratedAt > 30_000) {
       grid = nextGrid;
       const live = dom.calibrateRarityBorders();
-      palette = dom.withFallbackPalette(live);
+      // v0.27 shows the grid only in its "Select an item" modal: the palette read there is kept after it closes
+      if (live.length) palette = dom.withFallbackPalette(live);
       calibratedAt = now();
     }
     const code =
@@ -778,10 +779,11 @@ export function createEquipment({
     const t = now();
     const fillsOf = (sales) => windowFills(sales, t);
     const valuations = rows.map((r) => {
-      // Trust the row first; a just-changed grid selection can precede replacement of the list.
+      // Trust the row first; a just-changed grid selection can precede replacement of the list. The row's image
+      // named by its item code says the rarity outright; a skin's name does not, and then its frame does.
       const rarity =
-        dom.rarityFromBorder(r.border, palette) ??
-        dom.rarityFromItemCode(r.alt);
+        dom.rarityFromItemCode(r.alt) ??
+        dom.rarityFromBorder(r.border, palette);
       const slot = dom.slotFromAlt(r.alt);
       const rowCode =
         codeFor(slot, rarity) ?? (dom.rarityFromItemCode(r.alt) ? r.alt : null);
