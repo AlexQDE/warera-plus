@@ -665,7 +665,7 @@ export function createEquipment({
       const rate = r.tax?.rate;
       const pct = rate != null ? Math.round(rate * 1000) / 10 : null;
       lines.push(
-        `Auction: buy now <b>${fmt(r.price)} g</b>${r.max != null ? ` (max ${fmt(r.max)} before tax)` : ""} · next bid <b>${fmt(r.bid)} g</b>${rate != null && r.bid != null ? ` (${fmt(r.bid / (1 + rate))} before tax)` : ""}${r.start != null ? ` · start or current bid ${fmt(r.start)}` : ""}${r.ends ? ` · ends in ${escapeHtml(r.ends)}` : ""}`,
+        `Auction: buy now <b>${fmt(r.price)} g</b>${r.max != null ? ` (max ${fmt(r.max)} before tax)` : ""} · next bid <b>${fmt(r.bid)} g</b>${rate != null && r.bid != null && !r.taxBad ? ` (${fmt(r.bid / (1 + rate))} before tax)` : ""}${r.start != null ? ` · start or current bid ${fmt(r.start)}` : ""}${r.ends ? ` · ends in ${escapeHtml(r.ends)}` : ""}`,
       );
       lines.push(
         r.taxBad
@@ -952,6 +952,10 @@ export function createEquipment({
         delete row.dataset.scrapSniper;
       }
     const dupes = new Map();
+    // a card that failed the tax check has no price another row can be measured against
+    const peerRows = valuations.map((r) =>
+      r.taxBad ? { ...r, price: null } : r,
+    );
     for (const [i, r] of valuations.entries()) {
       if (setup) {
         r.row.querySelector(":scope > .ss-verdict")?.remove();
@@ -1001,9 +1005,7 @@ export function createEquipment({
               ),
             )
           : null;
-      const peers = r.code
-        ? listedPeers(r.code, r.skills, valuations, i)
-        : null;
+      const peers = r.code ? listedPeers(r.code, r.skills, peerRows, i) : null;
       let el = r.row.querySelector(":scope > .ss-verdict");
       if (!el) {
         el = document.createElement("div");

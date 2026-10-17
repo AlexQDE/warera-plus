@@ -58,6 +58,10 @@ export function auctionPage(cards = FIXTURE.cards) {
   for (const c of cards) document.getElementById("list").appendChild(build(c));
 }
 
+/** A labelled pager as React prints "Page {n}": the label and the number in text nodes of their own. */
+const PAGER =
+  "<button>Page <span>1</span></button><button>Page <span>2</span></button>";
+
 beforeEach(() => auctionPage());
 afterEach(() => {
   document.body.innerHTML = "";
@@ -148,10 +152,22 @@ describe("the v0.27 auction cards", () => {
       `<article><div><img alt="${alt}"></div><div>1</div><button>BUY</button></article>`;
     document.body.innerHTML = `<main><div id="offers">${["knife", "rifle", "tank"].map(offer).join("")}</div><nav><button>1</button><button>2</button></nav></main>`;
     expect(auctionRows()).toHaveLength(0);
-    document.querySelector("nav").innerHTML =
-      "<button>Page 1</button><button>Page 2</button>";
+    // a labelled pager, its number in a text node of its own as React prints "Page {n}"
+    document.querySelector("nav").innerHTML = PAGER;
     expect(auctionRows()).toHaveLength(0);
     expect(offerRows()).toHaveLength(3);
+  });
+  it("takes no lone piece above a pager for a card: a card's buy now is its max price and a tax", () => {
+    // one v0.26 offer and a labelled pager: one piece and two labelled amounts, but no max price
+    document.body.innerHTML = `<main><div id="offers"><article><div><img alt="knife"></div><div>1</div><button>BUY</button></article></div><nav>${PAGER}</nav></main>`;
+    expect(auctionRows()).toHaveLength(0);
+    // one own auction (no buy-now or bid) above the pager: its max price, 277.927, is no tax away from "Page 1"
+    auctionPage(FIXTURE.cards.slice(0, 1));
+    for (const b of document.querySelectorAll("#list button")) b.remove();
+    document
+      .querySelector("main")
+      .insertAdjacentHTML("beforeend", `<nav>${PAGER}</nav>`);
+    expect(auctionRows()).toHaveLength(0);
   });
   it("reads a card's text again as its countdown ticks, and its frame once", () => {
     const cache = createRowCache();
@@ -269,6 +285,34 @@ describe("verdicts on the auction cards", () => {
     expect(card(2).dataset.scrapSniper).toBe("unknown");
     expect(line(2)).toContain("sells 200");
     expect(card(2).querySelector(".lens-gain").textContent).toBe("–");
+  });
+  it("counts no card that failed the tax check among the listed peers, and gives its bid no pre-tax figure", () => {
+    // a fourth card, the epic gloves again, its buy now 170.00 where the page's 10% makes 155.23 of its max
+    auctionPage([...FIXTURE.cards, FIXTURE.cards[2]]);
+    const [whole, , decimals] = [...card(3).querySelectorAll("button")]
+      .flatMap((b) => {
+        const out = [];
+        const walk = document.createTreeWalker(b, 4);
+        while (walk.nextNode()) out.push(walk.currentNode);
+        return out;
+      })
+      .filter((n) => /^(155|\.|23)$/.test(n.nodeValue));
+    whole.nodeValue = "170";
+    decimals.nodeValue = "00";
+    const details = (i) => {
+      card(i).querySelector("[data-action='details']").click();
+      equipment.render(state(0.2));
+      return card(i)
+        .querySelector(".lens-details")
+        .textContent.replace(/\s+/g, " ");
+    };
+    equipment.render(state(0.2));
+    expect(card(3).dataset.scrapSniper).toBe("unknown");
+    expect(card(2).dataset.scrapSniper).toBe("bid");
+    expect(details(2)).not.toContain("Listed now with these stats");
+    const failed = details(3);
+    expect(failed).toContain("next bid 29.910 g · start");
+    expect(failed).not.toContain("before tax) · start");
   });
   it("values a skinned card by its stats: the tier its stat falls in", () => {
     equipment.render(state(0.2));

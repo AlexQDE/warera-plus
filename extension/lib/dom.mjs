@@ -487,9 +487,10 @@ export function readAuctionTokens(tokens) {
 }
 
 /**
- * Every auction card under `root` (v0.27): a card shows an item and carries
- * exactly two buttons with an amount, buy-now then bid, whose amounts include
- * the buyer's market tax; the card's own start and max price do not. Rows
+ * Every auction card under `root` (v0.27): a card shows one piece and carries
+ * exactly two buttons with a labelled amount, buy-now then bid, whose amounts
+ * include the buyer's market tax; the card's own start and max price do not,
+ * so its buy now is its max price and a tax of 0 to 50%. Rows
  * have offerRows' shape (row, button, img, alt, tile, border, rarity,
  * priceText, price = the buy-now amount, lines) plus kind "auction", the bid
  * button and its amount, start, max, the countdown and the card's tokens. A
@@ -547,6 +548,14 @@ export function auctionRows(
       };
       cache?.rows.set(card, read);
     }
+    // a lone piece above two labelled numbers (a pager) has no max price its first number is a tax away from
+    const slack = Math.max(0.02, 0.002 * (read.price ?? 0));
+    if (
+      !(read.price > 0 && read.max > 0) ||
+      read.price < read.max - slack ||
+      read.price > read.max * 1.5 + slack
+    )
+      continue;
     if (
       !read.style ||
       read.style.epoch !== (cache?.epoch ?? 0) ||
