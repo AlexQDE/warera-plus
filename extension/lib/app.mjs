@@ -10,8 +10,7 @@ import {
   sellHintHtml,
 } from "./sellform.mjs";
 import { suggestPrice } from "./pricing.mjs";
-import { comparableFills } from "./resale.mjs";
-import { WINDOW_HOURS } from "./similar.mjs";
+import { windowFills } from "./similar.mjs";
 import { createCraftDesk } from "./craftdesk.mjs";
 import { createDialogs } from "./dialogs.mjs";
 import { casesStripHtml, tripLineHtml } from "./casesview.mjs";
@@ -705,14 +704,7 @@ export async function startLens(runtime = chrome.runtime) {
                     ? suggestPrice({
                         code: it.code,
                         skills: it.skills,
-                        fills: sales
-                          ? comparableFills(sales.fills, {
-                              code: it.code,
-                              hours: WINDOW_HOURS,
-                              now,
-                              state: null,
-                            })
-                          : [],
+                        fills: sales ? windowFills(sales, now) : [],
                         asks: equipment.asks(it.code),
                         now,
                         game: read.game,

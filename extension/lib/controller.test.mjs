@@ -303,6 +303,66 @@ describe("background controller", () => {
         .error,
     ).toBe("bad-item");
   });
+  it("brings an item's sales up to date by reading only the new ones, the rest kept inside the week", async () => {
+    // the feed of one item, newest first, pages of two: ids are numbers here
+    const feed = { rows: [] };
+    const sale = (n, hoursAgo, price = 100) => ({
+      _id: `s${n}`,
+      money: price,
+      itemCode: "jet",
+      quantity: 1,
+      transactionType: "itemMarket",
+      item: {
+        code: "jet",
+        state: 100,
+        skills: { attack: 250, criticalChance: 45 },
+      },
+      createdAt: new Date(NOW - hoursAgo * 3600e3).toISOString(),
+    });
+    const pages = [];
+    const f = vi.fn(async (url) => {
+      const input = JSON.parse(new URL(url).searchParams.get("input"));
+      const page = input.cursor ? Number(input.cursor.slice(1)) : 0;
+      pages.push(page);
+      return response({
+        items: feed.rows.slice(page * 2, page * 2 + 2),
+        nextCursor: feed.rows.length > (page + 1) * 2 ? `p${page + 1}` : null,
+      });
+    });
+    const { controller, advance } = setup(f);
+    feed.rows = [
+      sale(5, 1),
+      sale(4, 2),
+      sale(3, 30),
+      sale(2, 100),
+      sale(1, 160),
+    ];
+    const first = await controller.handle({ type: "sales", itemCode: "jet" });
+    expect(first.sales.fills.map((x) => x.id)).toEqual([
+      "s5",
+      "s4",
+      "s3",
+      "s2",
+      "s1",
+    ]);
+    expect(pages).toEqual([0, 1, 2]);
+    // ten minutes on, two new sales: one page, down to the first sale held; the oldest has left the week
+    advance(10 * 60_000);
+    feed.rows = [sale(7, 0.05), sale(6, 0.1), ...feed.rows];
+    pages.length = 0;
+    advance(8 * 3600e3); // s1 (160 h + 8 h) is now older than the week
+    const next = await controller.handle({ type: "sales", itemCode: "jet" });
+    expect(pages).toEqual([0, 1]); // the second page holds s5, the first it knew
+    expect(next.sales.fills.map((x) => x.id)).toEqual([
+      "s7",
+      "s6",
+      "s5",
+      "s4",
+      "s3",
+      "s2",
+    ]);
+    expect(next.sales.complete).toBe(true);
+  });
   const ME = "697b55e4bcecf3b37667e0d1";
   const OTHER = "69b4b8113af735a990a8070e";
   const oid = (n) => n.toString(16).padStart(24, "0");

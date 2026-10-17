@@ -32,6 +32,7 @@ import {
   rowSkills,
   listedPeers,
   spanWords,
+  windowFills,
   WINDOW_HOURS,
   STAT_SHORT,
   PERCENT,
@@ -758,23 +759,10 @@ export function createEquipment({
     const salesErrors = state.salesErrors ?? {};
     const avgValues = state.avg?.values ?? {};
     const avgTimes = state.avg?.times ?? {};
-    // One clock and, per item, one list of comparable sales for the whole scan: every row of an item shares it.
+    // One clock for the scan; per item one list of comparable sales, kept across scans for a minute per read
+    // (similar.windowFills), so every row of an item shares it and the worth of its stats is read once.
     const t = now();
-    /** @type {Map<string, any[]>} */
-    const comparable = new Map();
-    const fillsOf = (itemCode, sales) => {
-      let list = comparable.get(itemCode);
-      if (!list) {
-        list = comparableFills(sales.fills, {
-          code: itemCode,
-          hours: WINDOW_HOURS,
-          now: t,
-          state: null,
-        });
-        comparable.set(itemCode, list);
-      }
-      return list;
-    };
+    const fillsOf = (sales) => windowFills(sales, t);
     const valuations = rows.map((r) => {
       // Trust the row first; a just-changed grid selection can precede replacement of the list.
       const rarity =
@@ -797,7 +785,7 @@ export function createEquipment({
       // the row's value from the sales of its stats, worked out once and used by the line, the label and the rank
       const similar =
         rowCode && sales?.fills
-          ? similarValue(rowCode, skills, fillsOf(rowCode, sales), { now: t })
+          ? similarValue(rowCode, skills, fillsOf(sales), { now: t })
           : null;
       const value = rowCode
         ? valueOf({
@@ -894,10 +882,9 @@ export function createEquipment({
         r.value?.source === "fills" && r.price != null && r.similar
           ? percentileRank(
               r.price,
-              (r.value.matched
-                ? r.similar.fills
-                : fillsOf(r.code, r.sales)
-              ).map((f) => f.price),
+              (r.value.matched ? r.similar.fills : fillsOf(r.sales)).map(
+                (f) => f.price,
+              ),
             )
           : null;
       const peers = r.code

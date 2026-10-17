@@ -23,8 +23,7 @@ import {
 } from "./observed.mjs";
 import { describeCode } from "./craftdata.mjs";
 import { GEAR_CODES, RARITIES } from "./items.mjs";
-import { similarValue, WINDOW_HOURS } from "./similar.mjs";
-import { comparableFills } from "./resale.mjs";
+import { similarValue, windowFills } from "./similar.mjs";
 import { positive } from "./quality.mjs";
 
 const CASE_BOOKS = [
@@ -51,6 +50,9 @@ export const PICKS_KEPT = 2000;
 export const PICK_DEAD_MS = 15 * 60_000;
 /** A press older than this is dropped whatever the history says. */
 const PICK_MAX_AGE_MS = 7 * 86400_000;
+/** An item's sales are read over this many hours, at most this many pages of 100. */
+const SALES_HOURS = 168;
+const SALES_PAGES = 10;
 /** The pieces of the Ledger's list sent to the page at a time. */
 export const LEDGER_PAGE = 50;
 /** The Ledger's list filters, by how a piece came. */
@@ -157,17 +159,36 @@ export function createController({
         if (kind === "book") result = (await fetchBook(fetchImpl, key)).book;
         else if (kind === "cases")
           result = await fetchBooks(fetchImpl, key, CASE_BOOKS);
-        else if (kind === "sales")
-          result = {
-            ...(await fetchSales(fetchImpl, key, code, {
-              now: now(),
-              hours: 168,
-              maxPages: 10,
-            })),
-            code,
-            hours: 168,
-          };
-        else {
+        else if (kind === "sales") {
+          // A last read whose fills carry their ids is brought up to date: only the sales newer than the
+          // first one it holds are read (usually one page instead of ten), the rest kept inside the window.
+          const held =
+            cache?.fills?.length &&
+            cache.fills.every((f) => typeof f?.id === "string")
+              ? cache
+              : null;
+          const fetched = await fetchSales(fetchImpl, key, code, {
+            now: now(),
+            hours: SALES_HOURS,
+            maxPages: SALES_PAGES,
+            known: held ? new Set(held.fills.map((f) => f.id)) : null,
+          });
+          if (held && fetched.met) {
+            const cutoff = now() - SALES_HOURS * 3600e3;
+            const fills = [
+              ...fetched.fills,
+              ...held.fills.filter((f) => Date.parse(f.at) >= cutoff),
+            ];
+            result = {
+              fills: fills.slice(0, SALES_PAGES * 100),
+              pages: fetched.pages,
+              complete: !!held.complete && fills.length <= SALES_PAGES * 100,
+              met: true,
+              code,
+              hours: SALES_HOURS,
+            };
+          } else result = { ...fetched, code, hours: SALES_HOURS };
+        } else {
           const fetched = await fetchEquipmentAvg(
             fetchImpl,
             key,
@@ -816,12 +837,7 @@ export function createController({
       if (sales?.fills) {
         let fills = fillsOf.get(p.code);
         if (!fills) {
-          fills = comparableFills(sales.fills, {
-            code: p.code,
-            hours: WINDOW_HOURS,
-            now: now(),
-            state: null,
-          });
+          fills = windowFills(sales, now());
           fillsOf.set(p.code, fills);
         }
         const v = similarValue(p.code, p.skills, fills, { now: now() });
