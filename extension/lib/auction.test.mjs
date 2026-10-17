@@ -222,6 +222,12 @@ describe("verdicts on the auction cards", () => {
   const line = (i) =>
     card(i).querySelector(".ss-verdict")?.textContent.replace(/\s+/g, " ") ??
     "";
+  // the countdown a card prints, set (the elite gloves, card 2, print 22h23m52s)
+  const endsIn = (i, text) => {
+    [...card(i).querySelectorAll("span")].find((s) =>
+      /^\d+[dhms]/.test(s.textContent ?? ""),
+    ).textContent = text;
+  };
   beforeEach(() => {
     window.history.replaceState({}, "", "/market/auctions");
     equipment = createEquipment({
@@ -232,6 +238,7 @@ describe("verdicts on the auction cards", () => {
   afterEach(() => equipment.clear());
   it("tags BID with the most to bid before tax when the next bid pays and buying now does not", () => {
     // epic gloves (162 scraps) at a 0.2 bid: 32.4; next bid 29.91 with the 10% tax; buy now 155.23
+    endsIn(2, "4m10s");
     equipment.render(state(0.2));
     expect(card(2).dataset.scrapSniper).toBe("bid");
     // the most to bid: 32.4 / 1.03 (the 3% SNIPE minimum) / 1.10 (the tax) = 28.59
@@ -239,6 +246,32 @@ describe("verdicts on the auction cards", () => {
     expect(line(2)).toContain("≤ 28.59");
     expect(card(0).dataset.scrapSniper).toBe("miss"); // tank: 97.2 of scraps against 218.9 and 305.72
     expect(equipment.pulse()).toContain("1</b> bid");
+  });
+  it("tags BID only in an auction's last ten minutes: before them a bid wins nothing yet", () => {
+    // the same gloves with 22 hours to go: the next bid would pay, but the price is far from final
+    equipment.render(state(0.2));
+    expect(card(2).dataset.scrapSniper).not.toBe("bid");
+    expect(line(2)).not.toContain("BID");
+    expect(equipment.pulse()).not.toContain("bid");
+    card(2).querySelector("[data-action='details']").click();
+    equipment.render(state(0.2));
+    const details = card(2)
+      .querySelector(".lens-details")
+      .textContent.replace(/\s+/g, " ");
+    // the most to bid stays in the details, with when BID shows
+    expect(details).toContain("bid at most 28.59");
+    expect(details).toContain("last 10 minutes");
+    for (const [ends, tagged] of [
+      ["10m0s", true],
+      ["9m59s", true],
+      ["10m1s", false],
+      ["1h", false],
+      ["5ч", false], // a countdown it cannot read: no BID
+    ]) {
+      endsIn(2, ends);
+      equipment.render(state(0.2));
+      expect(card(2).dataset.scrapSniper === "bid").toBe(tagged);
+    }
   });
   it("tags SNIPE when buying now pays", () => {
     // 162 scraps at 1: 162 against buy now 155.23
@@ -249,6 +282,7 @@ describe("verdicts on the auction cards", () => {
   it("reads the tax off the card when the notice gives none, and tags nothing when the card and the notice disagree", () => {
     document.getElementById("market").innerHTML =
       "<div><span>Live auctions</span></div>";
+    endsIn(2, "4m10s");
     equipment.render(state(0.2));
     expect(card(2).dataset.scrapSniper).toBe("bid");
     equipment.clear();
@@ -308,7 +342,7 @@ describe("verdicts on the auction cards", () => {
     };
     equipment.render(state(0.2));
     expect(card(3).dataset.scrapSniper).toBe("unknown");
-    expect(card(2).dataset.scrapSniper).toBe("bid");
+    expect(card(2).dataset.scrapSniper).not.toBe("unknown"); // it passed the tax check
     expect(details(2)).not.toContain("Listed now with these stats");
     const failed = details(3);
     expect(failed).toContain("next bid 29.910 g · start");

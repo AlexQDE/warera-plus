@@ -81,6 +81,11 @@ export const TAGS = {
   error: "NO QUOTE",
 };
 const FULL_SCAN_EVERY = 30_000;
+/**
+ * BID shows in an auction's last minutes only: the game has no bid that rises by itself, so a bid placed earlier
+ * wins nothing unless the bidder is back at the end, and until then the price is far from final.
+ */
+const BID_WINDOW_S = 10 * 60;
 
 /**
  * What a piece with these stats sells for: the median of the last 7 days'
@@ -670,7 +675,7 @@ export function createEquipment({
       lines.push(
         r.taxBad
           ? `Tax check failed: the card's buy now and max price do not agree with the tax on the page${pct != null ? ` (${pct}%)` : ""}, so no tag`
-          : `Your ${pct}% market tax (${r.tax?.source === "card" ? "read off the card: buy now ÷ max" : "the page's notice"}) is in the buttons' amounts, not in the card's prices${r.bidding?.ceiling != null ? ` · bid at most <b>${r.bidding.ceiling.toFixed(2)}</b> before tax for the SNIPE or FLIP margin` : ""} · a bid in the last minute adds a minute, so the price is not final until the auction ends`,
+          : `Your ${pct}% market tax (${r.tax?.source === "card" ? "read off the card: buy now ÷ max" : "the page's notice"}) is in the buttons' amounts, not in the card's prices${r.bidding?.ceiling != null ? ` · bid at most <b>${r.bidding.ceiling.toFixed(2)}</b> before tax for the SNIPE or FLIP margin` : ""} · a bid in the last minute adds a minute, so the price is not final until the auction ends · the game has no bid that rises by itself: a bid wins only if you are there at the end, so BID shows in the auction's last ${BID_WINDOW_S / 60} minutes`,
       );
     }
     lines.push(
@@ -880,7 +885,8 @@ export function createEquipment({
         value.matched &&
         (value.amount - r.price) / r.price >= s.flipPct / 100;
       // The auction's other way in: the next bid. It pays when the scraps or the sales of these stats cover it
-      // with the SNIPE or FLIP margin; the most worth bidding (before tax, as bids are typed) is the ceiling.
+      // with the SNIPE or FLIP margin; the most worth bidding (before tax, as bids are typed) is the ceiling. It is
+      // a BID in the auction's last minutes only (BID_WINDOW_S): a countdown that does not read is none.
       let bidding = null;
       if (auction && usable && r.bid > 0) {
         const vb = dom.verdict({
@@ -897,8 +903,10 @@ export function createEquipment({
           value?.matched ? value.amount / (1 + s.flipPct / 100) : null,
         ].filter((c) => c != null);
         const ceilingTaxed = ceilings.length ? Math.max(...ceilings) : null;
+        const closing =
+          (dom.countdownSeconds(r.ends) ?? Infinity) <= BID_WINDOW_S;
         bidding = {
-          hit: !!vb.hit || flipBid,
+          hit: closing && (!!vb.hit || flipBid),
           scrap:
             vb.margin != null ? { gain: vb.margin, pct: vb.marginPct } : null,
           sell: value?.matched

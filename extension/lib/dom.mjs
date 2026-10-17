@@ -401,6 +401,17 @@ export function offerButtonCount(root = document) {
 const COUNTDOWN_RE = /^(\d+\s*[dhms]\s*)+$/i;
 /** An amount as the auction cards print it: "199", "277.927", "1,234.5". */
 const AMOUNT_RE = /^\d[\d,]*(\.\d+)?$/;
+const UNIT_SECONDS = { d: 86_400, h: 3_600, m: 60, s: 1 };
+
+/** A card's countdown in seconds ("5h35m28s" -> 20128); null for what reads as none (a translated one). */
+export function countdownSeconds(text) {
+  const t = String(text ?? "").trim();
+  if (!COUNTDOWN_RE.test(t)) return null;
+  let seconds = 0;
+  for (const [, n, unit] of t.matchAll(/(\d+)\s*([dhms])/gi))
+    seconds += Number(n) * UNIT_SECONDS[unit.toLowerCase()];
+  return seconds;
+}
 
 /**
  * An element's text as tokens, in page order, without the extension's own
