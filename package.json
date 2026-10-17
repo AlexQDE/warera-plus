@@ -12,7 +12,8 @@
     "format": "prettier --write extension scripts README.md CHANGELOG.md docs package.json tsconfig.json eslint.config.mjs vitest.config.js .github/workflows/ci.yml",
     "format:check": "prettier --check extension scripts README.md CHANGELOG.md docs package.json tsconfig.json eslint.config.mjs vitest.config.js .github/workflows/ci.yml",
     "check": "npm run lint && npm run typecheck && npm run validate && npm test && npm run format:check",
-    "package": "node scripts/package.mjs"
+    "package": "node scripts/package.mjs",
+    "build:dev": "node scripts/build-dev.mjs"
   },
   "engines": {
     "node": ">=24"
