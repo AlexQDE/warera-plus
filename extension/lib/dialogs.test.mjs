@@ -303,6 +303,9 @@ describe("reading the game's dialogs", () => {
       reel: ["sickle2", "flask1", "pickaxe1"],
     });
     expect(findDialog()).toBeNull();
+    // its line alone tells it, with no tool drawn yet
+    v027Window({ line: "A random employee tool", odds: toolOdds, reel: [] });
+    expect(findDialog()).toBeNull();
     // in words the reader does not know, the tools in its reel tell it
     v027Window({ line: "", odds: toolOdds, reel: ["sickle2", "flask1"] });
     expect(findDialog()).toBeNull();

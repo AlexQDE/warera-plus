@@ -952,16 +952,18 @@ describe("SPA lifecycle and DOM work", () => {
 });
 
 // The inventory as the game draws it, read off app.warera.io (v0.26) and dev.warera.io (v0.27) on 2026-10-18:
-// a tile is the first box with a background around an item's image; v0.26 holds it one box under the grid,
-// v0.27 three (a block, a flex box and the grid's 48 px cell). jsdom computes inline styles only, so the
-// tiles carry theirs.
+// a tile is the first box with a background around an item's image; v0.26 holds it one box under its grid (a
+// flex row), v0.27 three (a block, a flex box and the 48 px cell of a CSS grid). jsdom computes inline styles
+// only, so the tiles and grids carry theirs.
 const invTile = (code, wrappers) => {
   let html = `<div style="background-color: rgb(16, 24, 32)"><img alt="${code}"><span>3</span></div>`;
   for (let i = 0; i < wrappers; i++) html = `<div>${html}</div>`;
   return html;
 };
-const inventory = (codes, wrappers) =>
-  `<main><section><div id="items" style="display: grid">${codes.map((c) => invTile(c, wrappers)).join("")}</div></section></main>`;
+const inventory = (codes, wrappers, display = "grid") =>
+  `<main><section><div id="items" style="display: ${display}">${codes.map((c) => invTile(c, wrappers)).join("")}</div></section></main>`;
+const V026 = [1, "flex"];
+const V027 = [3, "grid"];
 // v0.27's wooden case window: its header lists what the case drops (case1, toolbox, case2) as images, and its
 // reel draws drop tiles
 const woodenWindow = `<div role="dialog"><div style="background-color: rgb(11, 17, 24)"><p>Drops <img alt="case1"><img alt="toolbox"><img alt="case2"></p><div style="display: flex">${[
@@ -977,18 +979,26 @@ const woodenWindow = `<div role="dialog"><div style="background-color: rgb(11, 1
 
 describe("the case strip's place on an inventory", () => {
   it("goes before the grid that holds a lone case, at v0.26's depth and at v0.27's", () => {
-    for (const wrappers of [1, 3]) {
+    for (const version of [V026, V027]) {
       document.body.innerHTML = inventory(
         ["woodenCase", "bread", "steel"],
-        wrappers,
+        ...version,
       );
       expect(casesAnchor()).toBe(document.getElementById("items"));
       document.body.innerHTML = inventory(
         ["case1", "woodenCase", "bread"],
-        wrappers,
+        ...version,
       );
       expect(casesAnchor()).toBe(document.getElementById("items"));
     }
+  });
+  it("finds the grid of a case with no other item in it, never a far box that holds an image elsewhere", () => {
+    for (const version of [V026, V027]) {
+      document.body.innerHTML = inventory(["woodenCase"], ...version);
+      expect(casesAnchor()).toBe(document.getElementById("items"));
+    }
+    document.body.innerHTML = `<div id="app"><header><div style="background-color: rgb(1, 2, 3)"><img alt="scraps"></div></header>${inventory(["woodenCase"], ...V027)}</div>`;
+    expect(casesAnchor()).toBe(document.getElementById("items"));
   });
   it("leaves the game's case window out: its drop images neither move the strip nor take it in", () => {
     document.body.innerHTML =

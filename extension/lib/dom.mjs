@@ -1012,21 +1012,39 @@ const CASE_IMG_CODES = ["woodenCase", "case1", "case2"];
 /** An image of the page itself, not of one of the game's windows or of this extension's panels. */
 const pageImage = (img) => !img.closest('[role="dialog"], [data-lens]');
 
-/** The block that holds `tile` with the items next to it (the grid): its nearest ancestor with another item's image, or null. */
+// How far above a case tile its grid sits: two boxes on v0.26, four on v0.27 (2026-10-18). The tiles next to it
+// are looked for a little higher, never as far as a box that also holds an image elsewhere on the page.
+const GRID_DEPTH = 4;
+const NEIGHBOUR_DEPTH = 6;
+
+/**
+ * The grid that holds `tile`: the nearest box with another item's image (the
+ * tiles next to it); for a tile alone in its grid, the box laid out as a
+ * grid; null when neither is near.
+ */
 function gridOf(tile) {
+  const ups = [];
   for (
     let e = tile.parentElement;
-    e && e !== document.body;
+    e && e !== document.body && ups.length < NEIGHBOUR_DEPTH;
     e = e.parentElement
   )
-    for (const img of e.querySelectorAll("img"))
-      if (
+    ups.push(e);
+  const near = ups.find((e) =>
+    [...e.querySelectorAll("img")].some(
+      (img) =>
         !tile.contains(img) &&
         pageImage(img) &&
-        isItemImageAlt(img.getAttribute("alt"))
-      )
-        return e;
-  return null;
+        isItemImageAlt(img.getAttribute("alt")),
+    ),
+  );
+  return (
+    near ??
+    ups
+      .slice(0, GRID_DEPTH)
+      .find((e) => /grid/.test(getComputedStyle(e).display)) ??
+    null
+  );
 }
 
 /**
