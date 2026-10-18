@@ -275,17 +275,25 @@ describe("reading the game's dialogs", () => {
     document.body.innerHTML = `<main></main><div role="dialog"><div><div>Open</div><div>${line} ${imgs(drops)}</div>${div(odds)}<div>${imgs(reel)}</div><div>Quick animation</div><div>4 Total cases opened</div></div><div class="row"><button>Open all 3</button><button>Open 3</button></div></div>`;
   };
   it("never prices v0.27's wooden case or toolbox window, which show what they drop and odds like a case's", () => {
+    const woodenOdds = [
+      "1% Mythic",
+      "2% Legendary",
+      "2% Epic",
+      "13% Rare",
+      "20% Uncommon",
+      "62% Common",
+    ];
     v027Window({
       line: "A random resource stack, or a case",
       drops: ["case1", "toolbox", "case2"],
-      odds: [
-        "1% Mythic",
-        "2% Legendary",
-        "2% Epic",
-        "13% Rare",
-        "20% Uncommon",
-        "62% Common",
-      ],
+      odds: woodenOdds,
+      reel: ["bread", "case1", "iron"],
+    });
+    expect(findDialog()).toBeNull();
+    // its line alone tells it, whatever the reel happens to draw
+    v027Window({
+      line: "A random resource stack, or a case",
+      odds: woodenOdds,
       reel: ["bread", "case1", "iron"],
     });
     expect(findDialog()).toBeNull();

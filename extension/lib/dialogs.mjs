@@ -98,10 +98,11 @@ export function findDialog(root = document) {
       const text = lines.join(" ");
       const shown = caseFromImage(dialog);
       // v0.27's toolbox opens into a tool for an employee ("A random employee tool", OPEN buttons and odds too),
-      // and the wooden case is not one of the two cases priced here: neither gets the case panel
+      // and the wooden case ("A random resource stack, or a case") is not one of the two cases priced here:
+      // neither gets the case panel
       const other =
         (shown != null && shown !== "case1" && shown !== "case2") ||
-        /random (employee )?tool/i.test(text);
+        /random (employee )?tool|random resource stack/i.test(text);
       if (
         !other &&
         (shown || /total cases opened/i.test(text) || caseFromOdds(lines))
