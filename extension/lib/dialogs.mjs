@@ -12,7 +12,7 @@ import {
   isItemImageAlt,
   selectedTileIndex,
 } from "./dom.mjs";
-import { WEAPONS, RARITIES } from "./items.mjs";
+import { WEAPONS, RARITIES, isToolCode } from "./items.mjs";
 import { snapshotSummary, CASE_LABELS } from "./cases.mjs";
 import { tierBoard } from "./craftboard.mjs";
 import { spanWords, windowWords } from "./similar.mjs";
@@ -53,17 +53,24 @@ export function caseFromOdds(lines) {
 
 const CASE_IMAGES = ["case1", "case2", "woodenCase", "toolbox"];
 /**
- * The case a dialog shows by its image (cases have no skins: the image is
- * named by the code), one of case1, case2, woodenCase, toolbox; null when the
- * dialog shows none of them.
+ * The case a dialog opens, by the images it shows (cases have no skins: the
+ * image is named by the code), one of case1, case2, woodenCase, toolbox; null
+ * when the dialog shows none of them. v0.27's windows show what a case drops,
+ * not the case: a wooden case lists a case1, a toolbox and a case2 (no other
+ * window shows a toolbox next to a case), a toolbox's reel draws tools.
  * @param {Element} dialog
  */
 export function caseFromImage(dialog) {
-  for (const img of dialog.querySelectorAll("img")) {
-    const alt = img.getAttribute("alt") ?? "";
-    if (CASE_IMAGES.includes(alt) && !img.closest("[data-lens]")) return alt;
-  }
-  return null;
+  const alts = [...dialog.querySelectorAll("img")]
+    .filter((img) => !img.closest("[data-lens]"))
+    .map((img) => img.getAttribute("alt") ?? "");
+  if (
+    alts.includes("toolbox") &&
+    (alts.includes("case1") || alts.includes("case2"))
+  )
+    return "woodenCase";
+  if (alts.some(isToolCode)) return "toolbox";
+  return alts.find((alt) => CASE_IMAGES.includes(alt)) ?? null;
 }
 
 /**
@@ -90,11 +97,11 @@ export function findDialog(root = document) {
     if (open) {
       const text = lines.join(" ");
       const shown = caseFromImage(dialog);
-      // v0.27's toolbox opens into a tool for an employee (OPEN buttons and odds too), and the wooden case is not
-      // one of the two cases priced here: neither gets the case panel
+      // v0.27's toolbox opens into a tool for an employee ("A random employee tool", OPEN buttons and odds too),
+      // and the wooden case is not one of the two cases priced here: neither gets the case panel
       const other =
         (shown != null && shown !== "case1" && shown !== "case2") ||
-        /random tool/i.test(text);
+        /random (employee )?tool/i.test(text);
       if (
         !other &&
         (shown || /total cases opened/i.test(text) || caseFromOdds(lines))

@@ -266,6 +266,54 @@ describe("reading the game's dialogs", () => {
       );
     expect(findDialog()).toBeNull();
   });
+  // v0.27's windows as its client draws them (dev build JWLllTElOSrQkss76XV1d, read from its code on
+  // 2026-10-18): no image of the case being opened; under the "Open" title a line of what it drops, its odds
+  // (Common among them, as a normal case's), a reel of drop tiles. The wooden case's line is "A random resource
+  // stack, or a case" with a case1, a toolbox and a case2; a toolbox's is "A random employee tool", its reel tools.
+  const imgs = (alts) => alts.map((a) => `<img alt="${a}">`).join("");
+  const v027Window = ({ line, drops = [], odds, reel }) => {
+    document.body.innerHTML = `<main></main><div role="dialog"><div><div>Open</div><div>${line} ${imgs(drops)}</div>${div(odds)}<div>${imgs(reel)}</div><div>Quick animation</div><div>4 Total cases opened</div></div><div class="row"><button>Open all 3</button><button>Open 3</button></div></div>`;
+  };
+  it("never prices v0.27's wooden case or toolbox window, which show what they drop and odds like a case's", () => {
+    v027Window({
+      line: "A random resource stack, or a case",
+      drops: ["case1", "toolbox", "case2"],
+      odds: [
+        "1% Mythic",
+        "2% Legendary",
+        "2% Epic",
+        "13% Rare",
+        "20% Uncommon",
+        "62% Common",
+      ],
+      reel: ["bread", "case1", "iron"],
+    });
+    expect(findDialog()).toBeNull();
+    const toolOdds = [
+      "0.2% Mythic",
+      "1.3% Legendary",
+      "6.5% Epic",
+      "20% Rare",
+      "37% Uncommon",
+      "35% Common",
+    ];
+    v027Window({
+      line: "A random employee tool",
+      odds: toolOdds,
+      reel: ["sickle2", "flask1", "pickaxe1"],
+    });
+    expect(findDialog()).toBeNull();
+    // in words the reader does not know, the tools in its reel tell it
+    v027Window({ line: "", odds: toolOdds, reel: ["sickle2", "flask1"] });
+    expect(findDialog()).toBeNull();
+    // a normal case's window stays one
+    v027Window({
+      line: "Weapon 30%, Equipment 70%",
+      odds: CASE_LINES.slice(3, 9),
+      reel: ["knife", "gun", "helmet3"],
+    });
+    expect(findDialog()).toMatchObject({ kind: "case", code: "case1" });
+  });
   it("takes the case from its image before its odds", () => {
     withImage("case2");
     expect(findDialog()).toMatchObject({ kind: "case", code: "case2" });
