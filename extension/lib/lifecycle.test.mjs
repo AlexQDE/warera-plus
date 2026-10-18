@@ -4,6 +4,7 @@ import { startLens } from "./app.mjs";
 import { DEFAULTS } from "./settings.mjs";
 import {
   mapLootItem,
+  casesAnchor,
   withFallbackPalette,
   paletteFromSamples,
   rarityFromBorder,
@@ -392,6 +393,31 @@ describe("SPA lifecycle and DOM work", () => {
     window.history.pushState({}, "", "/market/equipments");
     await settle(5100);
     expect(document.querySelectorAll("#scrap-sniper-bar")).toHaveLength(1);
+  });
+  it("mounts the bar on the v0.27 auction page, under its tax notice", async () => {
+    window.history.replaceState({}, "", "/market/auctions");
+    document.body.innerHTML =
+      '<main><div id="tax"><div>Live auctions</div><span>Bids are shown before tax: when you bid, your country adds its 10% market tax. A bid at the max price wins at once.</span></div><div id="offers"></div></main>';
+    app = await startLens(marketRuntime({ panel: "craft" }));
+    await settle();
+    expect(document.querySelectorAll("#scrap-sniper-bar")).toHaveLength(1);
+    expect(bar().nextElementSibling.id).toBe("tax");
+    expect(bar().querySelectorAll('[data-action="tab"]')).toHaveLength(3);
+    expect(bodyText()).toContain("Chosen");
+  });
+  it("puts a start and max price in the v0.27 Start an auction form once a piece is picked", async () => {
+    window.history.replaceState({}, "", "/market/auctions");
+    document.body.innerHTML =
+      '<main><div id="tax"><span>Bids are shown before tax: your country adds its 10% market tax.</span></div></main><div role="dialog"><div>Start an auction</div><div class="tile" style="background-image: linear-gradient(45deg, red, black)"><img alt="sniper"><div>123</div><div>16<b>%</b></div><div>100<b>%</b></div></div><label><span>Start price</span><input name="startPrice" value="0"></label><label><span>Max price (instant buy)</span><input name="maxPrice" value="131.846"></label><span>A bid at it buys the item at once. From <span>82.404</span> to <span>131.846</span>, 100% to 160% of the estimated value.</span><button>Close</button><button type="submit">Start auction</button></div>';
+    const runtime = marketRuntime({ panel: "none" });
+    app = await startLens(runtime);
+    await settle(3000);
+    const hint = document.querySelector('[role="dialog"] .ss-auction');
+    expect(hint).not.toBeNull();
+    expect(hint.previousElementSibling.querySelector("input").name).toBe(
+      "maxPrice",
+    );
+    expect(salesCalls(runtime, "sniper")).toBeGreaterThanOrEqual(1);
   });
   it("reads the grid's item and the ledger's held item once each instead of looping between them", async () => {
     window.history.replaceState({}, "", "/market/equipments?item=jet");
@@ -922,5 +948,80 @@ describe("SPA lifecycle and DOM work", () => {
     s.cancel();
     await settle(100);
     expect(run).toHaveBeenCalledTimes(2);
+  });
+});
+
+// The inventory as the game draws it, read off app.warera.io (v0.26) and dev.warera.io (v0.27) on 2026-10-18:
+// a tile is the first box with a background around an item's image; v0.26 holds it one box under its grid (a
+// flex row), v0.27 three (a block, a flex box and the 48 px cell of a CSS grid). jsdom computes inline styles
+// only, so the tiles and grids carry theirs.
+const invTile = (code, wrappers) => {
+  let html = `<div style="background-color: rgb(16, 24, 32)"><img alt="${code}"><span>3</span></div>`;
+  for (let i = 0; i < wrappers; i++) html = `<div>${html}</div>`;
+  return html;
+};
+const inventory = (codes, wrappers, display = "grid") =>
+  `<main><section><div id="items" style="display: ${display}">${codes.map((c) => invTile(c, wrappers)).join("")}</div></section></main>`;
+const V026 = [1, "flex"];
+const V027 = [3, "grid"];
+// v0.27's wooden case window: its header lists what the case drops (case1, toolbox, case2) as images, and its
+// reel draws drop tiles
+const woodenWindow = `<div role="dialog"><div style="background-color: rgb(11, 17, 24)"><p>Drops <img alt="case1"><img alt="toolbox"><img alt="case2"></p><div style="display: flex">${[
+  "case1",
+  "bread",
+  "case2",
+]
+  .map(
+    (c) =>
+      `<div style="background-color: rgb(34, 34, 34)"><img alt="${c}"></div>`,
+  )
+  .join("")}</div></div></div>`;
+
+describe("the case strip's place on an inventory", () => {
+  it("goes before the grid that holds a lone case, at v0.26's depth and at v0.27's", () => {
+    for (const version of [V026, V027]) {
+      document.body.innerHTML = inventory(
+        ["woodenCase", "bread", "steel"],
+        ...version,
+      );
+      expect(casesAnchor()).toBe(document.getElementById("items"));
+      document.body.innerHTML = inventory(
+        ["case1", "woodenCase", "bread"],
+        ...version,
+      );
+      expect(casesAnchor()).toBe(document.getElementById("items"));
+    }
+  });
+  it("finds the grid of a case with no other item in it, never a far box that holds an image elsewhere", () => {
+    for (const version of [V026, V027]) {
+      document.body.innerHTML = inventory(["woodenCase"], ...version);
+      expect(casesAnchor()).toBe(document.getElementById("items"));
+    }
+    document.body.innerHTML = `<div id="app"><header><div style="background-color: rgb(1, 2, 3)"><img alt="scraps"></div></header>${inventory(["woodenCase"], ...V027)}</div>`;
+    expect(casesAnchor()).toBe(document.getElementById("items"));
+  });
+  it("leaves the game's case window out: its drop images neither move the strip nor take it in", () => {
+    document.body.innerHTML =
+      inventory(["woodenCase", "bread"], 3) + woodenWindow;
+    expect(casesAnchor()).toBe(document.getElementById("items"));
+    // the last wooden case opened: its tile is gone, the window stays open
+    document.body.innerHTML = inventory(["bread", "steel"], 3) + woodenWindow;
+    expect(casesAnchor()).toBeNull();
+  });
+  it("mounts the strip before the v0.27 inventory's grid, never in the open case window, and takes it off when the last case goes", async () => {
+    window.history.replaceState({}, "", `/user/${ME}/inventory`);
+    document.body.innerHTML =
+      inventory(["woodenCase", "bread", "steel"], 3) + woodenWindow;
+    app = await startLens(mockRuntime());
+    await settle();
+    expect(
+      document.getElementById("scrap-sniper-cases").nextElementSibling,
+    ).toBe(document.getElementById("items"));
+    document
+      .querySelector('#items img[alt="woodenCase"]')
+      .closest("#items > div")
+      .remove();
+    await settle(5100);
+    expect(document.getElementById("scrap-sniper-cases")).toBeNull();
   });
 });
