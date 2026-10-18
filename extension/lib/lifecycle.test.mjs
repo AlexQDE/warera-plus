@@ -4,6 +4,7 @@ import { startLens } from "./app.mjs";
 import { DEFAULTS } from "./settings.mjs";
 import {
   mapLootItem,
+  casesAnchor,
   withFallbackPalette,
   paletteFromSamples,
   rarityFromBorder,
@@ -947,5 +948,70 @@ describe("SPA lifecycle and DOM work", () => {
     s.cancel();
     await settle(100);
     expect(run).toHaveBeenCalledTimes(2);
+  });
+});
+
+// The inventory as the game draws it, read off app.warera.io (v0.26) and dev.warera.io (v0.27) on 2026-10-18:
+// a tile is the first box with a background around an item's image; v0.26 holds it one box under the grid,
+// v0.27 three (a block, a flex box and the grid's 48 px cell). jsdom computes inline styles only, so the
+// tiles carry theirs.
+const invTile = (code, wrappers) => {
+  let html = `<div style="background-color: rgb(16, 24, 32)"><img alt="${code}"><span>3</span></div>`;
+  for (let i = 0; i < wrappers; i++) html = `<div>${html}</div>`;
+  return html;
+};
+const inventory = (codes, wrappers) =>
+  `<main><section><div id="items" style="display: grid">${codes.map((c) => invTile(c, wrappers)).join("")}</div></section></main>`;
+// v0.27's wooden case window: its header lists what the case drops (case1, toolbox, case2) as images, and its
+// reel draws drop tiles
+const woodenWindow = `<div role="dialog"><div style="background-color: rgb(11, 17, 24)"><p>Drops <img alt="case1"><img alt="toolbox"><img alt="case2"></p><div style="display: flex">${[
+  "case1",
+  "bread",
+  "case2",
+]
+  .map(
+    (c) =>
+      `<div style="background-color: rgb(34, 34, 34)"><img alt="${c}"></div>`,
+  )
+  .join("")}</div></div></div>`;
+
+describe("the case strip's place on an inventory", () => {
+  it("goes before the grid that holds a lone case, at v0.26's depth and at v0.27's", () => {
+    for (const wrappers of [1, 3]) {
+      document.body.innerHTML = inventory(
+        ["woodenCase", "bread", "steel"],
+        wrappers,
+      );
+      expect(casesAnchor()).toBe(document.getElementById("items"));
+      document.body.innerHTML = inventory(
+        ["case1", "woodenCase", "bread"],
+        wrappers,
+      );
+      expect(casesAnchor()).toBe(document.getElementById("items"));
+    }
+  });
+  it("leaves the game's case window out: its drop images neither move the strip nor take it in", () => {
+    document.body.innerHTML =
+      inventory(["woodenCase", "bread"], 3) + woodenWindow;
+    expect(casesAnchor()).toBe(document.getElementById("items"));
+    // the last wooden case opened: its tile is gone, the window stays open
+    document.body.innerHTML = inventory(["bread", "steel"], 3) + woodenWindow;
+    expect(casesAnchor()).toBeNull();
+  });
+  it("mounts the strip before the v0.27 inventory's grid, never in the open case window, and takes it off when the last case goes", async () => {
+    window.history.replaceState({}, "", `/user/${ME}/inventory`);
+    document.body.innerHTML =
+      inventory(["woodenCase", "bread", "steel"], 3) + woodenWindow;
+    app = await startLens(mockRuntime());
+    await settle();
+    expect(
+      document.getElementById("scrap-sniper-cases").nextElementSibling,
+    ).toBe(document.getElementById("items"));
+    document
+      .querySelector('#items img[alt="woodenCase"]')
+      .closest("#items > div")
+      .remove();
+    await settle(5100);
+    expect(document.getElementById("scrap-sniper-cases")).toBeNull();
   });
 });

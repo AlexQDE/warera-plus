@@ -1009,12 +1009,33 @@ export function lowestCommonAncestor(a, b) {
 }
 
 const CASE_IMG_CODES = ["woodenCase", "case1", "case2"];
+/** An image of the page itself, not of one of the game's windows or of this extension's panels. */
+const pageImage = (img) => !img.closest('[role="dialog"], [data-lens]');
+
+/** The block that holds `tile` with the items next to it (the grid): its nearest ancestor with another item's image, or null. */
+function gridOf(tile) {
+  for (
+    let e = tile.parentElement;
+    e && e !== document.body;
+    e = e.parentElement
+  )
+    for (const img of e.querySelectorAll("img"))
+      if (
+        !tile.contains(img) &&
+        pageImage(img) &&
+        isItemImageAlt(img.getAttribute("alt"))
+      )
+        return e;
+  return null;
+}
 
 /**
  * Where the case strip goes: before the block that holds the case tiles. On
  * the resource market that is the grid (tiles named item-code-selector-<code>);
  * on an inventory page it is the tiles whose image is named by the case code
- * (cases have no skins). Null when no case tile is on the page.
+ * (cases have no skins), the game's windows left out: v0.27's wooden case
+ * window shows what it drops (case1, toolbox, case2) as images, in its header
+ * and its reel. Null when no case tile is on the page.
  */
 export function casesAnchor(root = document) {
   const byId = CASE_IMG_CODES.map((c) =>
@@ -1032,16 +1053,19 @@ export function casesAnchor(root = document) {
     return anchor;
   }
   const frames = [...root.querySelectorAll("img")]
-    .filter((i) => CASE_IMG_CODES.includes(i.getAttribute("alt")))
+    .filter(
+      (i) => CASE_IMG_CODES.includes(i.getAttribute("alt")) && pageImage(i),
+    )
     .map((i) => tileOf(i))
     .filter(Boolean);
   if (!frames.length) return null;
   let anchor = frames[0];
   for (const f of frames.slice(1))
     anchor = lowestCommonAncestor(anchor, f) ?? anchor;
-  // one tile alone: step out of its cell so the strip does not land inside a tile
+  // one tile alone: the grid that holds it with the other items, as two case tiles give; v0.27 wraps a tile two
+  // boxes deeper than v0.26, and two steps up stayed in its 48 px cell (2026-10-18: the strip stood a letter wide)
   if (frames.length === 1)
-    anchor = anchor.parentElement?.parentElement ?? anchor;
+    anchor = gridOf(anchor) ?? anchor.parentElement?.parentElement ?? anchor;
   return anchor;
 }
 
