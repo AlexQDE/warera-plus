@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, it, expect, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { suggestPrice } from "./pricing.mjs";
+import { startLens } from "./app.mjs";
+import { DEFAULTS } from "./settings.mjs";
 import {
   findSellForm,
   readSellForm,
@@ -14,6 +18,51 @@ import {
 const jet = `<div class="tile" style="background-image: linear-gradient(45deg, red, black)"><img alt="winterJet" src="x.png"><div>270</div><div>50<b>%</b></div><div>100<b>%</b></div></div>`;
 const FORM = (tiles = jet) =>
   `<main></main><div role="dialog"><div class="backdrop"></div><div class="wrapper"><div class="card"><div>Sell an item</div><div class="slots">${tiles}<div>+</div></div><div>Items</div><div>Fighter Jet</div><div>Mythic</div><div>Market average <span>484.55</span></div><div class="block"><label><span>PRICE</span><div><div><input name="price" value="504.177"></div><button>-</button><button>+</button></div></label><div>Suggested price <span>504.177</span></div><div class="range"><span>353</span><span>504.177</span><span>806.5</span></div></div><div>You receive <span>504.177</span></div><button>Close</button><button>Put on sale</button></div></div></div>`;
+
+const NOW = Date.parse("2026-10-27T12:00:00Z");
+const tankFills = [
+  ...[199, 200, 201].map((price) => ({
+    price,
+    skills: { attack: 168, criticalChance: 33 },
+  })),
+  ...[163, 164, 164, 164, 165].map((price) => ({
+    price,
+    skills: { attack: 147, criticalChance: 33 },
+  })),
+].map((f, i) => ({
+  ...f,
+  at: new Date(NOW - (i + 1) * 3600e3).toISOString(),
+  state: 100,
+  code: "tank",
+}));
+
+function liveSell(attack = 147) {
+  document.body.innerHTML = readFileSync(
+    "fixtures/v027-live-sell.html",
+    "utf8",
+  );
+  for (const img of document.querySelectorAll('img[alt="hamsterTank"]')) {
+    if (!img.closest("li"))
+      img.parentElement.parentElement.querySelector("span span").textContent =
+        String(attack);
+  }
+  return document.querySelector('[role="dialog"]');
+}
+
+function pricePiece(piece, fills = tankFills) {
+  return {
+    code: piece.code,
+    game: piece.game,
+    s: suggestPrice({
+      code: piece.code,
+      skills: piece.skills,
+      fills,
+      asks: piece.asks,
+      game: piece.game,
+      now: NOW,
+    }),
+  };
+}
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -169,5 +218,214 @@ describe("the sell form", () => {
     div.innerHTML = near;
     expect(div.textContent.replace(/\s+/g, " ")).toContain("175 for all");
     expect(div.querySelector("[data-sell-use]").dataset.sellUse).toBe("175");
+  });
+});
+
+describe("the v0.27 sell window", () => {
+  it("finds the dialog and reads each picked piece, its starting price, range and similar offers", () => {
+    const form = liveSell();
+    expect(findSellForm()).toBe(form);
+    const read = readSellForm(form);
+    expect(read.perItem).toBe(true);
+    expect(read.items).toHaveLength(2); // neither slot copies nor offers are picked pieces
+    expect(read.items[0]).toMatchObject({
+      code: "tank",
+      stats: [147, 33],
+      skills: { attack: 147, criticalChance: 33 },
+      itemId: "6ae09befd6a885ddc946d478",
+      game: { suggested: 164.99, min: 122.654, max: 280.352 },
+      asks: [
+        { price: 163.9, skills: { attack: 148, criticalChance: 33 } },
+        { price: 164.99, skills: { attack: 147, criticalChance: 33 } },
+        { price: 166.3, skills: { attack: 147, criticalChance: 33 } },
+      ],
+    });
+    expect(read.items[1]).toMatchObject({
+      code: "boots5",
+      stats: [32],
+      skills: { dodge: 32 },
+      itemId: "6ae09befd6a885ddc946d479",
+      game: { suggested: 190, min: 133, max: 304 },
+      asks: [{ price: 192.5, skills: { dodge: 32 } }],
+    });
+    for (const piece of read.items) {
+      expect(piece.input.name).toBe(`price-${piece.itemId}`);
+      expect(piece.form.contains(piece.input)).toBe(true);
+      expect(piece.form.querySelectorAll('input[name^="price-"]')).toHaveLength(
+        1,
+      );
+    }
+  });
+
+  it("keeps the first-seen starting price per itemId through typing, reordering and replacing an input", () => {
+    const form = liveSell();
+    const [tank, boots] = readSellForm(form).items;
+    tank.input.value = "210";
+    boots.input.value = "199";
+    const replacement = tank.input.cloneNode(true);
+    replacement.value = "220";
+    tank.input.replaceWith(replacement);
+    tank.form.parentElement.before(boots.form.parentElement);
+    const items = readSellForm(form).items;
+    expect(items.find((p) => p.itemId === tank.itemId).game.suggested).toBe(
+      164.99,
+    );
+    expect(items.find((p) => p.itemId === boots.itemId).game.suggested).toBe(
+      190,
+    );
+    form.remove();
+    const reopened = liveSell();
+    reopened.querySelector('input[name^="price-"]').value = "175";
+    expect(readSellForm(reopened).items[0].game.suggested).toBe(175);
+  });
+
+  it("prices a high-attack tank from both stats and warns about the game's lower starting price", () => {
+    const form = liveSell(168);
+    const [tank] = readSellForm(form).items;
+    const pick = pricePiece(tank);
+    expect(pick.s).toMatchObject({
+      price: 200,
+      fair: 200,
+      sold: { level: "same", n: 3 },
+      floor: null,
+    });
+    renderSellHint(tank, sellHintHtml([pick]));
+    const hint = form.querySelector(".ss-sell");
+    expect(hint.textContent).toContain("200 what sells");
+    expect(hint.textContent).toContain("sold 200 · 3 same · 24 h");
+    expect(hint.querySelector(".lens-neg").textContent).toBe(
+      "the game starts you at 164.99 from an offer with other stats; pieces with these stats sell ≈ 200",
+    );
+  });
+
+  it("warns only when the start is more than 5% below same- or similar-stat fair value", () => {
+    const [tank] = readSellForm(liveSell(168)).items;
+    const pick = pricePiece(tank);
+    const div = document.createElement("div");
+    const warning = (start, level) => {
+      div.innerHTML = sellHintHtml([
+        {
+          ...pick,
+          game: { suggested: start },
+          s: { ...pick.s, sold: { ...pick.s.sold, level } },
+        },
+      ]);
+      return div.querySelector(".lens-neg");
+    };
+    expect(warning(164.99, "similar")).not.toBeNull();
+    expect(warning(190, "same")).toBeNull();
+    expect(warning(189.999, "same")).not.toBeNull();
+    expect(warning(164.99, "item")).toBeNull();
+    expect(warning(null, "same")).toBeNull();
+  });
+
+  it("keeps two hints and their use buttons separate, stops every hint click and never submits", () => {
+    const form = liveSell(168);
+    const read = readSellForm(form);
+    const [tank, boots] = read.items;
+    const tankPick = pricePiece(tank);
+    const bootPick = pricePiece(boots, []);
+    const dialogClick = vi.fn();
+    form.addEventListener("click", dialogClick);
+    const submitted = vi.fn((e) => e.preventDefault());
+    form.querySelector("form").addEventListener("submit", submitted);
+    const inputs = [vi.fn(), vi.fn()];
+    read.items.forEach((p, i) => p.input.addEventListener("input", inputs[i]));
+    for (let i = 0; i < 2; i++) {
+      renderSellHint(tank, sellHintHtml([tankPick]));
+      renderSellHint(boots, sellHintHtml([bootPick]));
+    }
+    const hints = [...form.querySelectorAll(".ss-sell")];
+    expect(hints).toHaveLength(2);
+    expect(
+      hints.every((h) => h.previousElementSibling.tagName === "LABEL"),
+    ).toBe(true);
+    expect(form.textContent).not.toContain("list apart");
+    // A framework-owned instance setter must be bypassed, like the existing form does.
+    const instanceSetter = vi.fn();
+    Object.defineProperty(tank.input, "value", {
+      configurable: true,
+      get() {
+        return Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype,
+          "value",
+        ).get.call(this);
+      },
+      set: instanceSetter,
+    });
+    hints[0].querySelector("b").click();
+    hints[0].querySelector(".lens-neg").click();
+    hints[0].click();
+    hints[0].querySelector("[data-sell-use]").click();
+    expect(tank.input.value).toBe("200");
+    expect(boots.input.value).toBe("190");
+    expect(instanceSetter).not.toHaveBeenCalled();
+    expect(inputs[0]).toHaveBeenCalledTimes(1);
+    expect(inputs[0].mock.calls[0][0].bubbles).toBe(true);
+    expect(inputs[1]).not.toHaveBeenCalled();
+    hints[1].querySelector("[data-sell-use]").click();
+    expect(boots.input.value).toBe("192.499");
+    expect(tank.input.value).toBe("200");
+    expect(inputs[1]).toHaveBeenCalledTimes(1);
+    expect(dialogClick).not.toHaveBeenCalled();
+    expect(submitted).not.toHaveBeenCalled();
+  });
+
+  it("wires each piece to its own sales, dialog asks and cached market asks", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    let app;
+    try {
+      window.history.replaceState({}, "", "/market/equipments");
+      document.body.innerHTML = readFileSync(
+        "fixtures/v027-live-market.html",
+        "utf8",
+      )
+        .replaceAll("gsg9Gloves", "dieselBoots")
+        .replace("<span><span>4</span>%", "<span><span>32</span>%")
+        .replaceAll("1<span>.5</span>", "188<span>.4</span>");
+      const runtime = {
+        sendMessage: vi.fn(async (msg) => {
+          if (msg.type === "getSettings")
+            return {
+              settings: { ...DEFAULTS },
+              hasKey: true,
+              revision: 1,
+              authRevision: 1,
+            };
+          if (msg.type === "sales")
+            return {
+              sales: {
+                code: msg.itemCode,
+                at: new Date(NOW).toISOString(),
+                complete: true,
+                fills: msg.itemCode === "tank" ? tankFills : [],
+              },
+            };
+          return {};
+        }),
+      };
+      app = await startLens(runtime);
+      await vi.advanceTimersByTimeAsync(1000);
+      // The offer from the last market scan remains useful in an inventory sale.
+      window.history.replaceState({}, "", "/inventory");
+      const form = liveSell(168);
+      app.scan();
+      await vi.advanceTimersByTimeAsync(1500);
+      const codes = runtime.sendMessage.mock.calls
+        .filter(([m]) => m.type === "sales")
+        .map(([m]) => m.itemCode);
+      expect(codes).toContain("tank");
+      expect(codes).toContain("boots5");
+      const hints = [...form.querySelectorAll(".ss-sell")];
+      expect(hints).toHaveLength(2);
+      expect(hints[0].textContent).toContain("200 what sells");
+      expect(hints[0].querySelector(".lens-neg")).not.toBeNull();
+      expect(hints[1].textContent).toContain("188.399 first in line");
+    } finally {
+      app?.dispose();
+      vi.useRealTimers();
+      window.history.replaceState({}, "", "/");
+    }
   });
 });

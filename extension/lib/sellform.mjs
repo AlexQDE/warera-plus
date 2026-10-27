@@ -1,7 +1,6 @@
-// The game's sell form ("+ NEW ITEM OFFER"): which pieces are picked, the
-// game's own estimate and the range it allows, and one line of ours under
-// PRICE with a suggested price (pricing.mjs) and a Use button that writes it
-// into the game's input. Nothing is listed: PUT ON SALE stays the player's.
+// The game's sell forms: the old shared PRICE and v0.27's price per piece.
+// Each hint uses sales of both stats and the game's allowed range. Use only
+// writes into its input: PUT ON SALE stays the player's.
 import { gold, escapeHtml as esc } from "./format.mjs";
 import { setHtml } from "./ui.mjs";
 import { slotFromAlt, isItemImageAlt, slotName } from "./dom.mjs";
@@ -12,14 +11,20 @@ const NUMBER = /^[\d,]+(?:\.\d+)?$/;
 const num = (/** @type {string} */ t) => Number(t.replace(/,/g, ""));
 /** Pieces whose prices differ more than this are not sold at one price. */
 const SPREAD = 0.15;
+const PIECE_PRICE = 'input[name^="price-"]';
+// The initial value belongs to the item, even when the game replaces its input.
+// Closing the dialog releases the map, so a new sale starts from a fresh offer.
+const startingPrices = new WeakMap();
 
-/** The open sell form: a dialog that starts "Sell an item" and holds the price input. */
+/** The open sell form, with either a shared price or a price for each item. */
 export function findSellForm(root = document) {
   return (
     [...root.querySelectorAll('[role="dialog"]')].find(
       (d) =>
-        /^\s*sell an item/i.test(d.textContent ?? "") &&
-        !!d.querySelector('input[name="price"]'),
+        (/^\s*sell an item/i.test(d.textContent ?? "") &&
+          !!d.querySelector('input[name="price"]')) ||
+        (/^\s*(?:×\s*)?sell items\b/i.test(d.textContent ?? "") &&
+          !!d.querySelector(PIECE_PRICE)),
     ) ?? null
   );
 }
@@ -38,14 +43,22 @@ function tileOf(img, stop) {
  * stats is not a piece.
  * @param {Element} form
  */
-function pickedItems(form) {
+function pickedItems(form, offer = false) {
   const items = [];
   for (const img of form.querySelectorAll("img")) {
     const alt = img.getAttribute("alt");
     if (!isItemImageAlt(alt)) continue;
     const tile = tileOf(img, form);
-    const read = tile ? tileStats(tileTokens(tile)) : null;
-    const code = read ? tileCode(slotFromAlt(alt), read.stats) : null;
+    if (!tile || img.closest("[data-lens]")) continue;
+    const tokens = tileTokens(tile);
+    let read = tileStats(tokens);
+    let code = read ? tileCode(slotFromAlt(alt), read.stats) : null;
+    // Offers may omit durability. Add it only when the printed stats do not
+    // already make a complete piece, so crit is never mistaken for durability.
+    if (offer && (!code || !rowSkills(code, read?.stats))) {
+      read = tileStats([...tokens, "100%"]);
+      code = read ? tileCode(slotFromAlt(alt), read.stats) : null;
+    }
     if (!code || !read) continue;
     items.push({
       code,
@@ -56,12 +69,80 @@ function pickedItems(form) {
   return items;
 }
 
+/** The piece's header and its offers share a section with exactly one price. */
+function pieceSection(input, form) {
+  let header = null;
+  for (let e = input.parentElement; e && e !== form; e = e.parentElement) {
+    if (e.querySelectorAll(PIECE_PRICE).length !== 1) break;
+    if (!header && pickedItems(e).length) header = e;
+    // The nearest tile/input ancestor can be just the header; the list is
+    // its sibling in the next ancestor of the same piece.
+    if (header && e.querySelector("ul")) return e;
+  }
+  return header;
+}
+
+/** Before-tax offers only: never the player's "Your offer" marker. */
+function pieceAsks(section, code) {
+  const asks = [];
+  for (const li of section.querySelectorAll("ul li")) {
+    if (/\byour offer\b/i.test(li.textContent ?? "")) continue;
+    const item = pickedItems(li, true).find((p) => p.code === code && p.skills);
+    if (!item) continue;
+    // The price is a span group after the seller and badges. Its integer
+    // and fraction are separate spans; read the outer group, not just 163.
+    const spans = [...li.querySelectorAll("span")].filter(
+      (e) => !tileOf(e, li) && NUMBER.test(tileTokens(e).join("")),
+    );
+    const amount = spans
+      .filter((e) => !spans.some((other) => other !== e && other.contains(e)))
+      .at(-1);
+    const price = amount ? num(tileTokens(amount).join("")) : null;
+    if (price != null && price > 0 && Number.isFinite(price))
+      asks.push({ price, skills: item.skills });
+  }
+  return asks;
+}
+
+function readPieces(form, inputs) {
+  let starts = startingPrices.get(form);
+  if (!starts) startingPrices.set(form, (starts = new Map()));
+  const items = [];
+  for (const input of inputs) {
+    const section = pieceSection(input, form);
+    const item = section ? pickedItems(section)[0] : null;
+    if (!section || !item) continue;
+    const itemId = input.name.slice("price-".length);
+    if (!starts.has(itemId))
+      starts.set(itemId, NUMBER.test(input.value) ? num(input.value) : null);
+    const range =
+      /\bfrom\s*([\d,]+(?:\.\d+)?)\s*to\s*([\d,]+(?:\.\d+)?)\s*before\s+tax\b/i.exec(
+        tileTokens(section).join(" "),
+      );
+    items.push({
+      ...item,
+      itemId,
+      form: section,
+      input,
+      game: {
+        suggested: starts.get(itemId),
+        min: range ? num(range[1]) : null,
+        max: range ? num(range[2]) : null,
+      },
+      asks: pieceAsks(section, item.code),
+    });
+  }
+  return { form, input: null, items, game: null, perItem: true };
+}
+
 /**
  * The picked pieces (code, stats), the price input, and the game's numbers:
  * its "Market average", its "Suggested price" and the range around it.
  * @param {Element} form
  */
 export function readSellForm(form) {
+  const inputs = [...form.querySelectorAll(PIECE_PRICE)];
+  if (inputs.length) return readPieces(form, inputs);
   const input = /** @type {HTMLInputElement | null} */ (
     form.querySelector('input[name="price"]')
   );
@@ -111,7 +192,7 @@ const priceText = (/** @type {number} */ v) =>
  * one price for all when they are close (the lowest), else each piece's
  * price and no Use, since one price would sell the dearer ones cheap.
  * `noKey`: no API key to read sales with, so the price rests on the asks.
- * @param {Array<{ code: string, noKey?: boolean, s: ReturnType<typeof import("./pricing.mjs").suggestPrice> }>} picks
+ * @param {Array<{ code: string, noKey?: boolean, game?: { suggested?: number | null }, s: ReturnType<typeof import("./pricing.mjs").suggestPrice> }>} picks
  */
 export function sellHintHtml(picks) {
   const priced = picks.filter((p) => p.s?.price != null);
@@ -146,13 +227,23 @@ export function sellHintHtml(picks) {
         .filter(Boolean)
         .join(" · ")
     : `${priced.length} pieces, the lowest of their prices`;
-  return `<div><span class="lens-brand">◈</span> <b>${priceText(lo)}</b> <small>${one ? esc(one.why) : "for all"}</small> ${use}</div>${basis ? `<small>${basis}</small>` : ""}`;
+  const start = priced[0].game?.suggested;
+  const warning =
+    one &&
+    (one.sold.level === "same" || one.sold.level === "similar") &&
+    one.fair != null &&
+    start != null &&
+    start > 0 &&
+    start < one.fair * 0.95
+      ? `<small class="lens-neg">the game starts you at ${priceText(start)} from an offer with other stats; pieces with these stats sell ≈ ${gold(one.fair)}</small>`
+      : "";
+  return `<div><span class="lens-brand">◈</span> <b>${priceText(lo)}</b> <small>${one ? esc(one.why) : "for all"}</small> ${use}</div>${basis ? `<small>${basis}</small>` : ""}${warning}`;
 }
 
 /**
  * Show `html` under the form's PRICE label (one element, reused), and wire
  * Use to write its price into the game's input the way typing would.
- * @param {ReturnType<typeof readSellForm>} read @param {string} html
+ * @param {{ form: Element, input: HTMLInputElement | null, itemId?: string }} read @param {string} html
  */
 export function renderSellHint(read, html) {
   const label = read.input?.closest("label");
@@ -164,22 +255,24 @@ export function renderSellHint(read, html) {
     el = document.createElement("div");
     el.className = "ss-sell";
     el.dataset.lens = "";
-    el.addEventListener("click", (e) => {
-      const b = /** @type {HTMLElement | null} */ (
-        /** @type {Element} */ (e.target).closest("[data-sell-use]")
-      );
-      if (!b || !read.input) return;
-      e.preventDefault();
-      e.stopPropagation();
-      // the prototype's setter, then an input event: the game's form sees a typed value
-      const setter = Object.getOwnPropertyDescriptor(
-        Object.getPrototypeOf(read.input),
-        "value",
-      )?.set;
-      setter?.call(read.input, b.dataset.sellUse ?? "");
-      read.input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
   }
+  if (read.itemId) el.dataset.sellItem = read.itemId;
+  // Refresh the input reference on every render in case the game replaced it.
+  el.onclick = (e) => {
+    e.stopPropagation(); // every click, including the basis and warning, stays ours
+    const b = /** @type {HTMLElement | null} */ (
+      /** @type {Element} */ (e.target).closest("[data-sell-use]")
+    );
+    if (!b || !read.input) return;
+    e.preventDefault();
+    // the prototype's setter, then an input event: the game's form sees a typed value
+    const setter = Object.getOwnPropertyDescriptor(
+      Object.getPrototypeOf(read.input),
+      "value",
+    )?.set;
+    setter?.call(read.input, b.dataset.sellUse ?? "");
+    read.input.dispatchEvent(new Event("input", { bubbles: true }));
+  };
   if (label.nextElementSibling !== el)
     label.insertAdjacentElement("afterend", el);
   setHtml(el, html);

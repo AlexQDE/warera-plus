@@ -24,6 +24,32 @@ describe("reading a listing's age", () => {
 });
 
 describe("suggesting a price", () => {
+  it("uses both tank stats despite a closest-crit starting price and cheap low-attack offers", () => {
+    const tank = (price, attack, crit) => ({
+      price,
+      skills: { attack, criticalChance: crit },
+    });
+    const fills = [
+      ...[199, 200, 201].map((p) => tank(p, 168, 33)),
+      ...[163, 164, 164, 164, 165].map((p) => tank(p, 147, 33)),
+      ...[150, 151, 152].map((p) => tank(p, 168, 26)),
+    ].map((f, i) => ({ ...f, at: hoursAgo(i + 1) }));
+    const s = suggestPrice({
+      code: "tank",
+      skills: { attack: 168, criticalChance: 33 },
+      fills,
+      asks: [tank(163.9, 148, 33), tank(164.99, 147, 33), tank(166.3, 147, 33)],
+      game: { suggested: 164.99, min: 122.654, max: 280.352 },
+      now: NOW,
+    });
+    expect(s).toMatchObject({
+      price: 200,
+      fair: 200,
+      sold: { level: "same", n: 3 },
+      floor: null,
+      clamped: false,
+    });
+  });
   it("lists first in line when fresh asks of the same stats sit above what sold: prices are rising", () => {
     // what sold today at dodge 32 is lower than what is listed now, and the cheapest ask is ten minutes old
     const fills = [185, 184, 186, 183, 187].map((p, i) => boots(p, 32, i + 1));
