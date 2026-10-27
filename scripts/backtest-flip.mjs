@@ -1,9 +1,13 @@
 // FLIP on the game's own sales: how often a FLIP tag would have been right on
-// an item's market over the last days, three ways: A, the value without the
+// an item's market over the last days, four ways: A, the value without the
 // market's fall (as before 3.11.0); C, sales alike brought down to today's
 // level by the market's fall; C + cap, C no higher than the second cheapest
-// offer of stats at least as good (as shipped). The sales feed answers only
-// an API key, so this runs with yours, from the environment; it only reads.
+// offer of stats at least as good (as shipped); C + cap + fall, C carried on
+// down by the same fall to the moment a piece bought now would sell again
+// (the item's median listed-to-sold wait, 48 hours at most), then capped as
+// C + cap. The extension does not do the last: this is the check of whether
+// it should. The sales feed answers only an API key, so this runs with yours,
+// from the environment; it only reads.
 //
 //   WARERA_API_KEY=<key> node scripts/backtest-flip.mjs [codes…] [--days 7] [--every 6] [--tax 0] [--flip 10] [--pick 4] [--pages 80] [--help]
 //
@@ -41,6 +45,8 @@ import {
 import { comparableFills } from "../extension/lib/resale.mjs";
 import { STAT_RANGES } from "../extension/lib/stats.mjs";
 
+/** C + cap + fall carries C down over the item's median listed-to-sold wait, this long at most. */
+const MAX_FALL_HOURS = 48;
 /** The options: each takes a number, with its default and the range it may take. */
 const OPTIONS = {
   days: { value: 7, want: "a number of days above 0", ok: (n) => n > 0 },
@@ -70,7 +76,9 @@ const USAGE = `Usage: WARERA_API_KEY=<key> node scripts/backtest-flip.mjs [codes
 
 How often FLIP would have been right at resale on the game's own sales: A, the
 value without the market's fall; C, sales alike brought down to today; C + cap,
-as shipped. Without codes, every item's last 7 days are read and the ones that
+as shipped; C + cap + fall, C carried on down to the resale (the median
+listed-to-sold wait, ${MAX_FALL_HOURS} h at most) before the cap, which the extension does
+not do. Without codes, every item's last 7 days are read and the ones that
 fell most are checked. It only reads.
 
 Options:
@@ -196,7 +204,7 @@ async function scan() {
   return picked;
 }
 
-const WAYS = ["A", "C", "C + cap"];
+const WAYS = ["A", "C", "C + cap", "C + cap + fall"];
 
 /** Walk one item's last `DAYS` and count each way's tags against what the pieces sold for at resale. */
 async function check(code) {
@@ -237,6 +245,10 @@ async function check(code) {
     first ??= t;
     last = t;
     waits.push(wait);
+    // C + cap + fall: C's fall carried on to the resale, over the wait (MAX_FALL_HOURS at most)
+    const toResale = Math.exp(
+      (marketTrend(code, held).log * Math.min(wait, MAX_FALL_HOURS)) / 24,
+    );
     const book = all
       .filter(
         (f) =>
@@ -276,12 +288,15 @@ async function check(code) {
       });
       const shipped = similarValue(code, offer.skills, held, { now: t });
       const cap = offerCap(code, offer.skills, book, i, TAX)?.cap ?? Infinity;
-      const tagged = (v, ceiling = Infinity) =>
-        v.matched && v.value != null && Math.min(v.value, ceiling) >= bar;
+      const tagged = (v, ceiling = Infinity, factor = 1) =>
+        v.matched &&
+        v.value != null &&
+        Math.min(v.value * factor, ceiling) >= bar;
       const tags = {
         A: tagged(plain),
         C: tagged(shipped),
         "C + cap": tagged(shipped, cap),
+        "C + cap + fall": tagged(shipped, cap, toResale),
       };
       for (const w of WAYS) {
         if (!tags[w]) continue;
@@ -314,17 +329,20 @@ async function check(code) {
 
 function print(count, real, indent) {
   console.log(
-    `${indent}${"".padEnd(8)}${"tags".padStart(6)}${"real".padStart(6)}${"precision".padStart(11)}${"lost gold".padStart(11)}${"median gain".padStart(13)}${"recall".padStart(8)}`,
+    `${indent}${"".padEnd(15)}${"tags".padStart(6)}${"real".padStart(6)}${"precision".padStart(11)}${"lost gold".padStart(11)}${"median gain".padStart(13)}${"recall".padStart(8)}`,
   );
   for (const w of WAYS) {
     const c = count[w];
     console.log(
-      `${indent}${w.padEnd(8)}${String(c.tags).padStart(6)}${String(c.real).padStart(6)}${ratio(c.real, c.tags).padStart(11)}${ratio(c.lost, c.tags).padStart(11)}${signed(median(c.gains)).padStart(13)}${ratio(c.real, real).padStart(8)}`,
+      `${indent}${w.padEnd(15)}${String(c.tags).padStart(6)}${String(c.real).padStart(6)}${ratio(c.real, c.tags).padStart(11)}${ratio(c.lost, c.tags).padStart(11)}${signed(median(c.gains)).padStart(13)}${ratio(c.real, real).padStart(8)}`,
     );
   }
 }
 
 try {
+  console.log(
+    `A: no fall · C: sales alike brought down to today · C + cap: as shipped · C + cap + fall: C carried on down to the resale, over the median wait (${MAX_FALL_HOURS} h at most), not in the extension`,
+  );
   console.log(
     `FLIP at ${FLIP < 0 ? "−" : "+"}${Math.abs(FLIP * 100)}%, tax ${TAX}%; moments every ${EVERY} h over the last ${DAYS} days; a tag is real when the piece's stats sold for that much in the ${RESALE_HOURS} h around the moment + the item's median wait`,
   );

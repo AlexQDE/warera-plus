@@ -10,7 +10,7 @@ Reload the extension itself (its card must read 3.11.0), then the game. Nothing 
 - **A steady or rising item.** Details has no trend part; "Sells for" is the median of the sales it lists.
 - **The cap.** A card with two or more other offers whose every stat is at least its own: Details reads "cap: 2nd offer X" (with "before tax" in a taxed country, X the second cheapest of those offers' prices over 1 + the notice's rate), and the line's gain is against the lower of "Sells for" and X. Such a card tags FLIP only when X too sits the FLIP margin above its price. A card with fewer than two such offers shows no cap.
 - **The other values.** The Sell items hint for a piece of a falling item and the Ledger's held value of one move down with the market as the card does; the picker's ↗ Flip counts fewer bought pieces on a falling item.
-- **On the game's sales.** With your key in `WARERA_API_KEY`, run `node scripts/backtest-flip.mjs` (or name the codes that fell) and keep its tables with the release: per item, A, C and C + cap's tags, how many were right at resale, the gold lost and the median gain.
+- **On the game's sales.** With your key in `WARERA_API_KEY`, run `node scripts/backtest-flip.mjs` (or name the codes that fell) and keep its tables with the release: per item, the tags of A, C, C + cap and C + cap + fall, how many were right at resale, the gold lost and the median gain. C + cap + fall against C + cap decides whether the fall to the resale moment goes into the extension.
 
 ## 3.10.1 on the live page (v0.27)
 
