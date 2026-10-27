@@ -41,11 +41,13 @@ const iconOf = (/** @type {Element | null | undefined} */ el) =>
   el?.querySelector("svg")?.innerHTML ?? null;
 /** The innermost matching text outside dealt cards and the extension's nodes. */
 function textNodes(root, re, inCard = () => false) {
+  // the text first: it rules out nearly every element, before the costlier closest() and contains()
   return [...root.querySelectorAll("span, div, p")].filter((e) => {
-    if (!native(e) || inCard(e)) return false;
     const t = e.textContent?.trim() ?? "";
     return (
       re.test(t) &&
+      native(e) &&
+      !inCard(e) &&
       ![...e.children].some((c) => (c.textContent?.trim() ?? "") === t)
     );
   });
@@ -59,9 +61,9 @@ function textNodes(root, re, inCard = () => false) {
 function statChips(dialog, inCard) {
   return [...dialog.querySelectorAll("div")].find(
     (e) =>
+      e.children.length === 3 &&
       native(e) &&
       !inCard(e) &&
-      e.children.length === 3 &&
       [...e.children].every(
         (c) =>
           c.querySelector("svg") &&
