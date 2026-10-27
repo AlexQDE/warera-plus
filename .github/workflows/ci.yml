@@ -16,10 +16,10 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run check
-      # the Chrome Web Store package, downloadable from the run
+      # the Chrome Web Store package itself, warera-plus-<version>.zip, downloadable from the run
       - run: npm run package
       - uses: actions/upload-artifact@v7
         with:
-          name: warera-plus-store-package
           path: dist/*.zip
+          archive: false
           if-no-files-found: error
