@@ -5,7 +5,7 @@
 // offer of stats at least as good (as shipped). The sales feed answers only
 // an API key, so this runs with yours, from the environment; it only reads.
 //
-//   WARERA_API_KEY=<key> node scripts/backtest-flip.mjs [codes…] [--days 7] [--every 6] [--tax 0] [--flip 10] [--pick 4] [--pages 80]
+//   WARERA_API_KEY=<key> node scripts/backtest-flip.mjs [codes…] [--days 7] [--every 6] [--tax 0] [--flip 10] [--pick 4] [--pages 80] [--help]
 //
 // Without codes it reads every item's last 7 days as the extension does (10
 // pages at most), prints how much each market fell a day as C reads it, and
@@ -26,6 +26,10 @@
 // around T + the item's median listed-to-sold wait, the offer's own sale left
 // out; an offer with too few such sales is not judged. Lost gold: tags that
 // would have sold for less than they cost.
+//
+// --help, an option it does not know and an option without a number in its
+// range print the usage and leave before the key is looked at or anything is
+// read.
 import { fetchSales, holdUntil } from "../extension/lib/api.mjs";
 import {
   similarValue,
@@ -37,21 +41,81 @@ import {
 import { comparableFills } from "../extension/lib/resale.mjs";
 import { STAT_RANGES } from "../extension/lib/stats.mjs";
 
-const args = process.argv.slice(2);
-const opt = (name, fallback) => {
-  const i = args.indexOf(name);
-  return i >= 0 ? Number(args[i + 1]) : fallback;
+/** The options: each takes a number, with its default and the range it may take. */
+const OPTIONS = {
+  days: { value: 7, want: "a number of days above 0", ok: (n) => n > 0 },
+  every: { value: 6, want: "a number of hours above 0", ok: (n) => n > 0 },
+  tax: {
+    value: 0,
+    want: "a rate from 0 to 100",
+    ok: (n) => n >= 0 && n <= 100,
+  },
+  flip: {
+    value: 10,
+    want: "a margin from -50 to 500, as the settings take",
+    ok: (n) => n >= -50 && n <= 500,
+  },
+  pick: {
+    value: 4,
+    want: "a whole number from 1",
+    ok: (n) => Number.isInteger(n) && n >= 1,
+  },
+  pages: {
+    value: 80,
+    want: "a whole number from 1",
+    ok: (n) => Number.isInteger(n) && n >= 1,
+  },
 };
-const DAYS = opt("--days", 7);
-const EVERY = opt("--every", 6);
-const TAX = opt("--tax", 0);
-const FLIP = opt("--flip", 10) / 100;
-const PICK = opt("--pick", 4);
-const PAGES = opt("--pages", 80);
-// the codes: every argument that is neither an option nor an option's value
-const codes = args.filter(
-  (a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--"),
-);
+const USAGE = `Usage: WARERA_API_KEY=<key> node scripts/backtest-flip.mjs [codes…] [options]
+
+How often FLIP would have been right at resale on the game's own sales: A, the
+value without the market's fall; C, sales alike brought down to today; C + cap,
+as shipped. Without codes, every item's last 7 days are read and the ones that
+fell most are checked. It only reads.
+
+Options:
+  --days <n>    days of moments replayed (${OPTIONS.days.value})
+  --every <h>   hours between moments (${OPTIONS.every.value})
+  --tax <pct>   your country's market tax, paid on top of an offer's price (${OPTIONS.tax.value})
+  --flip <pct>  the FLIP margin (${OPTIONS.flip.value})
+  --pick <n>    how many of the items that fell a scan checks (${OPTIONS.pick.value})
+  --pages <n>   pages of 100 sales read for an item at most (${OPTIONS.pages.value})
+  -h, --help    this text; nothing is read
+
+Codes: ${Object.keys(STAT_RANGES).join(" ")}`;
+
+/** The usage, and out: on stdout for --help, on stderr after what was wrong. Nothing has been read. */
+function usage(problem = null) {
+  if (problem) console.error(`${problem}\n\n${USAGE}`);
+  else console.log(USAGE);
+  process.exit(problem ? 1 : 0);
+}
+
+const codes = [];
+const args = process.argv.slice(2);
+for (let i = 0; i < args.length; i++) {
+  const a = args[i];
+  if (a === "-h" || a === "--help") usage();
+  if (a.startsWith("-")) {
+    const name = a.slice(2);
+    if (!a.startsWith("--") || !Object.hasOwn(OPTIONS, name))
+      usage(`Unknown option ${a}.`);
+    const raw = args[++i];
+    const n = raw == null || raw.trim() === "" ? NaN : Number(raw);
+    if (!Number.isFinite(n) || !OPTIONS[name].ok(n))
+      usage(
+        `${a} takes ${OPTIONS[name].want}${raw == null ? "" : `, not ${raw}`}.`,
+      );
+    OPTIONS[name].value = n;
+  } else if (!Object.hasOwn(STAT_RANGES, a)) usage(`${a} is no item code.`);
+  else codes.push(a);
+}
+const DAYS = OPTIONS.days.value;
+const EVERY = OPTIONS.every.value;
+const TAX = OPTIONS.tax.value;
+const FLIP = OPTIONS.flip.value / 100;
+const PICK = OPTIONS.pick.value;
+const PAGES = OPTIONS.pages.value;
 const KEY = process.env.WARERA_API_KEY ?? "";
 const READ_PAGES = 10; // the extension's read: the newest 1,000 sales of 7 days
 const MIN_CHECK_SALES = 100; // a scan checks no market that sold fewer in 7 days
@@ -65,13 +129,6 @@ if (!KEY) {
   );
   process.exit(1);
 }
-for (const code of codes)
-  if (!STAT_RANGES[code]) {
-    console.error(
-      `${code} is no item code; the codes: ${Object.keys(STAT_RANGES).join(" ")}`,
-    );
-    process.exit(1);
-  }
 
 const median = (xs) => {
   if (!xs.length) return null;
@@ -157,6 +214,7 @@ async function check(code) {
   const pieces = new Set();
   let first = null;
   let last = null;
+  let late = 0; // moments whose resale is still to come
   let seen = 0;
   let judged = 0;
   let real = 0;
@@ -169,9 +227,13 @@ async function check(code) {
         )
         .filter((h) => Number.isFinite(h) && h >= 0),
     );
+    if (wait == null) continue;
     // a piece bought at t is listed again and sells about the item's median wait later
-    const resaleEnd = wait == null ? null : t + (wait + RESALE_HOURS / 2) * H;
-    if (resaleEnd == null || resaleEnd > NOW) continue;
+    const resaleEnd = t + (wait + RESALE_HOURS / 2) * H;
+    if (resaleEnd > NOW) {
+      late++;
+      continue;
+    }
     first ??= t;
     last = t;
     waits.push(wait);
@@ -236,7 +298,11 @@ async function check(code) {
     `\n${code}: ${all.length}${complete ? "" : "+"} sales in ${DAYS + 7} d${complete ? "" : ` (the ${PAGES}-page cap: the oldest moments hold fewer)`}; C reads its fall now at ${now.log < 0 ? `${signed(now.perDay)} a day` : "none"} (${now.n} sales on ${now.days} days)`,
   );
   if (first == null) {
-    console.log("  no moment to judge: no sale carries its listing time");
+    console.log(
+      late
+        ? `  no moment to judge: the resale of each (the median wait + ${RESALE_HOURS / 2} h) is still to come; replay more --days`
+        : "  no moment to judge: no sale carries its listing time",
+    );
     return { count, judged, real };
   }
   console.log(
@@ -260,7 +326,7 @@ function print(count, real, indent) {
 
 try {
   console.log(
-    `FLIP at +${FLIP * 100}%, tax ${TAX}%; moments every ${EVERY} h over the last ${DAYS} days; a tag is real when the piece's stats sold for that much in the ${RESALE_HOURS} h around the moment + the item's median wait`,
+    `FLIP at ${FLIP < 0 ? "−" : "+"}${Math.abs(FLIP * 100)}%, tax ${TAX}%; moments every ${EVERY} h over the last ${DAYS} days; a tag is real when the piece's stats sold for that much in the ${RESALE_HOURS} h around the moment + the item's median wait`,
   );
   const checked = codes.length ? codes : await scan();
   const results = [];
