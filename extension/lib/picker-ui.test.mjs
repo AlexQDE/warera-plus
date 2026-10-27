@@ -231,6 +231,9 @@ describe("flip and scrap candidates in the picker", () => {
 });
 
 describe("the list by stats", () => {
+  // the list clicks on timers (vlist.mjs waits 80 ms after a click): fake ones, moved on by hand, so no test sleeps
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
   // a row of epic snipers in the game's own order, and a jet
   const SNIPERS = [
     [110, 19],
@@ -269,21 +272,23 @@ describe("the list by stats", () => {
   const open = async (code) => {
     equipment.picker(code, true, held, ctx);
     sort().querySelector("[data-sort-toggle]").click();
-    await vi.waitFor(() => expect(rescan).toHaveBeenCalled());
+    await vi.advanceTimersByTimeAsync(0); // read at once: no layout here, so nothing to scroll
+    expect(rescan).toHaveBeenCalled();
     equipment.picker(code, true, held, ctx);
   };
 
   it("reads nothing and lists nothing until asked: opening the window stays still", async () => {
     document.body.innerHTML = LIST();
     equipment.picker("sniper", true, held, ctx);
-    await new Promise((r) => setTimeout(r, 50));
+    await vi.advanceTimersByTimeAsync(50);
     expect(rescan).not.toHaveBeenCalled(); // no read of the list
     expect(sort().querySelector("[data-sort-pick]")).toBeNull();
     const toggle = sort().querySelector("[data-sort-toggle]");
     expect(toggle.getAttribute("aria-pressed")).toBe("false");
     expect(toggle.textContent).toContain("by crit");
     toggle.click();
-    await vi.waitFor(() => expect(rescan).toHaveBeenCalled());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(rescan).toHaveBeenCalled();
     equipment.picker("sniper", true, held, ctx);
     expect(sort().querySelectorAll("[data-sort-pick]").length).toBe(6);
     // the same button closes it again
@@ -311,12 +316,13 @@ describe("the list by stats", () => {
     const { picks, chosen } = listen();
     await open("sniper");
     sort().querySelector('[data-sort-pick="0:2"]').click(); // attack 121, crit 20
-    await vi.waitFor(() => expect(picks).toEqual([2]));
-    await new Promise((r) => setTimeout(r, 300)); // the first click has landed
+    await vi.advanceTimersByTimeAsync(300); // the first click has landed
+    expect(picks).toEqual([2]);
     expect([...chosen]).toEqual([2]);
     // clicked again: it stays selected
     sort().querySelector('[data-sort-pick="0:2"]').click();
-    await vi.waitFor(() => expect(picks).toEqual([2, 2, 2]));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(picks).toEqual([2, 2, 2]);
     expect([...chosen]).toEqual([2]);
   });
   it("offers the items in the window when the market names none, weapons first, and lists the one picked", async () => {
@@ -352,10 +358,10 @@ describe("the list by stats", () => {
     const { picks } = listen();
     await open(null);
     sort().querySelector('[data-sort-pick="0:2"]').click();
-    await vi.waitFor(() => expect(picks).toEqual([2]));
-    await new Promise((r) => setTimeout(r, 300)); // the first click has landed
+    await vi.advanceTimersByTimeAsync(300); // the first click has landed
+    expect(picks).toEqual([2]);
     sort().querySelector('[data-sort-pick="0:2"]').click();
-    await new Promise((r) => setTimeout(r, 300));
+    await vi.advanceTimersByTimeAsync(300);
     expect(picks).toEqual([2]);
     expect(words()).toContain("already selected");
   });
