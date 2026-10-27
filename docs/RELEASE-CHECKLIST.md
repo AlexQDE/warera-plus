@@ -32,7 +32,7 @@ Reload the extension itself first (its card on the extensions page must read 3.8
 - **The case window.** Open the inventory windows for a battle case, wooden case and toolbox without pressing Open: only the battle case gets a panel.
 - **Grid.** Open "+" → Select an item, pick an item, close it: cards keep their rarity.
 
-The 3.6.0–3.1.0 sections describe their original versions; current acceptance is the 3.8.0 section plus the Manual gate.
+The 3.6.0–3.1.0 sections describe their original versions; current acceptance is the 3.8.1 and 3.8.0 sections plus the Manual gate.
 
 ## 3.6.0 on the live page
 

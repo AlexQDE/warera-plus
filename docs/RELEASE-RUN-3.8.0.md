@@ -4,7 +4,7 @@ What [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md) found on main `00bb3f0` (3.8.0
 
 ## Automated gate
 
-The gate ran on a clean worktree at `00bb3f0`, one step at a time, before this branch changed any code. After the changes (`app.mjs`, `casesview.mjs`, `craftdesk.mjs`, `scripts/screenshots.mjs`, the new `trip.test.mjs`), lint, typecheck, validate, formatting and the whole suite passed again on the branch. The package waits for the merge with 3.8.1, whose zip will have its own SHA-256. The browser steps ran once free memory passed the 4 GB the maintainer's PC needs, with Playwright 1.61.1 from `E:\Qcerris\Naomi\node_modules`, which matches the installed Chromium 1228 (`PLAYWRIGHT_MODULE=file:///E:/Qcerris/Naomi/node_modules/playwright/index.mjs`).
+The gate ran on a clean worktree at `00bb3f0`, one step at a time, before this branch changed any code. After the changes (`app.mjs`, `casesview.mjs`, `craftdesk.mjs`, `scripts/screenshots.mjs`, the new `trip.test.mjs`), lint, typecheck, validate, formatting and the whole suite passed again on the branch. The branch was merged into 3.8.1 (`fc4bed8`) as `6f7b997`. On the merged tree lint, typecheck, validate and formatting pass, the suite is 38 files and 514 tests, and `dist/warera-plus-3.8.1.zip` has 45 files, 171.9 KB, SHA-256 `9ca0c36f48e95fe0f40b9a80950e5408e79044ec6f74d639b175cca4e61d081b`. The browser steps ran once free memory passed the 4 GB the maintainer's PC needs, with Playwright 1.61.1 from `E:\Qcerris\Naomi\node_modules`, which matches the installed Chromium 1228 (`PLAYWRIGHT_MODULE=file:///E:/Qcerris/Naomi/node_modules/playwright/index.mjs`).
 
 | Step                             | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -27,14 +27,14 @@ The gate ran on a clean worktree at `00bb3f0`, one step at a time, before this b
     - the bar no longer says "offers not read" ("2 snipes · 5 flips");
     - every card carries a line: 12 of 12, and 24 of 24 after Load more;
     - cards are 282 px wide.
-  - **Fail:** the line spills past the card's bottom into the next row (line 758-810 px against a card bottom at 763 px). Fixed for 3.8.1 on the parallel branch "fix sniper price and overlay on new market" (not committed yet).
+  - **Fail:** the line spills past the card's bottom into the next row (line 758-810 px against a card bottom at 763 px). Fixed in 3.8.1 (`fc4bed8`): live, 12 of 12 lines sit inside their cards.
 - **Details.**
   - Pass:
     - the card's own price, three decimals (Offer 1.400 g on a card printing 1.4);
     - "This piece: armor 5 · 100%";
     - 48 sales of the same stats in 24 h, brought to these stats;
     - Enter on ▸ opens Details, focus stays on the button, and the game gets no click.
-  - **Fail (text):** "the 2th percentile". Fixed for 3.8.1 on the parallel branch.
+  - **Fail (text):** "the 2th percentile". Fixed in 3.8.1.
 - **Filtered.** `?item=sniper`: 12 of 12 cards are the epic sniper (103-107 attack, 16-17% crit, 40.699-40.999 g). Select an item → epic gloves: 12 of 12 cards read `gloves4`.
 - **Your own offer.** Not checked: it needs a listing.
 - **Tiers (skins).** Not checked: no skinned piece was at hand.
@@ -111,23 +111,23 @@ The gate ran on a clean worktree at `00bb3f0`, one step at a time, before this b
 
 ## Fixes
 
-- **This branch:**
+- **This run's branch** (`431d4d9`, merged into 3.8.1):
   - a click on the map's trip line no longer reaches the game's "Nearest wooden case" item, which can move the player;
   - the trip line's age is a live label (`timeLabel`), so a passing second no longer rewrites the line and swallows a press on its toggle;
   - the checklist's stale wording rewritten to the current cards, Recruit, Ledger and wooden-case rules;
   - the craft board's tooltip marks the game's average with ≈, as the Market tab's legend says;
   - `scripts/screenshots.mjs` runs again: the stale Compact/Details click is gone, and the popup and the benchmark take the version from the manifest;
   - Prettier's `endOfLine: "auto"`, so `npm run check` passes on a Windows checkout.
-- **Parallel branch for 3.8.1** ("fix sniper price and overlay on new market", not committed yet):
+- **3.8.1** (`fc4bed8`):
   - the card line's overflow: while a card holds the line, the card is a column and the line sits at its bottom;
   - card prices from 1,000 up ("1.234K"), which read as no price;
   - "2th" and the other ordinals.
 - **Open:**
-  - out-of-range stats taken from `?item=` (`dom.mjs`) are not rejected, and Details has no line for a frame that disagrees with the stat-derived tier; both wait for the 3.8.1 commit, since they touch its files;
+  - out-of-range stats taken from `?item=` (`dom.mjs`) are not rejected, and Details has no line for a frame that disagrees with the stat-derived tier; both wait for the maintainer's call;
   - the live "Sell items" window is not adapted, so it shows no price suggestion;
   - the trip line's cost model: the game spends the stamina on hand first, then oil, so the line could read the oil figure the game's item prints;
   - a press on the trip line that starts in the instant the distance arrives can still reach the game's item, because the line then moves to its new anchor mid-click;
-  - the picker and the Market tab's legend mark same-stat values `~`, while cards and Ledger lines print them bare (`equipment.mjs`, after 3.8.1);
+  - the picker and the Market tab's legend mark same-stat values `~`, while cards and Ledger lines print them bare (`equipment.mjs`);
   - scans on the synthetic page do more work than in 1.6.0 (see the benchmark above), and the longest takes more than a frame;
   - `scripts/jitter.mjs` reports layout shifts but does not fail on them, and it runs on the v0.26 row stand-in, not the v0.27 cards;
   - the store images come from the same stand-in; captures of the live v0.27 game would make a better listing (CHROME-WEB-STORE.md).
