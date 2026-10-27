@@ -529,6 +529,81 @@ export function replayHistory(
 /** @param {ReadonlyArray<number | null | undefined>} xs */
 const sum = (xs) => xs.reduce((/** @type {number} */ s, x) => s + (x ?? 0), 0);
 
+/** A wooden opening as replayed from the player's history.
+ * @typedef {{ at: string, code: string, q: number, value: number | null, cost: number | null, approx: boolean }} WoodenOpening
+ */
+/**
+ * A window's wooden drops at the day's prices. Sales are context from all
+ * sources and all time: resource units cannot be tied to a particular case.
+ * Unknown prices stay unknown rather than entering a net as zero.
+ * @param {ReadonlyArray<WoodenOpening>} openings
+ * @param {Record<string, { sold: number, earned: number }>} [trades]
+ */
+export function woodenSummary(openings, trades = {}) {
+  /** @type {Map<string, { code: string, n: number, q: number, value: number | null }>} */
+  const byCode = new Map();
+  let cost = /** @type {number | null} */ (0);
+  let last = /** @type {WoodenOpening | null} */ (null);
+  for (const w of openings) {
+    const row = byCode.get(w.code) ?? { code: w.code, n: 0, q: 0, value: 0 };
+    row.n++;
+    row.q += w.q;
+    row.value =
+      row.value == null || w.value == null ? null : row.value + w.value;
+    byCode.set(w.code, row);
+    cost = cost == null || w.cost == null ? null : cost + w.cost;
+    if (!last || Date.parse(w.at) > Date.parse(last.at)) last = w;
+  }
+  const rows = [...byCode.values()].sort((a, b) =>
+    a.code.localeCompare(b.code),
+  );
+  const value = rows.some((r) => r.value == null)
+    ? null
+    : sum(rows.map((r) => r.value));
+  return {
+    n: openings.length,
+    q: sum(rows.map((r) => r.q)),
+    value,
+    cost,
+    net: value == null || cost == null ? null : value - cost,
+    unpriced: openings.filter((w) => w.value == null).length,
+    costUnknown: openings.filter((w) => w.cost == null).length,
+    approx: openings.filter((w) => w.approx).length,
+    rows,
+    sales: rows
+      .filter((r) => trades[r.code]?.sold > 0)
+      .map((r) => ({
+        code: r.code,
+        sold: trades[r.code].sold,
+        earned: trades[r.code].earned,
+      })),
+    last,
+  };
+}
+
+/** Value the recorded drop quantities at today's best bids, without changing the history summary.
+ * @param {ReturnType<typeof woodenSummary>} summary
+ * @param {(code: string) => number | null | undefined} bidOf
+ */
+export function woodenAtBids(summary, bidOf) {
+  const rows = summary.rows.map((r) => {
+    const bid = bidOf(r.code);
+    return {
+      ...r,
+      current:
+        bid != null && Number.isFinite(bid) && bid > 0 ? r.q * bid : null,
+    };
+  });
+  const value = rows.some((r) => r.current == null)
+    ? null
+    : sum(rows.map((r) => r.current));
+  return {
+    rows,
+    value,
+    perCase: value == null || !summary.n ? null : value / summary.n,
+  };
+}
+
 /**
  * The result of one set of pieces: what they cost, what came of them (sold,
  * scrapped, or held at `valueOf`), and the result where both are known.
@@ -632,6 +707,7 @@ export function windowView(
       value: sum(wooden.map((w) => w.value)),
       cost: sum(wooden.map((w) => w.cost)),
     },
+    woodenLedger: woodenSummary(woodenAll, history.trades),
     woodenUnpriced: woodenAll.length - wooden.length,
     woodenToolboxes: woodenAll.filter(
       (w) => w.value == null && w.code === "toolbox",

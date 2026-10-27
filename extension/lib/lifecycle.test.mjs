@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { startLens } from "./app.mjs";
 import { DEFAULTS } from "./settings.mjs";
+import { WOODEN_CODES } from "./cases.mjs";
 import {
   mapLootItem,
   casesAnchor,
@@ -65,6 +66,54 @@ function mockRuntime(overrides = {}) {
 }
 
 describe("SPA lifecycle and DOM work", () => {
+  it("applies wooden mode and ROI changes to the strip and wooden window without clicking game controls", async () => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      readFileSync("fixtures/v027-wooden-window-synthetic.html", "utf8"),
+    );
+    const runtime = mockRuntime({ hasKey: false });
+    const base = runtime.sendMessage.getMockImplementation();
+    const book = (bid, ask = bid) => ({
+      bid,
+      ask,
+      bids: [{ price: bid, quantity: 20000 }],
+      asks: [{ price: ask, quantity: 20000 }],
+    });
+    runtime.sendMessage.mockImplementation(async (msg) =>
+      msg.type === "cases"
+        ? {
+            cases: {
+              at: new Date().toISOString(),
+              books: {
+                ...Object.fromEntries(
+                  WOODEN_CODES.map((code) => [code, book(1)]),
+                ),
+                woodenCase: book(100, 22),
+              },
+            },
+          }
+        : base(msg),
+    );
+    const clicks = vi.spyOn(window.HTMLElement.prototype, "click");
+    app = await startLens(runtime);
+    await settle();
+    const strip = () => document.querySelector(".lens-case-wooden");
+    const panel = () => document.querySelector(".ss-dialog");
+    expect(strip().dataset.verdict).toBe("sell");
+    expect(panel().textContent).toContain("SELL");
+    runtime.info.settings.woodenMode = "flip";
+    runtime.info.settings.minMarginPct = 10;
+    runtime.info.revision++;
+    await settle(5100);
+    expect(strip().dataset.verdict).toBe("pass");
+    expect(panel().textContent).toContain("PASS");
+    runtime.info.settings.minMarginPct = 3;
+    runtime.info.revision++;
+    await settle(5100);
+    expect(strip().dataset.verdict).toBe("flip");
+    expect(panel().textContent).toContain("FLIP");
+    expect(clicks).not.toHaveBeenCalled();
+  });
   it("reads books and the point value for Recruit only while visible and enabled, then removes its UI", async () => {
     window.history.replaceState({}, "", "/companies");
     document.body.innerHTML = "<main></main>";
@@ -455,6 +504,19 @@ describe("SPA lifecycle and DOM work", () => {
     ).length;
   const bar = () => document.getElementById("scrap-sniper-bar");
   const bodyText = () => bar().querySelector(".lens-body").textContent;
+
+  it("reads the existing case books for current wooden bids when only the Ledger tab needs them", async () => {
+    window.history.replaceState({}, "", "/market/equipments");
+    marketFixture();
+    const runtime = marketRuntime({ panel: "ledger", userId: ME });
+    app = await startLens(runtime);
+    await settle();
+    expect(bar()).not.toBeNull();
+    expect(document.getElementById("scrap-sniper-cases")).toBeNull();
+    expect(
+      runtime.sendMessage.mock.calls.some(([msg]) => msg.type === "cases"),
+    ).toBe(true);
+  });
 
   it("mounts the bar once on the equipment market with the open section, removes it on navigation, restores it on return, and cleans up", async () => {
     window.history.replaceState({}, "", "/market/equipments");

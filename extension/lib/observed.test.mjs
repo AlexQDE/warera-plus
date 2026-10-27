@@ -9,7 +9,105 @@ import {
   memoDay,
   craftModes,
   matchPicks,
+  woodenSummary,
+  woodenAtBids,
 } from "./observed.mjs";
+
+describe("wooden summaries", () => {
+  const openings = [
+    {
+      at: "2026-10-26T10:00:00Z",
+      code: "oil",
+      q: 52,
+      value: 10.6,
+      cost: 7,
+      approx: false,
+    },
+    {
+      at: "2026-10-25T10:00:00Z",
+      code: "oil",
+      q: 40,
+      value: 8,
+      cost: 6,
+      approx: true,
+    },
+    {
+      at: "2026-10-26T09:00:00Z",
+      code: "iron",
+      q: 20,
+      value: 2,
+      cost: 7,
+      approx: false,
+    },
+  ];
+  const trades = {
+    oil: { qty: 1000, spent: 200, sold: 500, earned: 110 },
+    steel: { sold: 100, earned: 10 },
+  };
+  it("groups drops, keeps day costs, and lists all-source sales only for resources dropped", () => {
+    const summary = woodenSummary(openings, trades);
+    expect(summary).toMatchObject({
+      n: 3,
+      q: 112,
+      value: 20.6,
+      cost: 20,
+      net: expect.closeTo(0.6),
+      approx: 1,
+      last: openings[0],
+    });
+    expect(summary.rows).toEqual([
+      { code: "iron", n: 1, q: 20, value: 2 },
+      { code: "oil", n: 2, q: 92, value: 18.6 },
+    ]);
+    expect(summary.sales).toEqual([{ code: "oil", sold: 500, earned: 110 }]);
+    const current = woodenAtBids(summary, (code) =>
+      code === "oil" ? 0.25 : 0.1,
+    );
+    expect(current.value).toBe(25);
+    expect(current.perCase).toBeCloseTo(25 / 3);
+    expect(current.rows[1].current).toBe(23);
+    expect(summary.rows[1]).not.toHaveProperty("current");
+  });
+  it("keeps missing historical/current prices unknown, and handles empty windows", () => {
+    const summary = woodenSummary([
+      ...openings,
+      { ...openings[0], value: null, cost: null },
+    ]);
+    expect(summary).toMatchObject({
+      n: 4,
+      value: null,
+      cost: null,
+      net: null,
+      unpriced: 1,
+      costUnknown: 1,
+    });
+    expect(woodenAtBids(woodenSummary(openings), () => null)).toMatchObject({
+      value: null,
+      perCase: null,
+    });
+    expect(woodenAtBids(woodenSummary([]), () => null)).toMatchObject({
+      value: 0,
+      perCase: null,
+    });
+  });
+  it("adds selected-window wooden details to the worker's existing view", () => {
+    const history = { pieces: [], wooden: openings, trades, tools: [] };
+    const view = windowView(history, {
+      from: "2026-10-26",
+      to: "2026-10-26",
+      dayOf,
+      valueOf: () => null,
+    });
+    expect(view.woodenLedger).toMatchObject({
+      n: 2,
+      q: 72,
+      value: 12.6,
+      cost: 14,
+      net: expect.closeTo(-1.4),
+      sales: [{ code: "oil", sold: 500, earned: 110 }],
+    });
+  });
+});
 
 // Compact rows as the history store keeps them (api.reduceRow), ids shortened.
 const A = (h) =>

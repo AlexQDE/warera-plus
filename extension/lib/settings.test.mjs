@@ -2,6 +2,26 @@ import { describe, it, expect } from "vitest";
 import { DEFAULTS, SELL_FROM, PANELS, preferences } from "./settings.mjs";
 
 describe("preferences", () => {
+  it("holds wooden cases by default, retains flip, and sanitizes unknown modes without migrating other choices", () => {
+    expect(DEFAULTS.woodenMode).toBe("hold");
+    expect(preferences().woodenMode).toBe("hold");
+    expect(preferences({ woodenMode: "flip" }).woodenMode).toBe("flip");
+    expect(preferences({ woodenMode: "unknown" }).woodenMode).toBe("hold");
+    expect(preferences({ woodenMode: true }).woodenMode).toBe("hold");
+    expect(
+      preferences({
+        woodenMode: "flip",
+        schemaVersion: 6,
+        minMarginPct: 0,
+        craftSteelMode: "random",
+      }),
+    ).toMatchObject({
+      schemaVersion: 6,
+      minMarginPct: 0,
+      craftSteelMode: "random",
+      woodenMode: "flip",
+    });
+  });
   it("enables the Recruit advisor by default and retains an explicit off choice", () => {
     expect(DEFAULTS.recruit).toBe(true);
     expect(preferences().recruit).toBe(true);

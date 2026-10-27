@@ -31,6 +31,33 @@ const books = Object.fromEntries(
 const cases = { at, books };
 
 describe("safe case rendering", () => {
+  it("always shows the wooden ask and switches only the wooden verdict to flip mode", () => {
+    const hold = casesStripHtml({ cases, now: NOW, collapsed: true });
+    const flip = casesStripHtml({
+      cases,
+      now: NOW,
+      collapsed: true,
+      woodenMode: "flip",
+    });
+    expect(hold).toContain("<small>Ask</small>");
+    expect(hold).toContain('data-verdict="sell"');
+    expect(flip).toContain('data-verdict="pass"');
+    expect(flip).toContain("g a case · 0 cases under it");
+    expect(flip).toContain("market tax on top");
+    expect(flip.slice(flip.indexOf("<strong>Case</strong>"))).toBe(
+      hold.slice(hold.indexOf("<strong>Case</strong>")),
+    );
+    const cheap = { ...cases, books: { ...books, woodenCase: book(1, 12) } };
+    expect(
+      casesStripHtml({ cases: cheap, now: NOW, woodenMode: "flip" }),
+    ).toContain("12 cases under it");
+    expect(
+      casesStripHtml({ cases: cheap, now: NOW, woodenMode: "flip" }),
+    ).toContain('data-verdict="flip"');
+    expect(
+      casesStripHtml({ cases: cheap, now: NOW + 60000, woodenMode: "flip" }),
+    ).not.toContain('data-verdict="flip"');
+  });
   it("renders three cases with explicit depth, model and freshness", () => {
     const html = casesStripHtml({ cases, now: NOW });
     expect(html).toContain("Wooden Case");

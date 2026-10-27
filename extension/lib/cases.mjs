@@ -462,15 +462,20 @@ export function casePolicyValue(caseCode, { bids, avgOf, sellFrom = "never" }) {
 // ----------------------------------------------------------------- summary -
 const summaryCache = new WeakMap();
 /** UI-only memoization: API snapshots are immutable. Freshness-filtered averages
- * and the drop policy participate in the key, so an expired/failed item or a
- * changed policy cannot retain its valuation.
+ * and the drop policy and wooden ROI threshold participate in the key, so an
+ * expired/failed item or a changed setting cannot retain its valuation.
  */
-export function snapshotSummary({ books, avg = null, sellFrom = "never" }) {
-  if (!books) return casesSummary({ books, avg, sellFrom });
-  const key = `${sellFrom}:${JSON.stringify(avg)}`;
+export function snapshotSummary({
+  books,
+  avg = null,
+  sellFrom = "never",
+  minMarginPct = 3,
+}) {
+  if (!books) return casesSummary({ books, avg, sellFrom, minMarginPct });
+  const key = `${sellFrom}:${minMarginPct}:${JSON.stringify(avg)}`;
   const old = summaryCache.get(books);
   if (old?.key === key) return old.value;
-  const value = casesSummary({ books, avg, sellFrom });
+  const value = casesSummary({ books, avg, sellFrom, minMarginPct });
   summaryCache.set(books, { key, value });
   return value;
 }
@@ -480,8 +485,15 @@ export function snapshotSummary({ books, avg = null, sellFrom = "never" }) {
  * openScrap, openMarket, openValue, openBand, complete, ratio, verdict }, plus the
  * oil ask and the scrap bid. `books[code] = { bid, ask, bidQty, askQty }`,
  * `avg[code] = number` (may be null when the averages were not read).
+ * Wooden rows also carry flipVerdict, flipGain and askDepth { n, gain } at
+ * minMarginPct. Their ask and flip need no sealed bid; the hold verdict does.
  */
-export function casesSummary({ books, avg, sellFrom = "never" }) {
+export function casesSummary({
+  books,
+  avg,
+  sellFrom = "never",
+  minMarginPct = 3,
+}) {
   const b = books ?? {};
   const bidOf = (c) => num(b[c]?.bid);
   const avgOf = (c) => (avg ? num(avg[c]) : null);
@@ -530,6 +542,38 @@ export function casesSummary({ books, avg, sellFrom = "never" }) {
       }
     }
     const sealed = quote(1, book.bids);
+    const ask =
+      code === "woodenCase" ? quote(1, book.asks).value : num(book.ask);
+    const flipGain =
+      code === "woodenCase" && wooden.complete && ask != null
+        ? openValue - ask
+        : null;
+    // a flip must gain: a negative SNIPE threshold (set to see near misses) never makes a losing buy a FLIP
+    const flipRoi = Math.max(0, minMarginPct) / 100;
+    const flipVerdict =
+      flipGain == null
+        ? null
+        : flipGain > 0 && flipGain / ask >= flipRoi
+          ? "flip"
+          : "pass";
+    const askDepth = { n: 0, gain: 0 };
+    if (code === "woodenCase" && wooden.complete) {
+      for (const level of book.asks ?? []) {
+        if (
+          positive(level.price) == null ||
+          !Number.isInteger(level.quantity) ||
+          level.quantity < 1
+        )
+          continue;
+        if (
+          openValue <= level.price ||
+          (openValue - level.price) / level.price < flipRoi
+        )
+          break;
+        askDepth.n += level.quantity;
+        askDepth.gain += level.quantity * (openValue - level.price);
+      }
+    }
     complete = complete && sealed.complete;
     const v = caseVerdict({
       bid: num(book.bid),
@@ -542,7 +586,7 @@ export function casesSummary({ books, avg, sellFrom = "never" }) {
       label: CASE_LABELS[code],
       bid: num(book.bid),
       bidQty: num(book.bidQty) ?? 0,
-      ask: num(book.ask),
+      ask,
       askQty: num(book.askQty) ?? 0,
       openScrap,
       openMarket,
@@ -554,6 +598,7 @@ export function casesSummary({ books, avg, sellFrom = "never" }) {
       policy,
       ratio: v.ratio,
       verdict: v.verdict,
+      ...(code === "woodenCase" ? { flipVerdict, flipGain, askDepth } : {}),
     };
   });
   return {

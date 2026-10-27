@@ -31,6 +31,7 @@ function show(p) {
   $("sellFrom").value = SELL_FROM.includes(p.sellFrom) ? p.sellFrom : "epic";
   $("userId").value = p.userId ?? "";
   $("craftSteelMode").value = p.craftSteelMode ?? "auto";
+  $("woodenMode").value = p.woodenMode;
   for (const field of toggles) $(field).checked = p[field];
 }
 async function load() {
@@ -88,6 +89,7 @@ async function save(event) {
         sellFrom: $("sellFrom").value,
         userId: $("userId").value.trim() || null,
         craftSteelMode: $("craftSteelMode").value,
+        woodenMode: $("woodenMode").value,
       },
     });
     if (r.error) throw new Error(r.message);

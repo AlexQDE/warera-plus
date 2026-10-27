@@ -351,6 +351,19 @@
             threshold up at the game's average item price. The case verdict uses
             this policy.
           </p>
+          <label for="woodenMode">Wooden cases</label>
+          <select id="woodenMode">
+            <option value="hold">
+              Hold (compare the opening with the sealed bid)
+            </option>
+            <option value="flip">
+              Flip (buy at the ask, open, sell the drops)
+            </option>
+          </select>
+          <p class="help">
+            Flip uses the SNIPE minimum ROI and the order-book ask as listed. A
+            buyer in a taxed country pays that country's market tax on top.
+          </p>
           <label for="craftSteelMode">How you craft (for the Ledger)</label>
           <select id="craftSteelMode">
             <option value="auto">
