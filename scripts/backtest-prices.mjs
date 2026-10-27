@@ -21,17 +21,19 @@
 // left out here (trend: false), so the two differ by the stats alone.
 //
 // FLIP on markets that trend: flat, falling 3% or 6% a day, 15% down in the
-// last 48 hours, rising 3% a day, for four of the items above. Each sale was
-// listed a while before it sold (exponential, a 24-hour median). `listings`
-// offers of random rolls are priced at their worth now times lognormal noise
-// (10%). An offer is a real flip when it is worth 10% more than its price at
-// resale: after the median listed-to-sold wait of the item's sales, with the
-// market going on as it went (a fall keeps falling, the drop stays down, the
-// rise keeps rising), since a piece bought now sells only then. FLIP at 10%,
-// three ways: A, the value without the market's fall; C, as shipped (sales
-// alike brought to today); C + cap, as shipped with offerCap over the
-// listings (no tax). It prints how many tags were real flips (precision), how
-// many real flips got a tag (recall) and how many tags there were.
+// last 48 hours, rising 3% a day, for four of the items above, at the volumes
+// above and at 1,000 sales a week (the most the extension reads). Each sale
+// was listed a while before it sold (exponential, a 24-hour median).
+// `listings` offers of random rolls are priced at their worth now times
+// lognormal noise (10%). An offer is a real flip when it is worth 10% more
+// than its price at resale: after the median listed-to-sold wait of the item's
+// sales, with the market going on as it went (a fall keeps falling, the drop
+// stays down, the rise keeps rising), since a piece bought now sells only
+// then. FLIP at 10%, three ways: A, the value without the market's fall; C, as
+// shipped (sales alike brought to today); C + cap, as shipped with offerCap
+// over the listings (no tax). It prints how many tags were real flips
+// (precision), how many real flips got a tag (recall) and how many tags there
+// were.
 //
 // The markets are invented: this compares methods under stated assumptions,
 // it does not measure the game.
@@ -211,6 +213,8 @@ console.log(
 const LISTINGS = opt("--listings", 20);
 const FLIP = 0.1;
 const WAIT_MEDIAN = 24; // hours from listing to sale, the median of an exponential
+// and a busy market: 1,000 sales a week, the most the extension reads (10 pages)
+const FLIP_VOLUMES = [...VOLUMES, 1000];
 /** Where the market stands `h` hours ago, in log price (0 now); a negative `h` is later than now. */
 const TRENDS = [
   ["flat", () => 0],
@@ -268,7 +272,7 @@ function trendingMarket(code, n, model, level) {
 const WAYS = ["A", "C", "C + cap"];
 const flipRows = [];
 for (const [trend, level] of TRENDS)
-  for (const n of VOLUMES) {
+  for (const n of FLIP_VOLUMES) {
     const count = Object.fromEntries(
       WAYS.map((w) => [w, { tags: 0, real: 0 }]),
     );

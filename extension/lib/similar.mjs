@@ -69,7 +69,7 @@ export const SLOPE_OTHER = 0.3;
 export const MIN_SLOPE_PAIRS = 40;
 /** At most this much log price over a stat's whole range: the top roll at most e^2 = 7.4 times the bottom one. */
 export const MAX_SLOPE = 2;
-/** The newest sales a market's trend is read from. */
+/** The sales a market's trend is read from: the newest, or a busier market's last MIN_TREND_DAYS days, spread. */
 export const TREND_SALES = 200;
 /** A trend needs this many sales ... */
 export const MIN_TREND_SALES = 8;
@@ -181,10 +181,13 @@ const trendCache = new WeakMap();
  * as a rise, nor worse ones as a fall. Only a fall counts, from MIN_TREND_FALL
  * a day and at most MAX_TREND_DROP a day: a rising market lifts no old sale (a
  * false FLIP costs gold, a missed one only a chance), and a few odd sales
- * cannot make a crash.
- * No trend below MIN_TREND_SALES sales on MIN_TREND_DAYS days. Worked out once
- * per list of fills. `perDay` is the fall a day as a share (−0.04), 0 without
- * one; `log` the same in log price.
+ * cannot make a crash. Read from the newest TREND_SALES sales, or from a busier
+ * market's last MIN_TREND_DAYS days (its newest TREND_SALES sold within a day
+ * or two), TREND_SALES of them spread over those days. No trend below
+ * MIN_TREND_SALES sales on MIN_TREND_DAYS days.
+ * Worked out once per list of fills. `perDay` is the fall a day as a share
+ * (−0.04), 0 without one; `log` the same in log price; `n` the sales it was
+ * read from.
  * @param {string} code @param {ReadonlyArray<Fill> | null | undefined} fills
  * @returns {Trend}
  */
@@ -211,27 +214,38 @@ export function marketTrend(code, fills) {
     sales.push({ t, lp: Math.log(f.price) - worth });
   }
   sales.sort((a, b) => b.t - a.t);
-  sales.length = Math.min(sales.length, TREND_SALES);
-  const days = new Set(
-    sales.map((x) => Math.floor((sales[0].t - x.t) / 86400e3)),
-  ).size;
+  // the newest TREND_SALES, or as many as a busier market sold in its last MIN_TREND_DAYS days (its newest
+  // TREND_SALES sold within a day or two), TREND_SALES of them spread over those days
+  let take = Math.min(sales.length, TREND_SALES);
+  while (
+    take < sales.length &&
+    sales[0].t - sales[take].t < MIN_TREND_DAYS * 86400e3
+  )
+    take++;
+  const step = take / Math.min(take, TREND_SALES);
+  const read = Array.from(
+    { length: Math.min(take, TREND_SALES) },
+    (_, i) => sales[Math.floor(i * step)],
+  );
+  const days = new Set(read.map((x) => Math.floor((read[0].t - x.t) / 86400e3)))
+    .size;
   let log = 0;
-  if (sales.length >= MIN_TREND_SALES && days >= MIN_TREND_DAYS) {
+  if (read.length >= MIN_TREND_SALES && days >= MIN_TREND_DAYS) {
     /** @type {number[]} */
     const perDay = [];
-    for (let i = 0; i < sales.length; i++)
-      for (let j = i + 1; j < sales.length; j++) {
-        // sales[i] is the newer: a fall reads negative
-        const dt = (sales[i].t - sales[j].t) / 86400e3;
+    for (let i = 0; i < read.length; i++)
+      for (let j = i + 1; j < read.length; j++) {
+        // read[i] is the newer: a fall reads negative
+        const dt = (read[i].t - read[j].t) / 86400e3;
         if (dt * 24 >= TREND_PAIR_HOURS)
-          perDay.push((sales[i].lp - sales[j].lp) / dt);
+          perDay.push((read[i].lp - read[j].lp) / dt);
       }
     const m = median(perDay);
     if (m != null && m < Math.log(1 - MIN_TREND_FALL))
       log = Math.max(Math.log(1 - MAX_TREND_DROP), m);
   }
   /** @type {Trend} */
-  const out = { perDay: Math.expm1(log), log, n: sales.length, days };
+  const out = { perDay: Math.expm1(log), log, n: read.length, days };
   if (!byCode) trendCache.set(fills, (byCode = new Map()));
   byCode.set(code, out);
   return out;

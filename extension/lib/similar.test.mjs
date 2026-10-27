@@ -13,6 +13,7 @@ import {
   MIN_TREND_SALES,
   MIN_TREND_DAYS,
   MAX_TREND_DROP,
+  TREND_SALES,
 } from "./similar.mjs";
 import { STAT_RANGES } from "./stats.mjs";
 
@@ -403,6 +404,18 @@ describe("the market's fall, and sales brought to today", () => {
     const plain = sv("jet", piece, fills, { trend: false });
     expect(plain.value).toBeCloseTo(falling(26 / 24), 6);
     expect(plain.trend).toBeNull();
+  });
+  it("reads a busy market's fall over its last three days, not over its newest day or two", () => {
+    // 1,000 sales in the week, one every 10 minutes: the newest 200 sold within 34 hours, 429 within 72
+    const fills = Array.from({ length: 1000 }, (_, i) => ({
+      price: falling((i * 0.168) / 24),
+      at: iso(i * 0.168),
+      code: "jet",
+      skills: ROLLS[i % 3],
+    }));
+    const trend = marketTrend("jet", fills);
+    expect(trend).toMatchObject({ n: TREND_SALES, days: 3 });
+    expect(trend.perDay).toBeCloseTo(-0.04, 9);
   });
   it("lifts no sale when the market rose, and takes a fall steeper than 10% a day as 10%", () => {
     const rising = week((d) => 400 * 0.96 ** d);
