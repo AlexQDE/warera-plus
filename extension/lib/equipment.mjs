@@ -653,7 +653,12 @@ export function createEquipment({
       lines.push(
         `Dismantle: <b>${SCRAP_LADDER[r.rarity]}</b> scraps (${escapeHtml(r.rarity)}) at the observed bids = <b>${fmt(r.q.value)} g</b>${r.q.complete ? "" : ` · only ${r.q.filled} covered by observed bids`}`,
       );
-    else lines.push("Rarity unreadable: the frame border is off-palette");
+    else
+      lines.push(
+        r.kind === "card"
+          ? "Rarity unreadable: these stats fit no tier of the item"
+          : "Rarity unreadable: the frame border is off-palette",
+      );
     // a live card prints what the buyer pays, tax included; its Buy chip rounds that
     const offer =
       r.kind === "card"
@@ -668,6 +673,11 @@ export function createEquipment({
     lines.push(
       `This piece: ${escapeHtml(statWords(r))}${r.stats.durability != null ? ` · ${r.stats.durability}% durability` : ""}${r.statRank?.status === "ok" ? ` · ${ordinal(r.statRank.percentile)} percentile among ${r.statRank.n} listed` : ""}`,
     );
+    // a skin's frame can wear another tier's colours; the stats decide
+    if (r.kind === "card" && r.frameAgrees === false && r.frameRarity)
+      lines.push(
+        `The frame's colours say ${escapeHtml(r.frameRarity)}; the stats name ${escapeHtml(r.rarity ?? "no tier")}, and the stats price it`,
+      );
     if (value) {
       const gap = r.price != null ? value.amount - r.price : null;
       lines.push(

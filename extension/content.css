@@ -705,6 +705,10 @@
   border-radius: 8px;
   align-items: center;
 }
+/* a cell's label on its own line, above its value ("Sealed bid" over "7.500 g"), never run into it */
+[data-lens] .lens-case > div > small {
+  display: block;
+}
 [data-lens] .lens-case-details {
   grid-column: 1/-1;
   display: flex;

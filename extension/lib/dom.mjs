@@ -534,18 +534,16 @@ export function cardRows(
     // The tiers' stat ranges have holes between them, so the stats name the
     // code on their own. The frame's colour is only checked: live frames were
     // seen for common and epic alone, and a palette miss must not drop a card
-    // the stats read. The selected item (?item=) only stands in when the
-    // stats name nothing and it is the card's own slot: the address changes
-    // a frame before the game replaces the list, and the old cards are not it.
+    // the stats read. The selected item (?item=) only settles a tie among the
+    // tiers the stats fit: stats that fit no tier are unreadable whatever the
+    // address says (and the address changes a frame before the game replaces
+    // the list, so the old cards are not it).
     const frameAgrees =
       !inferred ||
       !gradientRarity ||
       rarityFromItemCode(inferred) === gradientRarity;
     const code =
-      inferred ??
-      (targetFromCode(filtered) && slotFromAlt(filtered) === slot
-        ? filtered
-        : null);
+      inferred ?? (matches.some(([c]) => c === filtered) ? filtered : null);
     const ownOffer = /^\s*withdraw\s*$/i.test(button.textContent ?? "");
     out.push({
       kind: "card",
@@ -732,8 +730,10 @@ export function pickerCard(dialog) {
  * Where the extension's bar goes in the picker: right after the card's title
  * ("Items"), so it stays in view while the list scrolls. The v0.27 dialog's
  * first child is a full-screen backdrop, so the card is found from a tile
- * upwards: the first ancestor with a child that is only the title. null when
- * there is none (the caller falls back to pickerCard).
+ * upwards: the first ancestor with a child that is only the title, up to the
+ * dialog itself (since 2026-10-27 the card is the dialog, and its first child
+ * an absolutely placed box with the close button). null when there is none
+ * (the caller falls back to pickerCard).
  * @param {Element} dialog
  * @returns {{ card: Element, title: Element } | null}
  */
@@ -741,7 +741,11 @@ export function pickerTitle(dialog) {
   const img = [...dialog.querySelectorAll("img")].find((i) =>
     isItemImageAlt(i.getAttribute("alt")),
   );
-  for (let n = img?.parentElement; n && n !== dialog; n = n.parentElement) {
+  for (
+    let n = img?.parentElement;
+    n;
+    n = n === dialog ? null : n.parentElement
+  ) {
     const title = [...n.children].find(
       (c) =>
         !c.classList.contains("ss-pick-bar") &&

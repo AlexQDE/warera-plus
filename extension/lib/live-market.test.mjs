@@ -200,7 +200,7 @@ it("does not take an extension-owned explanation for the game's tax notice", () 
   expect(dom.taxNotice()).toBeNull();
 });
 
-it("names the code from the stat ranges, checks the frame against it, and takes the URL as authoritative", () => {
+it("names the code from the stat ranges, checks the frame against it, and agrees with the URL when the stats do", () => {
   expect(dom.cardRows).toBeTypeOf("function");
   expect(dom.cardRows()[0]).toMatchObject({
     code: "gloves1",
@@ -358,12 +358,35 @@ it("trusts the cards' stats over an address that changed before the list did", (
     "helmet1",
     "chest1",
   ]);
-  // stats out of every range: the address stands in only for its own slot
+  // stats out of every range fit no tier: no code, whatever the address says
   const first = dom.cardRows()[0];
   first.tile.querySelector("span span").textContent = "99";
   expect(dom.cardRows()[0].code).toBeNull();
   window.history.replaceState({}, "", "/market/equipments?item=gloves3");
-  expect(dom.cardRows()[0].code).toBe("gloves3");
+  expect(dom.cardRows()[0].code).toBeNull();
+});
+
+it("says in Details when the frame's colours name another tier than the stats", () => {
+  const equipment = createEquipment({
+    settings: () => ({ ...DEFAULTS, picker: false }),
+    requestSales: vi.fn(),
+  });
+  const state = {
+    book: {
+      at: new Date().toISOString(),
+      bids: [{ price: 0.2, quantity: 2000 }],
+    },
+  };
+  dom.cardRows()[0].tile.style.backgroundImage =
+    "linear-gradient(45deg, rgb(59, 35, 95) 0%, rgb(15, 9, 25) 100%)";
+  equipment.render(state);
+  const strip = document.querySelector(".ss-verdict[data-card]");
+  strip.querySelector('[data-action="details"]').click();
+  equipment.render(state);
+  expect(strip.querySelector(".lens-details").textContent).toContain(
+    "The frame's colours say epic; the stats name common, and the stats price it",
+  );
+  equipment.clear();
 });
 
 it("keeps the live cards' PASS, NEAR MISS, FLIP and STALE verdicts", () => {

@@ -109,6 +109,16 @@ describe("the inventory picker", () => {
     expect(bar.textContent.replace(/\s+/g, " ")).toContain("⚒ Crafted 1");
     expect(bar.textContent.replace(/\s+/g, " ")).toContain("↓ Bought 2");
   });
+  it("puts its bar under the title when the dialog is the card itself, never in the close button's box", () => {
+    // as read live on 2026-10-27, Sell an item and Quick dismantle alike: the card carries role="dialog"; its
+    // first child is an absolutely placed box with the close button, then the title, then the body
+    document.body.innerHTML = `<main></main><div role="dialog" class="card"><div class="x" style="position: absolute"><button aria-label="close"></button></div><div class="title"><span>Items</span></div><div class="body"><div>0/5<button>Clear</button></div><div data-index="0">${tile("winterJet", [270, "50%", "100%"])}</div><button>Close</button></div></div>`;
+    equipment.render(state);
+    const bar = document.querySelector(".ss-pick-bar");
+    expect(bar.parentElement.getAttribute("role")).toBe("dialog");
+    expect(bar.previousElementSibling.classList.contains("title")).toBe(true);
+    expect(document.querySelector(".x .ss-pick-bar")).toBeNull();
+  });
   it("dims, never hides, what another source brought; All brings everything back", () => {
     equipment.render(state);
     document.querySelector('[data-picker-source="crafted"]').click();
