@@ -2,6 +2,10 @@
 
 Go through the newest release's section and the manual gate on the live game, with your own account, before publishing. Then [CHROME-WEB-STORE.md](CHROME-WEB-STORE.md).
 
+## 3.10.0 on the live page (v0.27)
+
+- **Luck in Train.** Open an employee's **already pending** hand (never draw one: a draw costs 10 energy). A Luck drill shows gold (no longer "≈ 0 g"); its "?" names the trainings left after this one, how much the best card of a hand gains, the rarer odds, and the toolbox chance it does not price. On an employee's last training ("2/3": one left, this one), Luck reads ≈ 0 g.
+
 ## 3.9.0 on the live page (v0.27)
 
 Reload the extension itself first (its card must read 3.9.0), then the game. Nothing here needs a listing, an opening or a purchase: pick pieces, read, close.

@@ -521,3 +521,24 @@ newest | mostExpensive, limit: 12, cursor?}` (the sort is kept in the
   "Market rate" at 0) and his potential ("1/3"); a card shows its rarity,
   title and effect ("-10%" "Expected wage", "+2" with the stat's icon and
   "Now 1").
+- **A hand's odds** (read 2026-10-27, client module 56899 and its config):
+  `training.rarityWeights` common 55, uncommon 25, rare 13, epic 5,
+  legendary 2; every Luck point adds `luck.trainingWeightShiftPerPoint`
+  (uncommon 0.5, rare 0.3, epic 0.15, legendary 0.05) and takes their sum
+  from common, never below 0 (`vh(leadership, luck)`; Leadership shifts
+  1 / 0.6 / 0.3 / 0.1 a level the same way, but the game's own odds display,
+  `pt(0, luck)`, uses leadership 0). The pool an employee is dealt from
+  (`S(e)`): a drill for each of Production, Luck and Responsibility at +1
+  common, +2 uncommon, +3 epic, +4 legendary; Rehab for each trait that is
+  not positive (negative rare, mixed uncommon); Clean slate (legendary) with
+  2 or more negative traits; New habit for each trait he lacks, mixed rare
+  and positive epic, and a legendary card for each pair of positive traits
+  the conflict list allows; Wild card (uncommon) while a trait can be gained;
+  Second wind +2 rare, +3 epic, +4 legendary while potentialMax + gain ≤ 15;
+  Negotiation −5% common, −10% uncommon, −20% rare while the expectation
+  stays at 0.7 or more. Trainings left are potentialMax − potential (the
+  header's "1/3" is potential / potentialMax). The draw itself is
+  server-side; `lib/hiring.mjs` assumes each card draws a rarity by the odds,
+  then a card of it at random. Luck also gives a toolbox chance of 0.001 an
+  hour a point, at most 0.02 (`zr`), times the traits'
+  `toolboxChanceMultiplier`.

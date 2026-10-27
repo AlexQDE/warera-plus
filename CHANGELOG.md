@@ -2,6 +2,10 @@
 
 What changed in each release of WarEra Plus, newest first. Every number here was measured as it says; a synthetic page or market says so.
 
+## 3.10.0
+
+- **Luck has a price in the Train window.** A Luck drill was worth nothing to the advisor, so it was never the pick. The game deals training cards by rarity (55 common, 25 uncommon, 13 rare, 5 epic, 2 legendary) and every Luck point moves a point of that weight from common to the rarer cards (uncommon +0.5, rare +0.3, epic +0.15, legendary +0.05), read off the client's code on 2026-10-27. A Luck drill is now worth the trainings the employee has left after this one (the header's "1/3": potentialMax − potential) times how much the best card of a hand gains with those odds, the cards priced as the advisor prices them for him: every drill, Negotiation over the 70% floor, Rehab for his traits that are not positive, Clean slate with two negatives, the habits he lacks and their positive pairs, the Wild card, Second wind under the potential cap of 15. The toolbox chance Luck adds (0.1% an hour a point, 2% at most) is named, not priced: tools have no market price. The Wild card's +1 to a random stat counts Luck's worth too. The server's draw is not in the client: the model assumes each card draws a rarity by those odds, then a card of it at random. On the synthetic window (one training after the open hand) a Luck +2 drill is +0.2 g; with more trainings left it grows with them.
+
 ## 3.9.1
 
 What 3.9.0's first look on the live page found (2026-10-27, after the extension's reload).
