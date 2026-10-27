@@ -141,7 +141,7 @@ export function createCraftDesk({ settings, now = Date.now }) {
             ? `<span class="lens-muted">–</span>`
             : `<b class="${cls(gain)}">${signedGold(gain)}</b> <small class="${cls(gain)}">${pct(r.roiRandom)}</small>`;
         const chosen = r.best
-          ? `<span title="${esc(itemLabel(r.best.code))} sells ~${gold(r.best.avg)} g; a sniper craft (the slot chosen) costs ${r.costChosen.value == null ? "–" : gold(r.costChosen.value)} g">${esc(slotName(r.best.code))} <small class="${cls(r.roiChosen)}">${pct(r.roiChosen)}</small></span>`
+          ? `<span title="${esc(itemLabel(r.best.code))} sells ≈${gold(r.best.avg)} g at the game's average; a sniper craft (the slot chosen) costs ${r.costChosen.value == null ? "–" : gold(r.costChosen.value)} g">${esc(slotName(r.best.code))} <small class="${cls(r.roiChosen)}">${pct(r.roiChosen)}</small></span>`
           : `<span class="lens-muted">–</span>`;
         const isBest = top?.row === r;
         const main = `<tr class="lens-tier${isBest ? " lens-best" : ""}" data-rarity="${r.rarity}" aria-expanded="${open}"${isBest ? ` title="best now: ${top.mode === "random" ? "a random craft" : "a sniper craft (the slot chosen)"}"` : ""}><th scope="row"><button type="button" data-action="desk-tier" data-tier="${r.tier}" aria-pressed="${open}"><span aria-hidden="true">${open ? "▾" : "▸"}</span> ${r.rarity}</button></th>${cell(cost)}${cell(ev)}<td class="lens-num">${profit}</td><td>${chosen}</td></tr>`;
