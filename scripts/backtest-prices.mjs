@@ -21,19 +21,19 @@
 // left out here (trend: false), so the two differ by the stats alone.
 //
 // FLIP on markets that trend: flat, falling 3% or 6% a day, 15% down in the
-// last 48 hours, rising 3% a day, for four of the items above, at the volumes
-// above and at 1,000 sales a week (the most the extension reads). Each sale
-// was listed a while before it sold (exponential, a 24-hour median).
-// `listings` offers of random rolls are priced at their worth now times
-// lognormal noise (10%). An offer is a real flip when it is worth 10% more
-// than its price at resale: after the median listed-to-sold wait of the item's
-// sales, with the market going on as it went (a fall keeps falling, the drop
-// stays down, the rise keeps rising), since a piece bought now sells only
-// then. FLIP at 10%, three ways: A, the value without the market's fall; C, as
-// shipped (sales alike brought to today); C + cap, as shipped with offerCap
-// over the listings (no tax). It prints how many tags were real flips
-// (precision), how many real flips got a tag (recall) and how many tags there
-// were.
+// last 48 hours, in the last 24 hours, or 4 to 7 days ago and flat since,
+// rising 3% a day, for four of the items above, at the volumes above and at
+// 1,000 sales a week (the most the extension reads). Each sale was listed a
+// while before it sold (exponential, a 24-hour median). `listings` offers of
+// random rolls are priced at their worth now times lognormal noise (10%). An
+// offer is a real flip when it is worth 10% more than its price at resale:
+// after the median listed-to-sold wait of the item's sales, with the market
+// going on as it went (a fall keeps falling, the drop stays down, the rise
+// keeps rising), since a piece bought now sells only then. FLIP at 10%, three
+// ways: A, the value without the market's fall; C, as shipped (sales alike
+// brought to today); C + cap, as shipped with offerCap over the listings (no
+// tax). It prints how many tags were real flips (precision), how many real
+// flips got a tag (recall) and how many tags there were.
 //
 // The markets are invented: this compares methods under stated assumptions,
 // it does not measure the game.
@@ -223,6 +223,14 @@ const TRENDS = [
   [
     "15% down in the last 48 h",
     (h) => -Math.log(0.85) * Math.min(1, Math.max(0, h / 48)),
+  ],
+  [
+    "15% down in the last 24 h",
+    (h) => -Math.log(0.85) * Math.min(1, Math.max(0, h / 24)),
+  ],
+  [
+    "15% down 4-7 d ago, flat",
+    (h) => -Math.log(0.85) * Math.min(1, Math.max(0, (h - 96) / 72)),
   ],
   ["rising 3% a day", (h) => Math.log(0.97) * (h / 24)],
 ];

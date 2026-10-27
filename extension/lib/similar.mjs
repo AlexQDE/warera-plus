@@ -183,11 +183,13 @@ const trendCache = new WeakMap();
  * false FLIP costs gold, a missed one only a chance), and a few odd sales
  * cannot make a crash. Read from the newest TREND_SALES sales, or from a busier
  * market's last MIN_TREND_DAYS days (its newest TREND_SALES sold within a day
- * or two), TREND_SALES of them spread over those days. No trend below
- * MIN_TREND_SALES sales on MIN_TREND_DAYS days.
- * Worked out once per list of fills. `perDay` is the fall a day as a share
- * (−0.04), 0 without one; `log` the same in log price; `n` the sales it was
- * read from.
+ * or two), TREND_SALES of them spread over those days; the steeper of that
+ * slope and the same over the last MIN_TREND_DAYS days of those sales, since
+ * over a week the pairs of its flat days outnumber those of a fall in its last
+ * days. No trend below MIN_TREND_SALES sales on MIN_TREND_DAYS days (either
+ * slope). Worked out once per list of fills. `perDay` is the fall a day as a
+ * share (−0.04), 0 without one; `log` the same in log price; `n` the sales it
+ * was read from, on `days` days.
  * @param {string} code @param {ReadonlyArray<Fill> | null | undefined} fills
  * @returns {Trend}
  */
@@ -227,25 +229,43 @@ export function marketTrend(code, fills) {
     { length: Math.min(take, TREND_SALES) },
     (_, i) => sales[Math.floor(i * step)],
   );
-  const days = new Set(read.map((x) => Math.floor((read[0].t - x.t) / 86400e3)))
-    .size;
-  let log = 0;
-  if (read.length >= MIN_TREND_SALES && days >= MIN_TREND_DAYS) {
+  /** On how many days (24-hour periods back from the newest) `xs` sold. @param {Array<{ t: number }>} xs */
+  const daysOf = (xs) =>
+    new Set(xs.map((x) => Math.floor((xs[0].t - x.t) / 86400e3))).size;
+  /**
+   * The median change of log price a day over pairs of `xs` sold TREND_PAIR_HOURS apart or more; null below
+   * MIN_TREND_SALES sales on MIN_TREND_DAYS days. @param {Array<{ t: number, lp: number }>} xs
+   */
+  const slopeOf = (xs) => {
+    if (xs.length < MIN_TREND_SALES || daysOf(xs) < MIN_TREND_DAYS) return null;
     /** @type {number[]} */
     const perDay = [];
-    for (let i = 0; i < read.length; i++)
-      for (let j = i + 1; j < read.length; j++) {
-        // read[i] is the newer: a fall reads negative
-        const dt = (read[i].t - read[j].t) / 86400e3;
+    for (let i = 0; i < xs.length; i++)
+      for (let j = i + 1; j < xs.length; j++) {
+        // xs[i] is the newer: a fall reads negative
+        const dt = (xs[i].t - xs[j].t) / 86400e3;
         if (dt * 24 >= TREND_PAIR_HOURS)
-          perDay.push((read[i].lp - read[j].lp) / dt);
+          perDay.push((xs[i].lp - xs[j].lp) / dt);
       }
-    const m = median(perDay);
-    if (m != null && m < Math.log(1 - MIN_TREND_FALL))
-      log = Math.max(Math.log(1 - MAX_TREND_DROP), m);
-  }
+    return median(perDay);
+  };
+  // a fall of the last MIN_TREND_DAYS days counts even after a flat week: the steeper of the two
+  const recent = read.filter((x) => read[0].t - x.t < MIN_TREND_DAYS * 86400e3);
+  const falls = [
+    slopeOf(read),
+    recent.length < read.length ? slopeOf(recent) : null,
+  ].filter((m) => m != null);
+  const m = falls.length ? Math.min(...falls) : null;
+  let log = 0;
+  if (m != null && m < Math.log(1 - MIN_TREND_FALL))
+    log = Math.max(Math.log(1 - MAX_TREND_DROP), m);
   /** @type {Trend} */
-  const out = { perDay: Math.expm1(log), log, n: read.length, days };
+  const out = {
+    perDay: Math.expm1(log),
+    log,
+    n: read.length,
+    days: read.length ? daysOf(read) : 0,
+  };
   if (!byCode) trendCache.set(fills, (byCode = new Map()));
   byCode.set(code, out);
   return out;

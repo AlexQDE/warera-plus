@@ -417,6 +417,23 @@ describe("the market's fall, and sales brought to today", () => {
     expect(trend).toMatchObject({ n: TREND_SALES, days: 3 });
     expect(trend.perDay).toBeCloseTo(-0.04, 9);
   });
+  it("reads a fall of the last three days after a flat week: the steeper of the week's slope and theirs", () => {
+    // flat from 3 days back, then 8% a day: over the week the flat days' pairs outnumber the fall's
+    const fills = week((d) => 400 / 0.92 ** Math.min(3, d));
+    const trend = marketTrend("jet", fills);
+    expect(trend).toMatchObject({ n: 21, days: 7 });
+    expect(trend.perDay).toBeCloseTo(-0.08, 9);
+    // a week flat but for its last three days rising lifts nothing, as any rise
+    const rose = week((d) => 400 * 0.92 ** Math.min(3, d));
+    expect(marketTrend("jet", rose).perDay).toBe(0);
+    // a week that fell 8% a day and held its last three days: the week's slope is the steeper
+    const held = marketTrend(
+      "jet",
+      week((d) => 400 / 0.92 ** Math.max(0, d - 3)),
+    );
+    expect(held.perDay).toBeLessThan(-0.04);
+    expect(held.perDay).toBeGreaterThan(-0.08);
+  });
   it("lifts no sale when the market rose, and takes a fall steeper than 10% a day as 10%", () => {
     const rising = week((d) => 400 * 0.96 ** d);
     expect(marketTrend("jet", rising).perDay).toBe(0);
