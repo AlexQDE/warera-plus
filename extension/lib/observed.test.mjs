@@ -68,18 +68,27 @@ describe("wooden summaries", () => {
     expect(current.rows[1].current).toBe(23);
     expect(summary.rows[1]).not.toHaveProperty("current");
   });
-  it("keeps missing historical/current prices unknown, and handles empty windows", () => {
+  it("sets an opening with an unknown price apart without blanking the totals, and handles empty windows", () => {
     const summary = woodenSummary([
       ...openings,
       { ...openings[0], value: null, cost: null },
     ]);
+    // the three priced openings keep their totals; the fourth is counted apart
     expect(summary).toMatchObject({
       n: 4,
+      counted: 3,
+      value: 20.6,
+      cost: 20,
+      net: expect.closeTo(0.6),
+      unpriced: 1,
+      costUnknown: 1,
+    });
+    expect(woodenSummary([{ ...openings[0], value: null }])).toMatchObject({
+      n: 1,
+      counted: 0,
       value: null,
       cost: null,
       net: null,
-      unpriced: 1,
-      costUnknown: 1,
     });
     expect(woodenAtBids(woodenSummary(openings), () => null)).toMatchObject({
       value: null,

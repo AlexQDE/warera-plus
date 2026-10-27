@@ -292,10 +292,14 @@ function woodenHtml({
       : row?.verdict
     : null;
   const [kind, word] = TAG[verdict] ?? ["miss", "NO SIGNAL"];
+  // the price the mode compares with, as on the strip: the sealed bid to hold, the ask to flip
+  const flip = woodenMode === "flip";
   const now = row
-    ? `<span class="lens-section lens-wooden-prices"><span><small>Open</small> ≈${complete ? gold(row.openValue) : "–"}</span> · <span><small>Sell</small> ${gold(row.bid)}</span> · <span><small>Buy</small> ${gold(row.ask)}</span></span> <span class="lens-tag" data-kind="${kind}">${word}</span>`
+    ? `<span class="lens-section lens-wooden-prices"><span><small>Open</small> ≈${complete ? gold(row.openValue) : "–"}</span> · ${flip ? `<span><small>Buy</small> ${gold(row.ask)}</span>` : `<span><small>Sell</small> ${gold(row.bid)}</span>`}</span> <span class="lens-tag" data-kind="${kind}">${word}</span>`
     : `<span class="lens-muted">Reading prices…</span>`;
-  const title = `Wooden case. Open: model EV at resource bids. Sell: sealed bid. Buy: order-book ask as listed. A buyer in a taxed country pays that country's market tax on top. ${woodenMode === "flip" ? "FLIP uses the SNIPE minimum ROI." : "Hold compares the opening value with the sealed bid."}${fresh ? "" : " Prices are stale; recommendation paused."}`;
+  const title = flip
+    ? `Flip: buy a case at the ask (as listed; a taxed country adds its tax), open it, sell the drops at the bids. FLIP at the SNIPE minimum ROI.${fresh ? "" : " Prices are stale; no tag."}`
+    : `Hold: the opening's value at the resource bids against the sealed bid.${fresh ? "" : " Prices are stale; no tag."}`;
   const today = ledger?.windows?.today.woodenLedger;
   const all = ledger?.windows?.all.woodenLedger;
   if (!today || !all) return `${head(now, title)}${waitingHtml(needsKey)}`;

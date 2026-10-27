@@ -410,7 +410,12 @@ describe("the ledger", () => {
     state.ledger.windows.today.woodenLedger = woodenSummary([]);
     state.ledger.windows.today.wooden = { n: 0, value: 0, cost: 0 };
     click('[data-action="desk-window"][data-window="today"]');
+    // a window without openings shows no "Wooden 0" chip while the section is closed
+    expect(body.querySelector('[data-action="desk-wooden"]')).toBeNull();
+    // opened in a window with openings, it stays open and closable on an empty one
+    click('[data-action="desk-window"][data-window="all"]');
     click('[data-action="desk-wooden"]');
+    click('[data-action="desk-window"][data-window="today"]');
     expect(text()).toContain("No wooden openings in this window.");
     expect(
       body
@@ -419,6 +424,7 @@ describe("the ledger", () => {
     ).toBe("true");
     click('[data-action="desk-wooden"]');
     expect(body.querySelector(".lens-wooden-ledger")).toBeNull();
+    expect(body.querySelector('[data-action="desk-wooden"]')).toBeNull();
   });
   it("shows the worker's view: the result, the money, the pieces, by activity and tier, the recent pieces", () => {
     state.craftsUserId = ME;

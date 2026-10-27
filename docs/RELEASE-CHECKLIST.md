@@ -7,10 +7,11 @@ Go through the newest release's section and the manual gate on the live game, wi
 Reload the extension itself first (its card must read 3.9.0), then the game. Nothing here needs a listing, an opening or a purchase: pick pieces, read, close.
 
 - **The picker's bar.** Market → Sell an item → a "+" slot: the bar sits under "Items", in the flow, above "0/5" and CLEAR, never over them; the card's CLOSE stays in reach. Inventory → Dismantle: the same under "Quick dismantle", the game's tabs uncovered.
-- **The cases strip.** Each cell's label sits over its value ("Sealed bid" over "7.500 g"); the wooden row shows the Ask too.
+- **The cases strip.** Each cell's label sits over its value ("Sealed bid" over "7.500 g"); the three rows keep the same columns.
+- **The settings popup** opens wide enough to read (440 px), one short line of help a setting.
 - **Sell items.** Pick a weapon and an armour piece: each gets its own line under its own price, from sales of both its stats. A piece whose game start comes from an offer with other stats (a high-attack weapon among same-crit offers) gets the red line. **use** writes only into its own piece's price. Close without PUT ON SALE.
 - **Colours.** A SNIPE card is framed green all round and a FLIP card purple, each with its line tinted; they read apart at a glance on Cheapest and after Load more.
-- **Wooden cases.** Settings, Advanced, Wooden cases: Flip, then the strip's wooden row reads FLIP or PASS with "+X g a case · N cases under it"; back to Hold, the old tag. Open a wooden case's window (if you hold one) without pressing OPEN: the panel shows Open / Sell / Buy, Today, All, Last and, when they differ, how many of the game's "Total cases opened" the history holds.
+- **Wooden cases.** Settings, Advanced, Wooden cases: Flip, then the strip's wooden row shows the Ask in the Sealed bid's place and reads FLIP or PASS with "+X g a case · N cases under it"; back to Hold, the sealed bid and the old tag. Open a wooden case's window (if you hold one) without pressing OPEN: the panel shows Open and Sell (hold) or Buy (flip), Today, All, Last and, when they differ, how many of the game's "Total cases opened" the history holds.
 - **The Ledger's Wooden chip** opens the drops by resource for the window; a second click closes it.
 
 ## 3.8.1 on the live page (v0.27)

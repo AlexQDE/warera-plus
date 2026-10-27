@@ -13,7 +13,8 @@
       }
       body {
         margin: 0;
-        min-width: 0;
+        /* the toolbar popup sizes itself to its content: wide enough to read at a glance */
+        min-width: 440px;
         background: #15171c;
         color: #e6e8ee;
         font:
@@ -264,14 +265,10 @@
             ><input id="show" type="checkbox" /> show the key</label
           >
           <p class="help">
-            Optional. Without a key the scrap prices, SNIPE and the game’s
-            averages still work, from the API’s free allowance (100 requests a
-            minute). Sales by stats, FLIP, the sell price from sales, the Ledger
-            and the picker's Crafted / Bought filters need one: the API serves
-            sales and your history only with a key. Create it in the game, in
-            your account settings, and paste it here. It is stored only in this
-            browser and sent only to <code>api2.warera.io</code> as the request
-            header.
+            Scrap prices, SNIPE and averages work without it; sales by stats,
+            FLIP and the Ledger need it. Make it in the game's account settings.
+            It stays in this browser and goes only to
+            <code>api2.warera.io</code>.
           </p>
           <div id="status" class="status" role="status" aria-live="polite">
             Loading settings…
@@ -285,17 +282,15 @@
               <label for="margin">SNIPE: minimum scrap ROI (%)</label>
               <input id="margin" type="number" min="-50" max="500" step="1" />
               <p class="help">
-                The scraps a piece dismantles into, sold at the observed bids,
-                must beat its price by this much. Negative shows near misses.
+                Its scraps at the bids beat its price by this much. Negative
+                shows near misses.
               </p>
             </div>
             <div>
               <label for="flipPct">FLIP: value above price (%)</label>
               <input id="flipPct" type="number" min="-50" max="500" step="1" />
               <p class="help">
-                What pieces of its stats sold for in the last 7 days (same or
-                similar stats, brought to its own) must sit this far above its
-                price. The game's average never earns FLIP.
+                Sales of its stats (7 days) sit this far above its price.
               </p>
             </div>
           </div>
@@ -333,8 +328,8 @@
           <label for="interval">Read the scrap book every (s)</label>
           <input id="interval" type="number" min="10" max="600" step="5" />
           <p class="help">
-            Steel and case books refresh every 60 seconds, the game's average
-            prices every 10 minutes, fills every 3 minutes. Hidden tabs pause.
+            Other books every 60 s, averages every 10 min, sales every 3 min.
+            Hidden tabs pause.
           </p>
           <label for="sellFrom">Case drops: sell from this rarity up</label>
           <select id="sellFrom">
@@ -347,23 +342,15 @@
             <option value="mythic">Mythic only</option>
           </select>
           <p class="help">
-            Rarities below the threshold are valued at the scrap bids, from the
-            threshold up at the game's average item price. The case verdict uses
-            this policy.
+            Below it, drops count at the scrap bids; from it up, at the game's
+            average price.
           </p>
           <label for="woodenMode">Wooden cases</label>
           <select id="woodenMode">
-            <option value="hold">
-              Hold (compare the opening with the sealed bid)
-            </option>
-            <option value="flip">
-              Flip (buy at the ask, open, sell the drops)
-            </option>
+            <option value="hold">Hold: opening vs. the sealed bid</option>
+            <option value="flip">Flip: buy at the ask, open, sell</option>
           </select>
-          <p class="help">
-            Flip uses the SNIPE minimum ROI and the order-book ask as listed. A
-            buyer in a taxed country pays that country's market tax on top.
-          </p>
+          <p class="help">Flip is tagged at the SNIPE minimum ROI.</p>
           <label for="craftSteelMode">How you craft (for the Ledger)</label>
           <select id="craftSteelMode">
             <option value="auto">
@@ -375,14 +362,9 @@
             </option>
           </select>
           <p class="help">
-            A sniper craft (the slot picked in the game's craft window, CRAFT
-            instead of CRAFT RANDOM) burns twice the steel; the scraps are the
-            same. The game does not record which way a craft was made. Detect
-            takes the pick off the craft window when you press CRAFT with the
-            extension on; for crafts it did not see (before it was installed, on
-            another device) a run of 6 weapons or 5 of one armour piece in a
-            row, too many for a random craft. Sniper crafts carry ◎ in the
-            Ledger.
+            A sniper craft (slot picked) burns twice the steel. Detect sees your
+            pick in the craft window; crafts it missed count as sniper when 6
+            weapons or 5 of one armour piece come in a row.
           </p>
           <label for="userId">Your player id (optional)</label>
           <input
@@ -396,9 +378,8 @@
             placeholder="read off the game page when empty"
           />
           <p class="help">
-            The 24-character id in your profile URL (app.warera.io/user/…).
-            Leave it empty: the Ledger reads it from the game page's own
-            inventory and skills links. Set it only to follow another account.
+            Leave empty to read it from the game page; set it only to follow
+            another account.
           </p>
           <label class="toggle"
             ><input id="casesCollapsed" type="checkbox" /> Start the case panel
@@ -419,13 +400,8 @@
 
         <footer>
           <p>
-            Read-only decision support: no purchases, crafts, listings, game
-            actions, session access or analytics. Quotes are snapshots, not
-            reserved liquidity; expected values are not guarantees.
-          </p>
-          <p>
-            WarEra Plus continues WarEra Lens and Scrap Sniper. Your existing
-            settings and key stay in this extension.
+            Read-only: no purchases, crafts, listings or game actions. Values
+            are estimates.
           </p>
         </footer>
       </form>

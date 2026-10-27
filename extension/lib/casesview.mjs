@@ -105,9 +105,10 @@ export function casesStripHtml({
       const flip = wooden && woodenMode === "flip";
       const verdict = fresh ? (flip ? r.flipVerdict : r.verdict) : null;
       const tag = verdictTag(verdict);
-      const ask = wooden
-        ? `<div title="Order-book ask as listed. A buyer in a taxed country pays that country's market tax on top."><small>Ask</small><b>${fmt(r.ask)} g</b></div>`
-        : "";
+      // one price column, as on the other cases: the sealed bid, or in flip mode the ask a case is bought at
+      const price = flip
+        ? `<div title="The order book's ask as listed; a buyer in a taxed country pays that tax on top"><small>Ask</small><b>${fmt(r.ask)} g</b></div>`
+        : `<div><small>Sealed bid</small><b>${fmt(r.bid)} g</b></div>`;
       const gain =
         flip && fresh && r.flipGain != null
           ? `${signed(r.flipGain)} g a case · ${fmtQty(r.askDepth.n)} cases under it`
@@ -117,7 +118,7 @@ export function casesStripHtml({
         r.code === "woodenCase"
           ? `v0.27 drops: 60/25/12/3 by rarity, 20-40 / 40-70 / 80-130 / 160-260 production points · ${s.wooden.complete ? "20/20 resources covered" : `${s.wooden.missing.length} resources lack price/depth`}`
           : `${esc(policyDetails(r.policy))}${fallbacks ? ` · *no average price yet, scrapped instead` : ""}<br>Scrap-only floor ${fmt(r.openScrap)} g · sold at avg (all drops) ${fmt(r.openMarket)} g · avg = the game's Current value, a mean of recent sales; selling takes time`;
-      return `<article class="lens-case${wooden ? " lens-case-wooden" : ""}" data-verdict="${esc(verdict ?? "none")}"><div><strong>${esc(r.label)}</strong><small>${esc(r.basis)}</small></div><div><small>Sealed bid</small><b>${fmt(r.bid)} g</b></div>${ask}<div><small>Expected opening value</small><b>${(wooden ? s.wooden.complete : r.complete) ? fmt(r.openValue) : "–"} g</b></div><div><span class="lens-tag ${esc(tag.cls)}"${wooden ? ` title="${esc(tag.why)}"` : ""}>${esc(tag.text)}</span><small>${fresh ? esc(gain || tag.why) : "Stale data; recommendation paused"}</small></div><div class="lens-case-details" ${collapsed ? "hidden" : ""}><span>Top bid depth ${fmtQty(r.bidQty)}${cases.books[r.code]?.bidCapped ? "+" : ""} · ask ${fmt(r.ask)} g${flip && r.flipGain != null ? ` · gain over qualifying asks ${fmt(r.askDepth.gain)} g` : ""}</span><span>${details}</span></div></article>`;
+      return `<article class="lens-case${wooden ? " lens-case-wooden" : ""}" data-verdict="${esc(verdict ?? "none")}"><div><strong>${esc(r.label)}</strong><small>${esc(r.basis)}</small></div>${price}<div><small>Expected opening value</small><b>${(wooden ? s.wooden.complete : r.complete) ? fmt(r.openValue) : "–"} g</b></div><div><span class="lens-tag ${esc(tag.cls)}"${wooden ? ` title="${esc(tag.why)}"` : ""}>${esc(tag.text)}</span><small>${fresh ? esc(gain || tag.why) : "Stale data; recommendation paused"}</small></div><div class="lens-case-details" ${collapsed ? "hidden" : ""}><span>Top bid depth ${fmtQty(r.bidQty)}${cases.books[r.code]?.bidCapped ? "+" : ""} · ask ${fmt(r.ask)} g${flip && r.flipGain != null ? ` · gain over qualifying asks ${fmt(r.askDepth.gain)} g` : ""}</span><span>${details}</span></div></article>`;
     })
     .join("");
   return (

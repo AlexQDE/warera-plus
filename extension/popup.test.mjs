@@ -35,8 +35,8 @@ it("loads and saves the two wooden modes from Advanced", async () => {
       o.textContent.replace(/\s+/g, " ").trim(),
     ]),
   ).toEqual([
-    ["hold", "Hold (compare the opening with the sealed bid)"],
-    ["flip", "Flip (buy at the ask, open, sell the drops)"],
+    ["hold", "Hold: opening vs. the sealed bid"],
+    ["flip", "Flip: buy at the ask, open, sell"],
   ]);
   control.value = "hold";
   document

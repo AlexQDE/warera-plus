@@ -717,16 +717,6 @@
   border-radius: 8px;
   align-items: center;
 }
-[data-lens] .lens-case-wooden {
-  grid-template-columns: minmax(95px, 1fr) repeat(3, minmax(80px, 1fr)) minmax(
-      150px,
-      1.5fr
-    );
-}
-[data-lens] .lens-case-wooden > div {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
 /* a cell's label on its own line, above its value ("Sealed bid" over "7.500 g"), never run into it */
 [data-lens] .lens-case > div > small {
   display: block;

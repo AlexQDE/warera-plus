@@ -279,6 +279,27 @@ describe("the v0.27 sell window", () => {
     expect(readSellForm(reopened).items[0].game.suggested).toBe(175);
   });
 
+  it("reads offers and a range printed in thousands, and waits for the game's start when the input comes up empty", () => {
+    const form = liveSell();
+    // the game splits "1.234K" at its point, as on the market's cards
+    const spans = [...form.querySelector("ul li").querySelectorAll("span")];
+    spans.find((s) => s.textContent === "163").textContent = "1";
+    spans.find((s) => s.textContent === ".9").textContent = ".234K";
+    const range = [...form.querySelectorAll("span")];
+    range.find((s) => s.textContent === "122.654").textContent = "1.5K";
+    range.find((s) => s.textContent === "280.352").textContent = "2.8K";
+    const [tank] = readSellForm(form).items;
+    expect(tank.asks[0].price).toBe(1234);
+    expect(tank.game).toMatchObject({ min: 1500, max: 2800 });
+    form.remove();
+    const empty = liveSell();
+    const input = empty.querySelector('input[name^="price-"]');
+    input.value = "";
+    expect(readSellForm(empty).items[0].game.suggested).toBeNull();
+    input.value = "171.5";
+    expect(readSellForm(empty).items[0].game.suggested).toBe(171.5);
+  });
+
   it("prices a high-attack tank from both stats and warns about the game's lower starting price", () => {
     const form = liveSell(168);
     const [tank] = readSellForm(form).items;

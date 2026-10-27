@@ -3,11 +3,15 @@
 // writes into its input: PUT ON SALE stays the player's.
 import { gold, escapeHtml as esc } from "./format.mjs";
 import { setHtml } from "./ui.mjs";
-import { slotFromAlt, isItemImageAlt, slotName } from "./dom.mjs";
+import { slotFromAlt, isItemImageAlt, slotName, parsePrice } from "./dom.mjs";
 import { tileTokens, tileStats, tileCode } from "./picker.mjs";
 import { rowSkills } from "./similar.mjs";
 
 const NUMBER = /^[\d,]+(?:\.\d+)?$/;
+/** A price as the game prints it, thousands to billions abbreviated ("1.234K"). */
+const PRICE = /^[\d,]+(?:\.\d+)?[KkMmBb]?$/;
+/** Tokens joined with spaces, a number split at its point ("1" ".234K") joined back. @param {string[]} tokens */
+const joinTokens = (tokens) => tokens.join(" ").replace(/(\d) (\.\d)/g, "$1$2");
 const num = (/** @type {string} */ t) => Number(t.replace(/,/g, ""));
 /** Pieces whose prices differ more than this are not sold at one price. */
 const SPREAD = 0.15;
@@ -90,14 +94,15 @@ function pieceAsks(section, code) {
     const item = pickedItems(li, true).find((p) => p.code === code && p.skills);
     if (!item) continue;
     // The price is a span group after the seller and badges. Its integer
-    // and fraction are separate spans; read the outer group, not just 163.
+    // and fraction are separate spans ("163" ".9", "1" ".234K"); read the
+    // outer group, not just its integer.
     const spans = [...li.querySelectorAll("span")].filter(
-      (e) => !tileOf(e, li) && NUMBER.test(tileTokens(e).join("")),
+      (e) => !tileOf(e, li) && PRICE.test(tileTokens(e).join("")),
     );
     const amount = spans
       .filter((e) => !spans.some((other) => other !== e && other.contains(e)))
       .at(-1);
-    const price = amount ? num(tileTokens(amount).join("")) : null;
+    const price = amount ? parsePrice(tileTokens(amount).join("")) : null;
     if (price != null && price > 0 && Number.isFinite(price))
       asks.push({ price, skills: item.skills });
   }
@@ -113,11 +118,12 @@ function readPieces(form, inputs) {
     const item = section ? pickedItems(section)[0] : null;
     if (!section || !item) continue;
     const itemId = input.name.slice("price-".length);
-    if (!starts.has(itemId))
-      starts.set(itemId, NUMBER.test(input.value) ? num(input.value) : null);
+    // the game's start, once it has filled the input: an empty first read must not stand for it
+    if (!starts.has(itemId) && NUMBER.test(input.value))
+      starts.set(itemId, num(input.value));
     const range =
-      /\bfrom\s*([\d,]+(?:\.\d+)?)\s*to\s*([\d,]+(?:\.\d+)?)\s*before\s+tax\b/i.exec(
-        tileTokens(section).join(" "),
+      /\bfrom\s*([\d,]+(?:\.\d+)?[KkMmBb]?)\s*to\s*([\d,]+(?:\.\d+)?[KkMmBb]?)\s*before\s+tax\b/i.exec(
+        joinTokens(tileTokens(section)),
       );
     items.push({
       ...item,
@@ -125,9 +131,9 @@ function readPieces(form, inputs) {
       form: section,
       input,
       game: {
-        suggested: starts.get(itemId),
-        min: range ? num(range[1]) : null,
-        max: range ? num(range[2]) : null,
+        suggested: starts.get(itemId) ?? null,
+        min: range ? parsePrice(range[1]) : null,
+        max: range ? parsePrice(range[2]) : null,
       },
       asks: pieceAsks(section, item.code),
     });

@@ -245,7 +245,12 @@ export async function startLens(runtime = chrome.runtime) {
   }
   /** Run the sales reads kept while one was in flight, one at a time; the rest wait for the next completion. */
   function drainSales() {
-    if (!context.equipment && !context.craft && !context.dialog) {
+    if (
+      !context.equipment &&
+      !context.craft &&
+      !context.dialog &&
+      !context.sell
+    ) {
       salesPending.clear();
       return;
     }
@@ -256,7 +261,7 @@ export async function startLens(runtime = chrome.runtime) {
     }
   }
   const requestSales = (code) => {
-    if (context.equipment || context.craft || context.dialog)
+    if (context.equipment || context.craft || context.dialog || context.sell)
       void read("sales", false, code);
   };
   const equipment = createEquipment({
@@ -735,8 +740,8 @@ export async function startLens(runtime = chrome.runtime) {
     if (sell) {
       const read = readSellForm(sell);
       const now = Date.now();
-      // Sales are also needed when this window opens away from the market.
-      context.dialog ||= "sell";
+      // its pieces' sales are read wherever the window opens; nothing else a case or craft window reads is
+      context.sell = true;
       for (const it of read.items) requestSales(it.code);
       const pricePieces = (items) =>
         items.map((it) => {

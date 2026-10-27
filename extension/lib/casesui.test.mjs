@@ -31,7 +31,7 @@ const books = Object.fromEntries(
 const cases = { at, books };
 
 describe("safe case rendering", () => {
-  it("always shows the wooden ask and switches only the wooden verdict to flip mode", () => {
+  it("keeps the wooden row's columns: the sealed bid in hold mode, the ask in its place in flip mode", () => {
     const hold = casesStripHtml({ cases, now: NOW, collapsed: true });
     const flip = casesStripHtml({
       cases,
@@ -39,11 +39,20 @@ describe("safe case rendering", () => {
       collapsed: true,
       woodenMode: "flip",
     });
-    expect(hold).toContain("<small>Ask</small>");
+    const wooden = (html) =>
+      html.slice(
+        html.indexOf("<strong>Wooden Case</strong>"),
+        html.indexOf("<strong>Case</strong>"),
+      );
+    // as many cells as the other cases' rows: no extra Ask column
+    expect(wooden(hold)).toContain("<small>Sealed bid</small>");
+    expect(wooden(hold)).not.toContain("<small>Ask</small>");
+    expect(wooden(flip)).toContain("<small>Ask</small>");
+    expect(wooden(flip)).not.toContain("<small>Sealed bid</small>");
     expect(hold).toContain('data-verdict="sell"');
     expect(flip).toContain('data-verdict="pass"');
     expect(flip).toContain("g a case · 0 cases under it");
-    expect(flip).toContain("market tax on top");
+    expect(flip).toContain("pays that tax on top");
     expect(flip.slice(flip.indexOf("<strong>Case</strong>"))).toBe(
       hold.slice(hold.indexOf("<strong>Case</strong>")),
     );

@@ -540,32 +540,35 @@ const sum = (xs) => xs.reduce((/** @type {number} */ s, x) => s + (x ?? 0), 0);
  * @param {Record<string, { sold: number, earned: number }>} [trades]
  */
 export function woodenSummary(openings, trades = {}) {
-  /** @type {Map<string, { code: string, n: number, q: number, value: number | null }>} */
+  /** @type {Map<string, { code: string, n: number, q: number, value: number }>} */
   const byCode = new Map();
-  let cost = /** @type {number | null} */ (0);
+  let cost = 0;
+  let counted = 0;
   let last = /** @type {WoodenOpening | null} */ (null);
   for (const w of openings) {
+    if (!last || Date.parse(w.at) > Date.parse(last.at)) last = w;
+    // an opening counts where both its drop and its case have a price; the rest are counted apart
+    // (a toolbox has none), never as a blank that empties every total
+    if (w.value == null || w.cost == null) continue;
+    counted++;
     const row = byCode.get(w.code) ?? { code: w.code, n: 0, q: 0, value: 0 };
     row.n++;
     row.q += w.q;
-    row.value =
-      row.value == null || w.value == null ? null : row.value + w.value;
+    row.value += w.value;
     byCode.set(w.code, row);
-    cost = cost == null || w.cost == null ? null : cost + w.cost;
-    if (!last || Date.parse(w.at) > Date.parse(last.at)) last = w;
+    cost += w.cost;
   }
   const rows = [...byCode.values()].sort((a, b) =>
     a.code.localeCompare(b.code),
   );
-  const value = rows.some((r) => r.value == null)
-    ? null
-    : sum(rows.map((r) => r.value));
+  const value = counted ? sum(rows.map((r) => r.value)) : null;
   return {
     n: openings.length,
+    counted,
     q: sum(rows.map((r) => r.q)),
     value,
-    cost,
-    net: value == null || cost == null ? null : value - cost,
+    cost: counted ? cost : null,
+    net: value == null ? null : value - cost,
     unpriced: openings.filter((w) => w.value == null).length,
     costUnknown: openings.filter((w) => w.cost == null).length,
     approx: openings.filter((w) => w.approx).length,
@@ -600,7 +603,8 @@ export function woodenAtBids(summary, bidOf) {
   return {
     rows,
     value,
-    perCase: value == null || !summary.n ? null : value / summary.n,
+    // a case's worth over the openings the totals count, not those set apart
+    perCase: value == null || !summary.counted ? null : value / summary.counted,
   };
 }
 

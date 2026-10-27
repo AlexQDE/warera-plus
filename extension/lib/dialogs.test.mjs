@@ -395,7 +395,9 @@ describe("annotating them", () => {
     expect(panel.nextElementSibling.className).toBe("actions");
     const text = () => panel.textContent.replace(/\s+/g, " ");
     expect(text()).toContain("Open ≈");
-    expect(text()).toContain("Sell 100 · Buy 1.00");
+    // flip mode prices against the ask only, as the strip does: no sealed bid beside it
+    expect(text()).toContain("Buy 1.00");
+    expect(text()).not.toContain("Sell 100");
     expect(text()).toContain("FLIP");
     expect(text()).toContain(
       "Today 1 opened · drops +10.6 g at the day's prices · cases −7.00 g · net +3.60 g",

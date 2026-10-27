@@ -329,7 +329,8 @@ export function createCraftDesk({ settings, now = Date.now }) {
           ([t, o]) =>
             `<span class="lens-chip" data-rarity="${esc(t)}">${esc(cap(t))} <small>${count(o.n)}</small>${o.chosen ? ` <small class="lens-pick" title="${esc(`${count(o.chosen)} of ${count(o.n)} sniper crafts (slot chosen): twice the steel`)}">◎${count(o.chosen)}</small>` : ""} ${money(o.estimatedKnown ? o.estimated : null)}</span>`,
         ),
-      ...(w.woodenLedger || w.wooden.n || w.woodenUnpriced
+      // no "Wooden 0" for a window without openings, unless its section is open and needs its chip to close
+      ...(w.woodenLedger?.n || w.wooden.n || w.woodenUnpriced || woodenOpen
         ? [
             `<button type="button" class="lens-chip" data-action="desk-wooden" aria-expanded="${woodenOpen}" aria-controls="lens-wooden-ledger"${w.woodenUnpriced ? ` title="${esc(unpricedWooden(w.woodenUnpriced, w.woodenToolboxes ?? 0))}"` : ""}>Wooden <small>${count(w.woodenLedger?.n ?? w.wooden.n + (w.woodenUnpriced ?? 0))}</small> ${w.woodenLedger ? money(w.woodenLedger.net) : w.wooden.n ? money(w.wooden.value - w.wooden.cost) : "–"}${w.woodenUnpriced ? ` <small>${count(w.woodenUnpriced)} unpriced</small>` : ""}</button>`,
           ]
