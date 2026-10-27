@@ -487,3 +487,44 @@ export function listedPeers(code, skills, rows, self) {
     cheapest: prices.length ? Math.min(...prices) : null,
   };
 }
+
+/**
+ * The most a piece bought here sells for again while the market lists what it
+ * lists now: the second cheapest other offer of the same item whose every
+ * stat is at least the piece's (a buyer takes the better roll at the same
+ * price; the cheapest alone may be a slip), brought to the basis of the
+ * sales a value rests on, the seller's price before the buyer's market tax:
+ * the card's price over 1 + `taxPct` / 100, the page's rate. A rate the page
+ * did not give counts as none, a cap no lower than the true one. null below
+ * two such offers.
+ * @param {string} code @param {Record<string, number> | null | undefined} skills
+ * @param {ReadonlyArray<{ code?: string | null, price?: number | null, skills?: Record<string, number> | null }>} rows @param {number} self the row's own index
+ * @param {number | null | undefined} taxPct
+ * @returns {{ cap: number, offer: number, n: number, taxRead: boolean } | null}
+ */
+export function offerCap(code, skills, rows, self, taxPct) {
+  const keys = skills ? Object.keys(skills) : [];
+  if (!keys.length) return null;
+  const prices = rows
+    .filter(
+      (r, i) =>
+        i !== self &&
+        r.code === code &&
+        positive(r.price) != null &&
+        keys.every(
+          (k) =>
+            typeof r.skills?.[k] === "number" &&
+            r.skills[k] >= /** @type {Record<string, number>} */ (skills)[k],
+        ),
+    )
+    .map((r) => /** @type {number} */ (r.price))
+    .sort((a, b) => a - b);
+  if (prices.length < 2) return null;
+  const taxRead = typeof taxPct === "number" && Number.isFinite(taxPct);
+  return {
+    cap: prices[1] / (1 + (taxRead ? /** @type {number} */ (taxPct) : 0) / 100),
+    offer: prices[1],
+    n: prices.length,
+    taxRead,
+  };
+}

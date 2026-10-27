@@ -8,6 +8,7 @@ import {
   statSlopes,
   windowFills,
   marketTrend,
+  offerCap,
   MIN_SLOPE_PAIRS,
   MIN_TREND_SALES,
   MIN_TREND_DAYS,
@@ -248,6 +249,51 @@ describe("listedPeers", () => {
       n: 0,
       cheapest: null,
     });
+  });
+});
+
+describe("offerCap", () => {
+  const offer = (price, attack, crit, code = "sniper") => ({
+    code,
+    price,
+    skills: { attack, criticalChance: crit },
+  });
+  const piece = { attack: 110, criticalChance: 18 };
+  it("caps a resale at the second cheapest other offer whose every stat is at least the piece's, before tax", () => {
+    const rows = [
+      offer(40, 110, 18), // the piece itself: never its own competition
+      offer(44, 109, 20), // a lower attack: not as good, whatever its crit
+      offer(46, 110, 18), // the same roll
+      offer(47, 112, 17), // a lower crit
+      offer(48, 125, 19), // better in both
+      offer(41, 130, 20, "jet"), // another item
+      {
+        code: "sniper",
+        price: null,
+        skills: { attack: 130, criticalChance: 20 },
+      }, // an own offer: no price
+      offer(52, 115, 18),
+    ];
+    // as good or better: 46, 48, 52; the second cheapest is 48, over the page's 2% tax
+    expect(offerCap("sniper", piece, rows, 0, 2)).toEqual({
+      cap: 48 / 1.02,
+      offer: 48,
+      n: 3,
+      taxRead: true,
+    });
+    // at 0% the card's price is the seller's
+    expect(offerCap("sniper", piece, rows, 0, 0)?.cap).toBe(48);
+  });
+  it("caps nothing below two such offers, and takes a rate the page did not give as none", () => {
+    expect(
+      offerCap("sniper", piece, [offer(40, 110, 18), offer(46, 110, 18)], 0, 2),
+    ).toBeNull();
+    const rows = [offer(40, 110, 18), offer(46, 111, 18), offer(48, 110, 19)];
+    expect(offerCap("sniper", piece, rows, 0, null)).toMatchObject({
+      cap: 48,
+      taxRead: false,
+    });
+    expect(offerCap("sniper", null, rows, 0, 2)).toBeNull(); // stats unread: nothing to compare
   });
 });
 
