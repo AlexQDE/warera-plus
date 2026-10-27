@@ -2,9 +2,19 @@
 
 Go through the newest release's section and the manual gate on the live game, with your own account, before publishing. Then [CHROME-WEB-STORE.md](CHROME-WEB-STORE.md).
 
+## 3.10.1 on the live page (v0.27)
+
+Reload the extension itself (its card must read 3.10.1), then the game. Open an employee's **already pending** hand; drawing a new one costs 10 energy and is not needed for these checks.
+
+- **Above the cards.** The value line sits immediately above the dealt cards, each of its three two-line cells over its own card, readable in the 305 px window. Close and reopen the pending hand: one line, still above the cards.
+- **Gold a day and total.** Production, Responsibility, Negotiation and trait cards show bold `g/day`, then `8.2 g in 32 d` or their own total and days. At point value 0.1012, Mohannad's +2 Production is about 0.26 g/day and 8.18 g total, the best of his three.
+- **Luck and Second wind.** Luck shows its total above the trainings it improves, without `g/day`; Claudia's +1 Luck is about 0.61 g and `9 trainings`. At potential 3/3 there are zero more trainings. Second wind shows a total and `+N trainings`, counting only extra hands that fit after the existing ones before retirement.
+- **The best pick.** Exactly one card has ★ and a green outline around its box. The tooltip lists each total, its daily rate where applicable, its explanation, the wage chip, horizon and Leadership (3 on the observed hands). Opening a tooltip does not click or pick any card.
+- **Paid Production.** With the matching Employee window still open below Train, use a worker with a production trait. Claudia's wage 2.87 and header Production 7 give "paid on Production 4, 7 with traits" in the tooltip; her −5% Negotiation is about 2.79 g total, 0.12 g/day, still the pick. Without the matching Employee window the header's Production is used.
+
 ## 3.10.0 on the live page (v0.27)
 
-- **Luck in Train.** Open an employee's **already pending** hand (never draw one: a draw costs 10 energy). A Luck drill shows gold (no longer "≈ 0 g"); its "?" names the trainings left after this one, how much the best card of a hand gains, the rarer odds, and the toolbox chance it does not price. On an employee's last training ("2/3": one left, this one), Luck reads ≈ 0 g.
+- **Luck in Train.** Open an employee's **already pending** hand (never draw one: a draw costs 10 energy). A Luck drill shows gold (no longer "≈ 0 g"); its "?" names the trainings left after this one, how much the best card of a hand gains, the rarer odds, and the toolbox chance it does not price. Corrected in 3.10.1: the last open hand reads "3/3"; "2/3" leaves one more training.
 
 ## 3.9.0 on the live page (v0.27)
 

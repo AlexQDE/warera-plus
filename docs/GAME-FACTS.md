@@ -521,13 +521,26 @@ newest | mostExpensive, limit: 12, cursor?}` (the sort is kept in the
   "Market rate" at 0) and his potential ("1/3"); a card shows its rarity,
   title and effect ("-10%" "Expected wage", "+2" with the stat's icon and
   "Now 1").
+- **Live Train markup and paid Production** (2026-10-27): dealt cards are
+  `div[type="button"]` inside their three boxes, while Close and Pick a card
+  remain real buttons. Header Production includes trait points; wages use
+  base Production. Claudia's Laborer gives +3 on raws: header 7, output
+  6 × 7 × 1.038 ≈ 44 points/day, wage 6 × 0.1012 × 4 × 1.183 ≈ 2.87 g/day.
+  The Employee dialog stays open before Train, with the same employee name;
+  its Stats block's Daily wage supplies that independent wage reading.
+  Sanitized windows: `fixtures/v027-live-train-claudia.html` and
+  `fixtures/v027-live-train-mohannad.html`.
 - **A hand's odds** (read 2026-10-27, client module 56899 and its config):
   `training.rarityWeights` common 55, uncommon 25, rare 13, epic 5,
   legendary 2; every Luck point adds `luck.trainingWeightShiftPerPoint`
   (uncommon 0.5, rare 0.3, epic 0.15, legendary 0.05) and takes their sum
-  from common, never below 0 (`vh(leadership, luck)`; Leadership shifts
-  1 / 0.6 / 0.3 / 0.1 a level the same way, but the game's own odds display,
-  `pt(0, luck)`, uses leadership 0). The pool an employee is dealt from
+  from common, never below 0 (`vh(leadership, luck)`). Live windows read on
+  2026-10-27 show "Your Leadership" and "Their Luck" with their levels:
+  Leadership shifts 1 / 0.6 / 0.3 / 0.1 a level the same way. At Leadership
+  3, Luck 1 gives 48 / 28.5 / 15.1 / 6.05 / 2.35%, Luck 2 gives
+  47 / 29 / 15.4 / 6.2 / 2.4%, Luck 4 gives 45 / 30 / 16 / 6.5 / 2.5%.
+  This corrects the earlier inference from `pt(0, luck)` in the client.
+  The pool an employee is dealt from
   (`S(e)`): a drill for each of Production, Luck and Responsibility at +1
   common, +2 uncommon, +3 epic, +4 legendary; Rehab for each trait that is
   not positive (negative rare, mixed uncommon); Clean slate (legendary) with
@@ -537,7 +550,10 @@ newest | mostExpensive, limit: 12, cursor?}` (the sort is kept in the
   Second wind +2 rare, +3 epic, +4 legendary while potentialMax + gain ≤ 15;
   Negotiation −5% common, −10% uncommon, −20% rare while the expectation
   stays at 0.7 or more. Trainings left are potentialMax − potential (the
-  header's "1/3" is potential / potentialMax). The draw itself is
+  header's "1/3" is potential / potentialMax, and already counts the open
+  hand: Lionel's 0/8 became 1/8 immediately after drawing it). A future hand
+  drawn j days from now only pays for H − j of today's H-day horizon;
+  Second wind's extra hands come after the ones already left. The draw itself is
   server-side; `lib/hiring.mjs` assumes each card draws a rarity by the odds,
   then a card of it at random. Luck also gives a toolbox chance of 0.001 an
   hour a point, at most 0.02 (`zr`), times the traits'

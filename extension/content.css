@@ -35,13 +35,34 @@
 /* the best pick: the game's own card, outlined */
 [data-ss-best] {
   outline: 2px solid #3fb950 !important;
-  outline-offset: -2px;
+  outline-offset: -2px !important;
   border-radius: 8px;
 }
 .ss-train-value[data-lens] .ss-train-cell {
-  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
   text-align: center;
+  font-size: 10.5px;
+}
+.ss-train-value[data-lens] {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  position: relative;
+  padding: 3px 0;
+  gap: 4px;
+}
+.ss-train-value[data-lens] strong {
   font-weight: 700;
+}
+.ss-train-value[data-lens] small {
+  font-size: 9px;
+  font-weight: 400;
+}
+.ss-train-value[data-lens] .lens-help {
+  position: absolute;
+  right: 0;
+  top: -11px;
 }
 [data-lens] {
   --lens-bg: #121a26;

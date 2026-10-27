@@ -1,6 +1,6 @@
 // The game's Train window (v0.27): which of the three dealt cards to keep.
 // Each card is valued in gold for this employee (hiring.trainingValues) and
-// the best one's card is outlined; one compact line under the cards, the
+// the best one's card is outlined; one compact line above the cards, the
 // details in its "?" tooltip. Display only: no card, Pick or Close button
 // is ever clicked, and the game's nodes keep their identity.
 import { traitCode, trainingValues, TRAIN_STATS } from "./hiring.mjs";
@@ -39,10 +39,10 @@ function texts(el) {
 /** An icon's identity: its drawing (the same component draws the same paths). */
 const iconOf = (/** @type {Element | null | undefined} */ el) =>
   el?.querySelector("svg")?.innerHTML ?? null;
-/** The innermost elements whose whole text matches `re`, outside buttons and the extension's nodes. */
-function textNodes(root, re) {
+/** The innermost matching text outside dealt cards and the extension's nodes. */
+function textNodes(root, re, inCard = () => false) {
   return [...root.querySelectorAll("span, div, p")].filter((e) => {
-    if (!native(e) || e.closest("button")) return false;
+    if (!native(e) || inCard(e)) return false;
     const t = e.textContent?.trim() ?? "";
     return (
       re.test(t) &&
@@ -56,11 +56,11 @@ function textNodes(root, re) {
  * Luck, in that order): a box of exactly three chips, each an icon and a
  * number or "?", outside the cards.
  */
-function statChips(dialog) {
+function statChips(dialog, inCard) {
   return [...dialog.querySelectorAll("div")].find(
     (e) =>
       native(e) &&
-      !e.closest("button") &&
+      !inCard(e) &&
       e.children.length === 3 &&
       [...e.children].every(
         (c) =>
@@ -155,13 +155,10 @@ function readCard(button, icons) {
  */
 export function readTrainDialog(root = document) {
   for (const dialog of root.querySelectorAll('[role="dialog"]')) {
-    const stats = statChips(dialog);
-    if (!stats) continue;
-    const icons = [...stats.children].map(iconOf);
-    const buttons = [...dialog.querySelectorAll("button")].filter(native);
-    const cards = buttons
-      .map((b) => readCard(b, icons))
-      .filter((c) => c != null);
+    const buttons = [
+      ...dialog.querySelectorAll('button, [type="button"], [role="button"]'),
+    ].filter(native);
+    let cards = buttons.map((b) => readCard(b, [])).filter((c) => c != null);
     if (cards.length < 2) continue;
     // the row that holds the cards, and each card's own box in it
     let row = cards[0].button.parentElement;
@@ -173,21 +170,28 @@ export function readTrainDialog(root = document) {
         [...(row?.children ?? [])].find((ch) => ch.contains(c.button)) ?? null,
     );
     if (boxes.some((b) => !b) || new Set(boxes).size !== cards.length) continue;
+    const inCard = (e) => cards.some((c) => c.button.contains(e));
+    const stats = statChips(dialog, inCard);
+    if (!stats) continue;
+    const icons = [...stats.children].map(iconOf);
+    cards = cards.map((c) => readCard(c.button, icons));
     const values = [...stats.children].map((c) => {
       const v = c.textContent?.trim() ?? "";
       return /^\d+$/.test(v) ? Number(v) : null;
     });
     // the chips: his production bonus (the pickaxe, Production's icon) and
     // his wage chip ("Market rate" at 0), in that order; his potential "1/3"
-    const pcts = textNodes(dialog, /^(?:[+-]\d+(?:\.\d+)?%|Market rate)$/).map(
-      (e) => ({
-        // a percent with one decimal, as a share: "+13.8%" is 0.138
-        value: /^market rate$/i.test(e.textContent?.trim() ?? "")
-          ? 0
-          : Math.round(Number.parseFloat(e.textContent ?? "") * 1e4) / 1e6,
-        icon: iconOf(e.parentElement),
-      }),
-    );
+    const pcts = textNodes(
+      dialog,
+      /^(?:[+-]\d+(?:\.\d+)?%|Market rate)$/,
+      inCard,
+    ).map((e) => ({
+      // a percent with one decimal, as a share: "+13.8%" is 0.138
+      value: /^market rate$/i.test(e.textContent?.trim() ?? "")
+        ? 0
+        : Math.round(Number.parseFloat(e.textContent ?? "") * 1e4) / 1e6,
+      icon: iconOf(e.parentElement),
+    }));
     // told apart by their icons (the bonus chip draws Production's pickaxe,
     // and the game prints it only when he has a bonus); by their order
     // (bonus, then wage) only when no chip carries an icon
@@ -200,13 +204,11 @@ export function readTrainDialog(root = document) {
     const wageChip = iconed
       ? pcts.find((p) => p !== bonusChip && p.icon !== icons[0])
       : pcts.find((p) => p !== bonusChip);
-    const potentialNode = textNodes(dialog, /^(\d+)\s*\/\s*(\d+)$/).find(
-      (e) => !row.contains(e),
-    );
+    const potentialNode = textNodes(dialog, /^(\d+)\s*\/\s*(\d+)$/, inCard)[0];
     const potential = /^(\d+)\s*\/\s*(\d+)$/.exec(
       potentialNode?.textContent?.trim() ?? "",
     );
-    const hiredNode = textNodes(dialog, /^hired\s+\d+\s*d\b/i)[0];
+    const hiredNode = textNodes(dialog, /^hired\s+\d+\s*d\b/i, inCard)[0];
     const hired = hiredNode
       ? Number(/(\d+)/.exec(hiredNode.textContent ?? "")?.[1])
       : 0;
@@ -214,9 +216,26 @@ export function readTrainDialog(root = document) {
       hiredNode?.previousElementSibling?.textContent ?? "",
     );
     const traits = [...dialog.querySelectorAll('[role="img"][aria-label]')]
-      .filter((b) => native(b) && !b.closest("button"))
+      .filter((b) => native(b) && !inCard(b))
       .map((b) => traitCode(b.getAttribute("aria-label")))
       .filter(Boolean);
+    const leadershipNode = textNodes(dialog, /^Your Leadership$/i, inCard)[0];
+    const leadershipText =
+      leadershipNode?.nextElementSibling?.textContent?.trim() ?? "";
+    const leadership = /^\d+$/.test(leadershipText)
+      ? Number(leadershipText)
+      : null;
+    const header = texts(dialog);
+    const name = header[header.indexOf("Train") + 1];
+    let wageDay = null;
+    for (const employee of root.querySelectorAll('[role="dialog"]')) {
+      const title = texts(employee);
+      if (title[0] !== "Employee" || title[1] !== name) continue;
+      const label = textNodes(employee, /^Daily wage$/i)[0];
+      const raw = label?.nextElementSibling?.textContent?.trim() ?? "";
+      const wage = Number(raw);
+      if (raw && Number.isFinite(wage) && wage > 0) wageDay = wage;
+    }
     return {
       root: dialog,
       row,
@@ -233,17 +252,21 @@ export function readTrainDialog(root = document) {
         hiredDays: Number.isFinite(hired) ? hired : 0,
         age: ageMatch ? Number(ageMatch[1]) : null,
         traits: /** @type {string[]} */ (traits),
+        leadership,
+        wageDay,
       },
     };
   }
   return null;
 }
 
-/** A card's gold as the line prints it: "≈ 0 g" for less than a tenth. */
+/** Total gold for cards that improve future hands rather than a daily stream. */
 const goldText = (/** @type {number} */ g) =>
-  Math.abs(g) < 0.05 ? "≈ 0 g" : `${signed(g, 1)} g`;
+  Math.abs(g) < 0.005 ? "≈ 0 g" : `${signed(g, 2)} g`;
+const dailyText = (/** @type {number} */ g) =>
+  Math.abs(g) < 0.005 ? "≈ 0 g/day" : `${signed(g, 2)} g/day`;
 
-/** The advice line's cells, one under each card, and its tooltip. */
+/** The advice line's two-line cells, one above each card, and its tooltip. */
 export function trainHtml(read, result, pointValue) {
   const cells = read.cards.map((card, i) => {
     const v = result?.values[i];
@@ -251,16 +274,31 @@ export function trainHtml(read, result, pointValue) {
       return '<span class="ss-train-cell lens-muted">?</span>';
     const cls =
       v.gold > 0.05 ? "lens-pos" : v.gold < -0.05 ? "lens-neg" : "lens-muted";
-    return `<span class="ss-train-cell ${cls}">${result?.best === i ? "★ " : ""}${esc(goldText(v.gold))}</span>`;
+    const main = v.perDay == null ? goldText(v.gold) : dailyText(v.perDay);
+    const sub =
+      card.kind === "secondWind"
+        ? `+${v.hands ?? "?"} trainings`
+        : card.kind === "drill" && card.stat === "luck"
+          ? `${v.hands ?? "?"} trainings`
+          : `${signed(v.gold, 1).replace(/^\+/, "")} g in ${result.horizon} d`;
+    return `<span class="ss-train-cell ${cls}"><strong>${result?.best === i ? "★ " : ""}${esc(main)}</strong><small class="lens-muted">${esc(sub)}</small></span>`;
   });
   const t = read.trainee;
   const details = [
     ...read.cards.map((card, i) => {
       const v = result?.values[i];
-      return `${result?.best === i ? "★ " : ""}${card.title}${card.delta != null ? ` (${card.kind === "negotiation" ? "-" : "+"}${card.delta}${card.kind === "negotiation" ? "%" : ""})` : ""}: ${v?.gold == null ? "not priced" : goldText(v.gold)} - ${v?.note ?? "not read"}`;
+      return `${result?.best === i ? "★ " : ""}${card.title}${card.delta != null ? ` (${card.kind === "negotiation" ? "-" : "+"}${card.delta}${card.kind === "negotiation" ? "%" : ""})` : ""}: ${v?.gold == null ? "not priced" : `${goldText(v.gold)}${v.perDay == null ? "" : `, ${dailyText(v.perDay)}`}`} - ${v?.note ?? "not read"}`;
     }),
     `Production ${t.production}, wage chip ${t.wageChip == null ? "?" : `${t.wageChip >= 0 ? "+" : ""}${Math.round(t.wageChip * 1000) / 10}%`}, bonus ${t.bonus >= 0 ? "+" : ""}${Math.round(t.bonus * 1000) / 10}% + specialization still to come`,
     `${result?.horizon ?? "?"} days counted (until 65, 60 at most), output at the game's point value ${pointValue?.toFixed(4)}`,
+    t.leadership == null
+      ? "Leadership was not read; odds use 0"
+      : `Leadership ${t.leadership}`,
+    ...(result?.paidProduction != null && result.paidProduction !== t.production
+      ? [
+          `paid on Production ${result.paidProduction}, ${t.production} with traits`,
+        ]
+      : []),
   ];
   return `${cells.join("")}${helpMark(details.join("\n"))}`;
 }
@@ -294,9 +332,10 @@ export function createTrain() {
       line = document.createElement("div");
       line.className = "ss-train-value";
       line.dataset.lens = "";
-      read.row.insertAdjacentElement("afterend", line);
       owned.add(line);
     }
+    if (line.nextElementSibling !== read.row)
+      read.row.insertAdjacentElement("beforebegin", line);
     for (const node of owned)
       if (node !== line) {
         node.remove();

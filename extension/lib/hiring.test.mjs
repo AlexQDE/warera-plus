@@ -64,6 +64,79 @@ describe("the training cards", () => {
       expected += 6 * 2 * (PV * (1 + 0.009 + Math.min(d, 20) / 100) - PV * 0.8);
     expect(cheap?.values[0].gold).toBeCloseTo(expected, 9);
   });
+  it("infers paid Production from a rounded daily wage, falling back for an implausible wage", () => {
+    const cards = [
+      { kind: "negotiation", delta: 5 },
+      { kind: "habit", traitTo: ["greedy"] },
+      { kind: "drill", stat: "responsibility", delta: 1 },
+    ];
+    const t = {
+      ...SORAYUT,
+      production: 7,
+      wageChip: 0.183,
+      wageDay: 2.87,
+      age: 42,
+      traits: ["laborer"],
+    };
+    const r = trainingValues(cards, t, { pointValue: PV });
+    expect(r.paidProduction).toBe(4);
+    expect(r.values[0].gold).toBeCloseTo(23 * 6 * PV * 4 * 0.05, 9);
+    expect(r.values[0].perDay).toBeCloseTo(6 * PV * 4 * 0.05, 9);
+    expect(r.values[1].gold).toBeCloseTo(-23 * 6 * PV * 4 * 1.183 * 0.2, 9);
+    const fallback = trainingValues(
+      cards,
+      { ...t, wageDay: 6 * PV * 4.3 * 1.183 },
+      { pointValue: PV },
+    );
+    expect(fallback.paidProduction).toBe(7);
+    expect(fallback.values[0].gold).toBeCloseTo(23 * 6 * PV * 7 * 0.05, 9);
+    expect(r.values[2].gold).toBe(fallback.values[2].gold);
+  });
+  it("assigns daily values only to streams, and null at a zero horizon", () => {
+    const cards = [
+      { kind: "negotiation", delta: 10 },
+      { kind: "drill", stat: "luck", delta: 1 },
+      { kind: "secondWind", delta: 2 },
+    ];
+    const r = trainingValues(cards, SORAYUT, { pointValue: PV });
+    expect(r.values[0].perDay).toBeCloseTo(r.values[0].gold / 25, 12);
+    expect(r.values[1]).toMatchObject({ perDay: null, hands: 2 });
+    expect(r.values[2]).toMatchObject({ perDay: null, hands: 2 });
+    expect(
+      trainingValues(
+        cards,
+        { ...SORAYUT, age: 65 },
+        { pointValue: PV },
+      ).values.every((v) => v.perDay === null),
+    ).toBe(true);
+  });
+  it("adds Second wind hands after existing ones, only before retirement, keeping their full energy cost", () => {
+    const cards = [
+      { kind: "negotiation", delta: 20 },
+      { kind: "secondWind", delta: 4 },
+    ];
+    const trainee = {
+      ...SORAYUT,
+      production: 40,
+      potential: 1,
+      potentialMax: 3,
+      age: 60,
+    };
+    const r = trainingValues(cards, trainee, { pointValue: PV });
+    const top = 5 * 6 * PV * 40 * 0.2;
+    expect(r.values[1].hands).toBe(2);
+    expect(r.values[1].gold).toBeCloseTo(
+      Math.max(0, (top * 2) / 5 - ENERGY_GOLD) +
+        Math.max(0, top / 5 - ENERGY_GOLD),
+      10,
+    );
+    const full = trainingValues(
+      cards,
+      { ...trainee, potentialMax: 8 },
+      { pointValue: PV },
+    );
+    expect(full.values[1]).toMatchObject({ gold: 0, hands: 0, perDay: null });
+  });
   it("stops Negotiation at 70% and counts Greedy's markup in what it saves", () => {
     const low = trainingValues(
       [{ kind: "negotiation", delta: 10 }],
@@ -95,7 +168,15 @@ describe("the training cards", () => {
     // losing Greedy: his wage drops by a fifth of his expectation's pay
     expect(rehab.gold).toBeCloseTo(25 * 6 * PV * 5 * 1.0 * 0.2, 9);
     expect(wind.gold).toBeCloseTo(
-      2 * Math.max(0, Math.max(habit.gold, rehab.gold) - ENERGY_GOLD),
+      [3, 4].reduce(
+        (s, j) =>
+          s +
+          Math.max(
+            0,
+            (Math.max(habit.gold, rehab.gold) * (25 - j)) / 25 - ENERGY_GOLD,
+          ),
+        0,
+      ),
       9,
     );
     expect(trainingValues(HAND, SORAYUT, { pointValue: null })).toBeNull();
@@ -114,13 +195,20 @@ describe("the training cards", () => {
     const price = (changes) =>
       trainingValues(drill, { ...SORAYUT, ...changes }, { pointValue: PV })
         ?.values[0];
-    const one = price({ potential: 1, potentialMax: 3 });
+    // At the potential cap, Second wind is absent from the pool, keeping
+    // its prices identical as the number of remaining hands changes.
+    const one = price({ potential: 14, potentialMax: 15 });
     expect(one.gold).toBeGreaterThan(0);
-    expect(price({ potential: 0, potentialMax: 3 }).gold).toBeCloseTo(
-      2 * one.gold,
+    expect(price({ potential: 13, potentialMax: 15 }).gold).toBeCloseTo(
+      ((24 + 23) / 24) * one.gold,
       10,
     );
-    expect(price({ potential: 2, potentialMax: 3 }).gold).toBe(0);
+    expect(price({ potential: 12, potentialMax: 15 }).gold).toBeCloseTo(
+      ((24 + 23 + 22) / 24) * one.gold,
+      10,
+    );
+    expect(price({ potential: 2, potentialMax: 3 }).hands).toBe(1);
+    expect(price({ potential: 2, potentialMax: 3 }).gold).toBeGreaterThan(0);
     expect(price({ potential: 3, potentialMax: 3 }).gold).toBe(0);
     expect(price({ potential: 4, potentialMax: 3 }).gold).toBe(0);
     expect(price({ potential: 0, potentialMax: 3, age: 64 }).gold).toBe(0);
@@ -130,7 +218,7 @@ describe("the training cards", () => {
       12,
     );
     expect(one.note).toContain(
-      "1 more training after this one × the best card of a hand averages +",
+      "1 more training after this one, weighted by days left; best hand averages +",
     );
     expect(one.note).toContain(
       "uncommon +1%, rare +0.6%, epic +0.3%, legendary +0.1%",
@@ -139,7 +227,7 @@ describe("the training cards", () => {
     expect(one.note).toContain(
       "model: each card draws a rarity, then a card of it",
     );
-    // the hand open now is one of the trainings left
+    // potential already counts the hand open now
     expect(one.note).toContain("1 more training after this one");
   });
   it("leaves Luck and its random-stat contribution unknown without potential", () => {
@@ -157,7 +245,7 @@ describe("the training cards", () => {
     const a = trainingValues(HAND, SORAYUT, { pointValue: PV });
     const b = trainingValues(
       HAND,
-      { ...SORAYUT, potential: 2 },
+      { ...SORAYUT, potential: 3 },
       { pointValue: PV },
     );
     const luck = trainingValues(
@@ -182,7 +270,12 @@ describe("the training cards", () => {
     );
   });
   it("compares fixed pool prices, valuing Second wind from the expected best other hand", () => {
-    const trainee = { ...SORAYUT, potential: 1, potentialMax: 12 };
+    const trainee = {
+      ...SORAYUT,
+      potential: 1,
+      potentialMax: 12,
+      leadership: 3,
+    };
     const pool = hiring.trainingPool(trainee);
     const others = pool.filter((c) => c.kind !== "secondWind");
     // With no future hands, the ordinary card rules price Luck at zero.
@@ -192,22 +285,46 @@ describe("the training cards", () => {
       { pointValue: PV },
     ).values;
     const priced = others.map((c, i) => ({ ...c, gold: prices[i].gold }));
-    const odds = hiring.trainingOdds(trainee.luck);
+    const odds = hiring.trainingOdds(trainee.luck, trainee.leadership);
     const expectedOther = hiring.bestOfHand(priced, odds);
     for (const c of pool.filter((c) => c.kind === "secondWind"))
       priced.push({
         ...c,
-        gold: c.delta * Math.max(0, expectedOther - ENERGY_GOLD),
+        gold: Array.from({ length: c.delta }, (_, i) =>
+          Math.max(0, (expectedOther * (25 - (12 + i))) / 25 - ENERGY_GOLD),
+        ).reduce((s, g) => s + g, 0),
       });
     const perHand =
-      hiring.bestOfHand(priced, hiring.trainingOdds(trainee.luck + 2)) -
-      hiring.bestOfHand(priced, odds);
+      hiring.bestOfHand(
+        priced,
+        hiring.trainingOdds(trainee.luck + 2, trainee.leadership),
+      ) - hiring.bestOfHand(priced, odds);
     const r = trainingValues([HAND[1]], trainee, { pointValue: PV });
-    expect(r.values[0].gold).toBeCloseTo(10 * perHand, 10);
+    const weight = Array.from(
+      { length: 11 },
+      (_, i) => (25 - (i + 1)) / 25,
+    ).reduce((s, x) => s + x, 0);
+    expect(r.values[0].hands).toBe(11);
+    expect(r.values[0].gold).toBeCloseTo(weight * perHand, 10);
   });
 });
 
 describe("future training hands", () => {
+  it.each([
+    [1, [48, 28.5, 15.1, 6.05, 2.35]],
+    [2, [47, 29, 15.4, 6.2, 2.4]],
+    [4, [45, 30, 16, 6.5, 2.5]],
+  ])("matches the live Leadership 3 table at Luck %i", (luck, percentages) => {
+    expect(hiring.LEADERSHIP_TRAIN_SHIFT).toEqual({
+      uncommon: 1,
+      rare: 0.6,
+      epic: 0.3,
+      legendary: 0.1,
+    });
+    Object.values(hiring.trainingOdds(luck, 3)).forEach((p, i) =>
+      expect(Math.abs(p * 100 - percentages[i])).toBeLessThan(0.01),
+    );
+  });
   it("shifts the game's rarity weights at Luck 0 and 10 with leadership 0", () => {
     expect(hiring.trainingOdds(0)).toEqual({
       common: 0.55,

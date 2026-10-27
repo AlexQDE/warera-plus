@@ -192,12 +192,16 @@ describe("SPA lifecycle and DOM work", () => {
     expect(reads()).toBe(1);
     expect(document.querySelectorAll(".ss-train-value")).toHaveLength(1);
     expect(
-      [...document.querySelectorAll(".ss-train-cell")].map(
-        (c) => c.textContent,
-      ),
-      // Luck is priced by the future hands it improves (the window's "1/3": one more hand), and the Wild card's +1 to a
-      // random stat with it
-    ).toEqual(["★ +7.6 g", "+0.2 g", "+2.9 g"]);
+      [...document.querySelectorAll(".ss-train-cell")].map((c) => [
+        c.querySelector("strong").textContent,
+        c.querySelector("small").textContent,
+      ]),
+      // The header's 1/3 already counts this hand, leaving two future hands.
+    ).toEqual([
+      ["★ +0.30 g/day", "7.6 g in 25 d"],
+      ["+0.34 g", "2 trainings"],
+      ["+0.12 g/day", "2.9 g in 25 d"],
+    ]);
     const best = dialog.querySelector("[data-ss-best]");
     expect(best).not.toBeNull();
     expect(buttons.map((b) => b.outerHTML)).toEqual(original);

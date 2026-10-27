@@ -947,6 +947,12 @@ export const LUCK_TRAIN_SHIFT = {
   epic: 0.15,
   legendary: 0.05,
 };
+export const LEADERSHIP_TRAIN_SHIFT = {
+  uncommon: 1,
+  rare: 0.6,
+  epic: 0.3,
+  legendary: 0.1,
+};
 export const LUCK_TOOLBOX_PER_POINT = 0.001;
 export const TOOLBOX_CHANCE_CAP = 0.02;
 
@@ -958,25 +964,30 @@ export const TOOLBOX_CHANCE_CAP = 0.02;
  * @typedef {{ production: number, responsibility?: number | null,
  *   luck?: number | null, potential?: number | null, potentialMax?: number | null,
  *   wageChip: number, traits?: ReadonlyArray<string>, bonus?: number,
- *   hiredDays?: number, age?: number | null }} Trainee
+ *   hiredDays?: number, age?: number | null, leadership?: number | null,
+ *   wageDay?: number | null }} Trainee
  *   wageChip: his coin chip as a share (+0.138), Greedy / Modest and a
  *   Climber's drift included, as the game prints it; bonus: his pickaxe chip
  *   as a share (0.009 for +0.9%).
  */
 
 /**
- * Rarity shares with leadership 0, as in the game's own odds display.
+ * Rarity shares at the employee's Luck and the player's Leadership.
  * Common cannot go below zero; above that point the total weight grows.
  * @param {number} luck
+ * @param {number} [leadership]
  */
-export function trainingOdds(luck) {
+export function trainingOdds(luck, leadership = 0) {
   const points = Number.isFinite(luck) ? Math.max(0, luck) : 0;
+  const levels = Number.isFinite(leadership) ? Math.max(0, leadership) : 0;
   const weights = { ...TRAIN_WEIGHTS };
   let shift = 0;
   for (const rarity of /** @type {Array<keyof typeof LUCK_TRAIN_SHIFT>} */ (
     Object.keys(LUCK_TRAIN_SHIFT)
   )) {
-    const gain = points * LUCK_TRAIN_SHIFT[rarity];
+    const gain =
+      points * LUCK_TRAIN_SHIFT[rarity] +
+      levels * LEADERSHIP_TRAIN_SHIFT[rarity];
     weights[rarity] += gain;
     shift += gain;
   }
@@ -1092,8 +1103,9 @@ export function bestOfHand(pricedPool, odds, handSize = TRAIN_HAND_SIZE) {
 }
 
 /**
- * Every card of a hand valued for one employee: { values: [{ gold, note }],
- * best, horizon }, gold null for a card that cannot be priced; the best is
+ * Every card of a hand valued for one employee: gold, perDay (daily streams),
+ * hands (Luck and Second wind), and note; best, horizon and paidProduction.
+ * Gold is null for a card that cannot be priced; the best is
  * the largest gold (ties to the first), which matters even when all lose:
  * the window keeps one card anyway. null without a point value.
  * @param {ReadonlyArray<TrainingCard>} cards
@@ -1112,6 +1124,16 @@ export function trainingValues(cards, trainee, ctx) {
   // the markup Greedy and Modest put on his expectation (summed, as the chip sums it)
   const markup = traits.reduce((s, c) => s + ((TRAITS[c].wage ?? 1) - 1), 0);
   const M = 1 + trainee.wageChip; // his whole wage multiplier
+  const paidEstimate =
+    trainee.wageDay != null && M > 0
+      ? trainee.wageDay / (HOURS_PER_POINT * pp * M)
+      : NaN;
+  const paidProduction =
+    Number.isFinite(paidEstimate) &&
+    Math.round(paidEstimate) > 0 &&
+    Math.abs(paidEstimate - Math.round(paidEstimate)) <= 0.15
+      ? Math.round(paidEstimate)
+      : P;
   const expectation = M / (1 + markup);
   const H = Math.min(
     trainee.age != null && Number.isFinite(trainee.age)
@@ -1119,6 +1141,22 @@ export function trainingValues(cards, trainee, ctx) {
       : HORIZON_DAYS,
     HORIZON_DAYS,
   );
+  const left =
+    trainee.potential != null &&
+    Number.isFinite(trainee.potential) &&
+    trainee.potentialMax != null &&
+    Number.isFinite(trainee.potentialMax)
+      ? Math.max(0, trainee.potentialMax - trainee.potential)
+      : null;
+  // Drawing the open hand already increased potential; no second subtraction.
+  const futureHands =
+    left == null ? null : Math.max(0, Math.min(left, (H - 1) * TRAIN_PER_DAY));
+  /** Full-horizon value left for hands drawn on days 1 through count. */
+  const handWeight = (/** @type {number} */ count) => {
+    let weight = 0;
+    for (let j = 1; j <= count; j++) weight += (H - j / TRAIN_PER_DAY) / H;
+    return weight;
+  };
   const hired = trainee.hiredDays ?? 0;
   const full = SPEC_CAP / SPEC_PER_DAY;
   /** His production bonus d days on: the chip now plus the specialization still to come. */
@@ -1148,7 +1186,7 @@ export function trainingValues(cards, trainee, ctx) {
         : ctx.alone
           ? a
           : b;
-    const paid = HOURS_PER_POINT * pp * P;
+    const paid = HOURS_PER_POINT * pp * paidProduction;
     return sum(
       (d) =>
         HOURS_PER_POINT * V * (e.prod * (1 + bonusAt(d)) + P * e.pct + e.flat) -
@@ -1177,14 +1215,15 @@ export function trainingValues(cards, trainee, ctx) {
    * Reuse the dealt-card rules for the pool, with Luck held at zero there.
    * @param {TrainingCard} card
    * @param {boolean} [priceLuck]
-   * @returns {{ gold: number | null, note: string }}
+   * @returns {{ gold: number | null, note: string, hands?: number | null }}
    */
   const priceCard = (card, priceLuck = false) => {
     const k = card.delta ?? 0;
     switch (card.kind) {
       case "negotiation": {
         const cut = Math.max(0, Math.min(k / 100, expectation - WAGE_FLOOR));
-        const daily = HOURS_PER_POINT * pp * P * (1 + markup) * cut;
+        const daily =
+          HOURS_PER_POINT * pp * paidProduction * (1 + markup) * cut;
         return {
           gold: H * daily,
           note: `wage chip ${pct(trainee.wageChip)} → ${pct(M - cut * (1 + markup) - 1)}: saves ${daily.toFixed(2)} g a day`,
@@ -1266,12 +1305,28 @@ export function trainingValues(cards, trainee, ctx) {
   const windValue = (
     /** @type {TrainingCard} */ card,
     /** @type {number} */ top,
-  ) => ({
-    gold: (card.delta ?? 0) * Math.max(0, top - ENERGY_GOLD),
-    note: `+${card.delta ?? 0} training potential: each further training costs ${TRAIN_ENERGY_COST} energy (≈ ${ENERGY_GOLD} g of your own work)`,
-  });
+  ) => {
+    const hands =
+      futureHands == null
+        ? null
+        : Math.max(
+            0,
+            Math.min(card.delta ?? 0, (H - 1) * TRAIN_PER_DAY - futureHands),
+          );
+    let gold = 0;
+    for (let j = 1; j <= (hands ?? 0); j++) {
+      const weight = (H - ((futureHands ?? 0) + j) / TRAIN_PER_DAY) / H;
+      gold += Math.max(0, top * weight - ENERGY_GOLD);
+    }
+    return {
+      gold: hands == null ? null : gold,
+      hands,
+      note: `+${hands ?? "?"} trainings after ${futureHands ?? "?"} already left, weighted by days left; each costs ${TRAIN_ENERGY_COST} energy (≈ ${ENERGY_GOLD} g of your own work)`,
+    };
+  };
   const luck = trainee.luck ?? 0;
-  const odds = trainingOdds(luck);
+  const leadership = trainee.leadership ?? 0;
+  const odds = trainingOdds(luck, leadership);
   const pool = trainingPool(trainee);
   const otherPool = pool
     .filter((c) => c.kind !== "secondWind")
@@ -1287,25 +1342,12 @@ export function trainingValues(cards, trainee, ctx) {
       .map((c) => ({ ...c, ...windValue(c, otherBest) })),
   ];
   const baseline = bestOfHand(pricedPool, odds);
-  const left =
-    trainee.potential != null &&
-    Number.isFinite(trainee.potential) &&
-    trainee.potentialMax != null &&
-    Number.isFinite(trainee.potentialMax)
-      ? Math.max(0, trainee.potentialMax - trainee.potential)
-      : null;
-  // Model assumption: the open hand consumes one remaining training;
-  // one training a day also limits future hands to the horizon minus one.
-  const futureHands =
-    left == null
-      ? null
-      : Math.max(0, Math.min(left - 1, (H - 1) * TRAIN_PER_DAY));
   const percent = (/** @type {number} */ x) =>
     `${x >= 0 ? "+" : ""}${Math.round(x * 10000) / 100}%`;
   // the server's draw is not in the client: each card draws a rarity, then a card of it at random
   const assumption = "model: each card draws a rarity, then a card of it";
   const luckValue = (/** @type {number} */ k) => {
-    const improvedOdds = trainingOdds(luck + k);
+    const improvedOdds = trainingOdds(luck + k, leadership);
     const gain = bestOfHand(pricedPool, improvedOdds) - baseline;
     const changes = Object.keys(LUCK_TRAIN_SHIFT)
       .map(
@@ -1316,8 +1358,9 @@ export function trainingValues(cards, trainee, ctx) {
     const toolbox = (/** @type {number} */ l) =>
       Math.min(TOOLBOX_CHANCE_CAP, Math.max(0, l) * LUCK_TOOLBOX_PER_POINT);
     return {
-      gold: futureHands == null ? null : futureHands * gain,
-      note: `+${k} Luck: ${futureHands == null ? "trainings left not read" : `${futureHands} more training${futureHands === 1 ? "" : "s"} after this one × the best card of a hand averages ${gain >= 0 ? "+" : ""}${gain.toFixed(2)} g more`} (rarer cards: ${changes} of a hand's draws); toolbox chance ${percent(toolbox(luck + k) - toolbox(luck))} an hour, not priced; ${assumption}`,
+      gold: futureHands == null ? null : handWeight(futureHands) * gain,
+      hands: futureHands,
+      note: `+${k} Luck: ${futureHands == null ? "trainings left not read" : `${futureHands} more training${futureHands === 1 ? "" : "s"} after this one, weighted by days left; best hand averages ${gain >= 0 ? "+" : ""}${gain.toFixed(2)} g more`} (rarer cards: ${changes}); toolbox chance ${percent(toolbox(luck + k) - toolbox(luck))} an hour, not priced; ${assumption}`,
     };
   };
   const values = cards.map((card) => priceCard(card, true));
@@ -1342,5 +1385,19 @@ export function trainingValues(cards, trainee, ctx) {
       (best == null || v.gold > /** @type {number} */ (values[best].gold))
     )
       best = i;
-  return { values, best, horizon: H };
+  return {
+    values: values.map((v, i) => ({
+      ...v,
+      perDay:
+        H > 0 &&
+        v.gold != null &&
+        cards[i].kind !== "secondWind" &&
+        !(cards[i].kind === "drill" && cards[i].stat === "luck")
+          ? v.gold / H
+          : null,
+    })),
+    best,
+    horizon: H,
+    paidProduction,
+  };
 }
