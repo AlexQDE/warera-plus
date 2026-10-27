@@ -492,16 +492,17 @@
   opacity: 0.6;
 }
 
-/* Offer rows and cards: SNIPE green, FLIP purple, the whole card framed and glowing so it reads at a glance */
+/* Offer rows and cards: SNIPE green, FLIP purple, the whole card framed and glowing so it reads at a glance.
+   The v0.27 card's own classes set a transparent outline and its own shadow, so these must be important. */
 [data-scrap-sniper="hit"] {
-  outline: 3px solid #22c55e;
-  outline-offset: -3px;
-  box-shadow: 0 0 14px rgba(34, 197, 94, 0.55);
+  outline: 3px solid #22c55e !important;
+  outline-offset: -3px !important;
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.55) !important;
 }
 [data-scrap-sniper="flip"] {
-  outline: 3px solid #a855f7;
-  outline-offset: -3px;
-  box-shadow: 0 0 14px rgba(168, 85, 247, 0.55);
+  outline: 3px solid #a855f7 !important;
+  outline-offset: -3px !important;
+  box-shadow: 0 0 14px rgba(168, 85, 247, 0.55) !important;
 }
 [data-scrap-sniper="hit"] > .ss-verdict[data-lens] {
   background:
@@ -512,8 +513,8 @@
     linear-gradient(rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.2)), #141c29;
 }
 [data-scrap-sniper="near"] {
-  outline: 1px dashed #dab878;
-  outline-offset: -1px;
+  outline: 1px dashed #dab878 !important;
+  outline-offset: -1px !important;
 }
 .ss-verdict[data-lens] {
   position: static;

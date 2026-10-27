@@ -27,7 +27,8 @@ export function findSellForm(root = document) {
       (d) =>
         (/^\s*sell an item/i.test(d.textContent ?? "") &&
           !!d.querySelector('input[name="price"]')) ||
-        (/^\s*(?:×\s*)?sell items\b/i.test(d.textContent ?? "") &&
+        // live, the title runs straight into the first tile's numbers ("Sell items27050%…"): no word boundary
+        (/^\s*(?:×\s*)?sell items(?![a-z])/i.test(d.textContent ?? "") &&
           !!d.querySelector(PIECE_PRICE)),
     ) ?? null
   );

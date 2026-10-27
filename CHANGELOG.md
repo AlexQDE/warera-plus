@@ -2,6 +2,15 @@
 
 What changed in each release of WarEra Plus, newest first. Every number here was measured as it says; a synthetic page or market says so.
 
+## 3.9.1
+
+What 3.9.0's first look on the live page found (2026-10-27, after the extension's reload).
+
+- **The Sell items hints show.** The live window's text runs from its title straight into the first tile's numbers ("Sell items27050%100%Items…"), and the test for the title ended in a word boundary, which a letter followed by a digit is not: the window was never found, so no piece got its line. The fixture had a space there. A test now strips the whitespace as the live DOM has it.
+- **The SNIPE and FLIP frames show.** A v0.27 card's own classes set a transparent 2 px outline and their own shadow, which won over the frame and the glow; only the tinted line showed. The frames, and NEAR MISS's dashed outline, are now important, as the Recruit window's best card already was. Seen live: a green and a purple frame round the whole card.
+
+The picker's and Quick dismantle's bars sit under their titles, and the cases strip keeps its columns with the ask in flip mode, as 3.9.0 meant; seen live the same day.
+
 ## 3.9.0
 
 What a walk through every surface on the live page found on 2026-10-27, and wooden cases priced like the battle cases.

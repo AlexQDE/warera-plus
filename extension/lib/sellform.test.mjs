@@ -279,6 +279,19 @@ describe("the v0.27 sell window", () => {
     expect(readSellForm(reopened).items[0].game.suggested).toBe(175);
   });
 
+  it("finds the window when its title runs straight into the first tile's numbers, as the live DOM has it", () => {
+    const form = liveSell();
+    // the live dialog has no whitespace between its nodes: "Sell items27050%100%Items…"
+    const walker = document.createTreeWalker(form, window.NodeFilter.SHOW_TEXT);
+    const blank = [];
+    while (walker.nextNode())
+      if (!walker.currentNode.nodeValue.trim()) blank.push(walker.currentNode);
+    for (const n of blank) n.remove();
+    expect(form.textContent).toMatch(/^×?Sell items\d/);
+    expect(findSellForm()).toBe(form);
+    expect(readSellForm(form).items).toHaveLength(2);
+  });
+
   it("reads offers and a range printed in thousands, and waits for the game's start when the input comes up empty", () => {
     const form = liveSell();
     // the game splits "1.234K" at its point, as on the market's cards
