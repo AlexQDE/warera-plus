@@ -733,32 +733,35 @@ export async function startLens(runtime = chrome.runtime) {
     if (sell) {
       const read = readSellForm(sell);
       const now = Date.now();
+      // Sales are also needed when this window opens away from the market.
+      context.dialog ||= "sell";
       for (const it of read.items) requestSales(it.code);
-      if (read.items.length)
-        renderSellHint(
-          read,
-          sellHintHtml(
-            read.items.map((it) => {
-              const sales = state.salesByCode[it.code];
-              // without a key no sales come: the price rests on the asks and the game's estimate
-              return {
-                code: it.code,
-                noKey: !state.hasKey,
-                s:
-                  sales || !state.hasKey
-                    ? suggestPrice({
-                        code: it.code,
-                        skills: it.skills,
-                        fills: sales ? windowFills(sales, now) : [],
-                        asks: equipment.asks(it.code),
-                        now,
-                        game: read.game,
-                      })
-                    : null,
-              };
-            }),
-          ),
-        );
+      const pricePieces = (items) =>
+        items.map((it) => {
+          const sales = state.salesByCode[it.code];
+          // without a key no sales come: the price rests on the asks and the game's estimate
+          return {
+            code: it.code,
+            noKey: !state.hasKey,
+            game: read.perItem ? it.game : null,
+            s:
+              sales || !state.hasKey
+                ? suggestPrice({
+                    code: it.code,
+                    skills: it.skills,
+                    fills: sales ? windowFills(sales, now) : [],
+                    asks: [...(it.asks ?? []), ...equipment.asks(it.code)],
+                    now,
+                    game: read.perItem ? it.game : read.game,
+                  })
+                : null,
+          };
+        });
+      if (read.perItem) {
+        for (const it of read.items)
+          renderSellHint(it, sellHintHtml(pricePieces([it])));
+      } else if (read.items.length)
+        renderSellHint(read, sellHintHtml(pricePieces(read.items)));
       nextRoots.push(sell);
     }
     observe(nextRoots);

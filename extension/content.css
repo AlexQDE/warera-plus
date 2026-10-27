@@ -980,6 +980,10 @@
 /* Our line under the sell form's PRICE: the suggested price, why, and Use */
 .ss-sell[data-lens] {
   display: grid;
+  position: static;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   gap: 2px;
   margin: 6px 0;
   padding: 6px 8px;
@@ -988,6 +992,8 @@
   border-radius: 8px;
   font-size: 12px;
   text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .ss-sell[data-lens] b {
   font-size: 14px;
@@ -997,4 +1003,11 @@
   padding: 0 9px;
   font-size: 11px;
   margin-left: 4px;
+}
+.ss-sell[data-lens] > small {
+  display: block;
+  min-width: 0;
+}
+.ss-sell[data-lens] .lens-neg {
+  color: var(--lens-bad);
 }
