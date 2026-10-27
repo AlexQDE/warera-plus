@@ -929,6 +929,26 @@ export const WAGE_FLOOR = 0.7;
 export const REF_TAX = 10;
 /** Stats a drill can raise, in the order the Train window prints its chips. */
 export const TRAIN_STATS = ["production", "responsibility", "luck"];
+/** Client training config (module 56899, read 2026-10-27). */
+export const TRAIN_PER_DAY = 1;
+export const TRAIN_ENERGY_COST = 10;
+export const TRAIN_HAND_SIZE = 3;
+export const TRAIN_POTENTIAL_CAP = 15;
+export const TRAIN_WEIGHTS = {
+  common: 55,
+  uncommon: 25,
+  rare: 13,
+  epic: 5,
+  legendary: 2,
+};
+export const LUCK_TRAIN_SHIFT = {
+  uncommon: 0.5,
+  rare: 0.3,
+  epic: 0.15,
+  legendary: 0.05,
+};
+export const LUCK_TOOLBOX_PER_POINT = 0.001;
+export const TOOLBOX_CHANCE_CAP = 0.02;
 
 /**
  * @typedef {{ kind: string | null, rarity?: string | null, delta?: number | null,
@@ -936,12 +956,140 @@ export const TRAIN_STATS = ["production", "responsibility", "luck"];
  *   kind: drill | negotiation | wild | habit | rehab | cleanSlate | secondWind;
  *   traitTo / trait: the trait codes the card teaches / removes or replaces.
  * @typedef {{ production: number, responsibility?: number | null,
+ *   luck?: number | null, potential?: number | null, potentialMax?: number | null,
  *   wageChip: number, traits?: ReadonlyArray<string>, bonus?: number,
  *   hiredDays?: number, age?: number | null }} Trainee
  *   wageChip: his coin chip as a share (+0.138), Greedy / Modest and a
  *   Climber's drift included, as the game prints it; bonus: his pickaxe chip
  *   as a share (0.009 for +0.9%).
  */
+
+/**
+ * Rarity shares with leadership 0, as in the game's own odds display.
+ * Common cannot go below zero; above that point the total weight grows.
+ * @param {number} luck
+ */
+export function trainingOdds(luck) {
+  const points = Number.isFinite(luck) ? Math.max(0, luck) : 0;
+  const weights = { ...TRAIN_WEIGHTS };
+  let shift = 0;
+  for (const rarity of /** @type {Array<keyof typeof LUCK_TRAIN_SHIFT>} */ (
+    Object.keys(LUCK_TRAIN_SHIFT)
+  )) {
+    const gain = points * LUCK_TRAIN_SHIFT[rarity];
+    weights[rarity] += gain;
+    shift += gain;
+  }
+  weights.common = Math.max(0, weights.common - shift);
+  const total = Object.values(weights).reduce((s, w) => s + w, 0);
+  for (const rarity of /** @type {Array<keyof typeof weights>} */ (
+    Object.keys(weights)
+  ))
+    weights[rarity] /= total;
+  return weights;
+}
+
+/**
+ * Every card available to this employee under the client pool rules.
+ * @param {Trainee} trainee
+ * @returns {TrainingCard[]}
+ */
+export function trainingPool(trainee) {
+  /** @type {TrainingCard[]} */
+  const pool = [];
+  const drillRarities = ["common", "uncommon", "epic", "legendary"];
+  for (const stat of TRAIN_STATS)
+    for (const [i, rarity] of drillRarities.entries())
+      pool.push({ kind: "drill", rarity, delta: i + 1, stat });
+  const owned = new Set(trainee.traits ?? []);
+  let negatives = 0;
+  for (const code of owned) {
+    const polarity = TRAITS[code]?.polarity;
+    if (polarity === "negative") negatives++;
+    if (polarity === "negative" || polarity === "mixed")
+      pool.push({
+        kind: "rehab",
+        rarity: polarity === "negative" ? "rare" : "uncommon",
+        trait: code,
+      });
+  }
+  if (negatives >= 2) pool.push({ kind: "cleanSlate", rarity: "legendary" });
+  const available = Object.entries(TRAITS).filter(([code]) => !owned.has(code));
+  const positive = available.filter(([, t]) => t.polarity === "positive");
+  for (const [code, t] of available)
+    if (t.polarity === "positive" || t.polarity === "mixed")
+      pool.push({
+        kind: "habit",
+        rarity: t.polarity === "positive" ? "epic" : "rare",
+        traitTo: [code],
+      });
+  for (let i = 0; i < positive.length; i++)
+    for (let j = i + 1; j < positive.length; j++)
+      pool.push({
+        kind: "habit",
+        rarity: "legendary",
+        traitTo: [positive[i][0], positive[j][0]],
+      });
+  if (available.length) pool.push({ kind: "wild", rarity: "uncommon" });
+  for (const [i, rarity] of ["rare", "epic", "legendary"].entries()) {
+    const delta = i + 2;
+    if (
+      trainee.potentialMax != null &&
+      trainee.potentialMax + delta <= TRAIN_POTENTIAL_CAP
+    )
+      pool.push({ kind: "secondWind", rarity, delta });
+  }
+  const markup = [...owned].reduce(
+    (s, c) => s + ((TRAITS[c]?.wage ?? 1) - 1),
+    0,
+  );
+  const expectation = (1 + trainee.wageChip) / (1 + markup);
+  for (const [i, rarity] of ["common", "uncommon", "rare"].entries()) {
+    const delta = [5, 10, 20][i];
+    // Tiny tolerance keeps exact floor boundaries despite floating-point division.
+    if (expectation - delta / 100 >= WAGE_FLOOR - 1e-12)
+      pool.push({ kind: "negotiation", rarity, delta });
+  }
+  return pool;
+}
+
+/**
+ * Exact expected best card: the single-draw CDF raised to handSize.
+ * Model assumption: independent rarity draws, renormalised over the pool's
+ * available rarities, then uniform cards within that rarity; keep the best.
+ * Unpriced cards are omitted; an empty hand or pool has value zero.
+ * @param {ReadonlyArray<{ rarity?: string | null, gold: number | null }>} pricedPool
+ * @param {Readonly<Record<string, number>>} odds
+ * @param {number} [handSize]
+ */
+export function bestOfHand(pricedPool, odds, handSize = TRAIN_HAND_SIZE) {
+  if (handSize <= 0) return 0;
+  const cards = pricedPool.flatMap(({ rarity, gold }) =>
+    rarity && gold != null && Number.isFinite(gold) && odds[rarity] > 0
+      ? [{ rarity, gold }]
+      : [],
+  );
+  /** @type {Map<string, number>} */
+  const counts = new Map();
+  for (const c of cards) counts.set(c.rarity, (counts.get(c.rarity) ?? 0) + 1);
+  const weight = [...counts.keys()].reduce((s, r) => s + odds[r], 0);
+  if (!weight) return 0;
+  cards.sort((a, b) => a.gold - b.gold);
+  let cdf = 0;
+  let prev = 0;
+  let expected = 0;
+  for (const c of cards) {
+    cdf = Math.min(
+      1,
+      cdf +
+        odds[c.rarity] / weight / /** @type {number} */ (counts.get(c.rarity)),
+    );
+    const next = cdf ** handSize;
+    expected += c.gold * (next - prev);
+    prev = next;
+  }
+  return expected;
+}
 
 /**
  * Every card of a hand valued for one employee: { values: [{ gold, note }],
@@ -1020,13 +1168,18 @@ export function trainingValues(cards, trainee, ctx) {
           HOURS_PER_POINT * V * P * (1 + bonusAt(d)) * ((kk * REF_TAX) / 1000),
       );
     }
-    if (stat === "luck") return 0; // toolboxes, events, rarer cards: not priced
+    if (stat === "luck") return 0; // No recursive Luck value inside the future pool.
     return null;
   };
   const pct = (/** @type {number} */ x) =>
     `${x >= 0 ? "+" : ""}${Math.round(x * 1000) / 10}%`;
-  /** @type {Array<{ gold: number | null, note: string }>} */
-  const values = cards.map((card) => {
+  /**
+   * Reuse the dealt-card rules for the pool, with Luck held at zero there.
+   * @param {TrainingCard} card
+   * @param {boolean} [priceLuck]
+   * @returns {{ gold: number | null, note: string }}
+   */
+  const priceCard = (card, priceLuck = false) => {
     const k = card.delta ?? 0;
     switch (card.kind) {
       case "negotiation": {
@@ -1038,6 +1191,7 @@ export function trainingValues(cards, trainee, ctx) {
         };
       }
       case "drill":
+        if (card.stat === "luck" && priceLuck) return luckValue(k);
         return {
           gold: drillGold(card.stat, k),
           note:
@@ -1046,17 +1200,25 @@ export function trainingValues(cards, trainee, ctx) {
               : card.stat === "responsibility"
                 ? `+${k} Responsibility shields happiness losses (valued at ${REF_TAX}% income tax)`
                 : card.stat === "luck"
-                  ? `+${k} Luck: toolboxes, events, rarer cards; not priced in gold`
+                  ? `+${k} Luck: held at zero inside the future pool`
                   : "the drilled stat was not read",
         };
       case "wild": {
+        const luck = priceLuck ? luckValue(1).gold : 0;
+        if (luck == null)
+          return {
+            gold: null,
+            note: "trainings left not read for the random Luck stat",
+          };
         const trait = hiddenTraitPool().reduce(
           (s, p) => s + p.share * /** @type {number} */ (traitGold(p.code)),
           0,
         );
         const stat =
           TRAIN_STATS.reduce(
-            (s, st) => s + /** @type {number} */ (drillGold(st, 1)),
+            (s, st) =>
+              s +
+              (st === "luck" ? luck : /** @type {number} */ (drillGold(st, 1))),
             0,
           ) / TRAIN_STATS.length;
         return {
@@ -1100,7 +1262,65 @@ export function trainingValues(cards, trainee, ctx) {
       default:
         return { gold: null, note: "this card is not priced" };
     }
+  };
+  const windValue = (
+    /** @type {TrainingCard} */ card,
+    /** @type {number} */ top,
+  ) => ({
+    gold: (card.delta ?? 0) * Math.max(0, top - ENERGY_GOLD),
+    note: `+${card.delta ?? 0} training potential: each further training costs ${TRAIN_ENERGY_COST} energy (≈ ${ENERGY_GOLD} g of your own work)`,
   });
+  const luck = trainee.luck ?? 0;
+  const odds = trainingOdds(luck);
+  const pool = trainingPool(trainee);
+  const otherPool = pool
+    .filter((c) => c.kind !== "secondWind")
+    .map((c) => ({ ...c, ...priceCard(c) }));
+  // The pool's Second wind uses the baseline expected best hand of other
+  // cards, rather than the maximum of the entire pool. Hold these card
+  // prices fixed while changing the rarity odds, so Luck measures the draw.
+  const otherBest = bestOfHand(otherPool, odds);
+  const pricedPool = [
+    ...otherPool,
+    ...pool
+      .filter((c) => c.kind === "secondWind")
+      .map((c) => ({ ...c, ...windValue(c, otherBest) })),
+  ];
+  const baseline = bestOfHand(pricedPool, odds);
+  const left =
+    trainee.potential != null &&
+    Number.isFinite(trainee.potential) &&
+    trainee.potentialMax != null &&
+    Number.isFinite(trainee.potentialMax)
+      ? Math.max(0, trainee.potentialMax - trainee.potential)
+      : null;
+  // Model assumption: the open hand consumes one remaining training;
+  // one training a day also limits future hands to the horizon minus one.
+  const futureHands =
+    left == null
+      ? null
+      : Math.max(0, Math.min(left - 1, (H - 1) * TRAIN_PER_DAY));
+  const percent = (/** @type {number} */ x) =>
+    `${x >= 0 ? "+" : ""}${Math.round(x * 10000) / 100}%`;
+  // the server's draw is not in the client: each card draws a rarity, then a card of it at random
+  const assumption = "model: each card draws a rarity, then a card of it";
+  const luckValue = (/** @type {number} */ k) => {
+    const improvedOdds = trainingOdds(luck + k);
+    const gain = bestOfHand(pricedPool, improvedOdds) - baseline;
+    const changes = Object.keys(LUCK_TRAIN_SHIFT)
+      .map(
+        (r) =>
+          `${r} ${percent(improvedOdds[/** @type {keyof typeof improvedOdds} */ (r)] - odds[/** @type {keyof typeof odds} */ (r)])}`,
+      )
+      .join(", ");
+    const toolbox = (/** @type {number} */ l) =>
+      Math.min(TOOLBOX_CHANCE_CAP, Math.max(0, l) * LUCK_TOOLBOX_PER_POINT);
+    return {
+      gold: futureHands == null ? null : futureHands * gain,
+      note: `+${k} Luck: ${futureHands == null ? "trainings left not read" : `${futureHands} more training${futureHands === 1 ? "" : "s"} after this one × the best card of a hand averages ${gain >= 0 ? "+" : ""}${gain.toFixed(2)} g more`} (rarer cards: ${changes} of a hand's draws); toolbox chance ${percent(toolbox(luck + k) - toolbox(luck))} an hour, not priced; ${assumption}`,
+    };
+  };
+  const values = cards.map((card) => priceCard(card, true));
   // Second wind: more trainings, each worth about this hand's best other
   // card less the 10 energy it costs
   for (const [i, card] of cards.entries())
@@ -1112,10 +1332,7 @@ export function trainingValues(cards, trainee, ctx) {
       const top = others.length
         ? Math.max(.../** @type {number[]} */ (others))
         : 0;
-      values[i] = {
-        gold: (card.delta ?? 0) * Math.max(0, top - ENERGY_GOLD),
-        note: `+${card.delta ?? 0} training potential: each further training costs 10 energy (≈ ${ENERGY_GOLD} g of your own work)`,
-      };
+      values[i] = windValue(card, top);
     }
   /** @type {number | null} */
   let best = null;

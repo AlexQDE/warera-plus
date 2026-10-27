@@ -25,6 +25,8 @@ it("reads the employee and the three dealt cards", () => {
     production: 5,
     responsibility: 1,
     luck: 1,
+    potential: 1,
+    potentialMax: 3,
     wageChip: 0.138,
     bonus: 0.009,
     hiredDays: 0,
@@ -43,6 +45,30 @@ it("reads the employee and the three dealt cards", () => {
   expect(pickerDialog()).toBeNull();
 });
 
+it("reads potential only from the header and uses null when it is missing", () => {
+  const chip = [...document.querySelectorAll("span")].find(
+    (e) => e.textContent === "1/3",
+  );
+  chip.textContent = "1 / 3";
+  expect(train.readTrainDialog().trainee).toMatchObject({
+    potential: 1,
+    potentialMax: 3,
+  });
+  chip.remove();
+  const fake = document.createElement("span");
+  fake.textContent = "2/9";
+  train.readTrainDialog().cards[0].button.append(fake);
+  expect(train.readTrainDialog().trainee).toMatchObject({
+    potential: null,
+    potentialMax: null,
+  });
+  const advisor = train.createTrain();
+  advisor.render(fresh());
+  expect(document.querySelector(".lens-help").getAttribute("title")).toContain(
+    "trainings left not read",
+  );
+});
+
 it("marks Negotiation as the pick for an expensive worker, one line under the cards", () => {
   const buttons = [...document.querySelectorAll("button")];
   const original = buttons.map((b) => b.outerHTML);
@@ -55,12 +81,13 @@ it("marks Negotiation as the pick for an expensive worker, one line under the ca
   const cells = [...line.querySelectorAll(".ss-train-cell")].map(
     (c) => c.textContent,
   );
-  expect(cells).toEqual(["★ +7.6 g", "≈ 0 g", "+2.8 g"]);
+  // Luck now prices the one future hand; Wild card includes its +1 Luck share.
+  expect(cells).toEqual(["★ +7.6 g", "+0.2 g", "+2.9 g"]);
   const tip = line.querySelector(".lens-help").getAttribute("title");
   expect(tip).toContain(
     "★ Negotiation (-10%): +7.6 g - wage chip +13.8% → +3.8%: saves 0.30 g a day",
   );
-  expect(tip).toContain("Intensive drill (+2): ≈ 0 g - +2 Luck");
+  expect(tip).toContain("Intensive drill (+2): +0.2 g - +2 Luck");
   expect(tip).toContain("25 days counted");
   // the best card's own box is outlined, and only it
   expect(read.boxes[0].hasAttribute("data-ss-best")).toBe(true);

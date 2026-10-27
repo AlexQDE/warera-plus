@@ -195,7 +195,9 @@ describe("SPA lifecycle and DOM work", () => {
       [...document.querySelectorAll(".ss-train-cell")].map(
         (c) => c.textContent,
       ),
-    ).toEqual(["★ +7.6 g", "≈ 0 g", "+2.8 g"]);
+      // Luck is priced by the future hands it improves (the window's "1/3": one more hand), and the Wild card's +1 to a
+      // random stat with it
+    ).toEqual(["★ +7.6 g", "+0.2 g", "+2.9 g"]);
     const best = dialog.querySelector("[data-ss-best]");
     expect(best).not.toBeNull();
     expect(buttons.map((b) => b.outerHTML)).toEqual(original);

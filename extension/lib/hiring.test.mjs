@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import * as hiring from "./hiring.mjs";
 import {
   TRAITS,
   traitCode,
@@ -22,6 +23,9 @@ describe("the training cards", () => {
   const SORAYUT = {
     production: 5,
     responsibility: 1,
+    luck: 1,
+    potential: 1,
+    potentialMax: 3,
     wageChip: 0.138,
     traits: [],
     bonus: 0.009,
@@ -38,7 +42,7 @@ describe("the training cards", () => {
     expect(r?.horizon).toBe(25);
     expect(r?.values[0].gold).toBeCloseTo(25 * 6 * PV * 5 * 0.1, 9);
     expect(r?.values[0].note).toContain("wage chip +13.8% → +3.8%");
-    expect(r?.values[1].gold).toBe(0);
+    expect(r?.values[1].gold).toBeGreaterThan(0);
     expect(/** @type {number} */ (r?.values[2].gold)).toBeLessThan(
       /** @type {number} */ (r?.values[0].gold),
     );
@@ -104,6 +108,226 @@ describe("the training cards", () => {
     );
     expect(r?.values[0].gold).toBeNull();
     expect(r?.best).toBe(1);
+  });
+  it("prices Luck by the future hands, counting the open hand and the horizon", () => {
+    const drill = [HAND[1]];
+    const price = (changes) =>
+      trainingValues(drill, { ...SORAYUT, ...changes }, { pointValue: PV })
+        ?.values[0];
+    const one = price({ potential: 1, potentialMax: 3 });
+    expect(one.gold).toBeGreaterThan(0);
+    expect(price({ potential: 0, potentialMax: 3 }).gold).toBeCloseTo(
+      2 * one.gold,
+      10,
+    );
+    expect(price({ potential: 2, potentialMax: 3 }).gold).toBe(0);
+    expect(price({ potential: 3, potentialMax: 3 }).gold).toBe(0);
+    expect(price({ potential: 4, potentialMax: 3 }).gold).toBe(0);
+    expect(price({ potential: 0, potentialMax: 3, age: 64 }).gold).toBe(0);
+    // Two days in the horizon allow just one future hand, whatever potential remains.
+    expect(price({ potential: 0, potentialMax: 3, age: 63 }).gold).toBeCloseTo(
+      price({ potential: 1, potentialMax: 3, age: 63 }).gold,
+      12,
+    );
+    expect(one.note).toContain(
+      "1 more training after this one × the best card of a hand averages +",
+    );
+    expect(one.note).toContain(
+      "uncommon +1%, rare +0.6%, epic +0.3%, legendary +0.1%",
+    );
+    expect(one.note).toContain("toolbox chance +0.2% an hour, not priced");
+    expect(one.note).toContain(
+      "model: each card draws a rarity, then a card of it",
+    );
+    // the hand open now is one of the trainings left
+    expect(one.note).toContain("1 more training after this one");
+  });
+  it("leaves Luck and its random-stat contribution unknown without potential", () => {
+    const r = trainingValues(
+      HAND,
+      { ...SORAYUT, potential: null, potentialMax: null },
+      { pointValue: PV },
+    );
+    expect(r.values[1].gold).toBeNull();
+    expect(r.values[1].note).toContain("trainings left not read");
+    expect(r.values[2].gold).toBeNull();
+    expect(r.best).toBe(0);
+  });
+  it("includes Luck's value in Wild card's random stat average", () => {
+    const a = trainingValues(HAND, SORAYUT, { pointValue: PV });
+    const b = trainingValues(
+      HAND,
+      { ...SORAYUT, potential: 2 },
+      { pointValue: PV },
+    );
+    const luck = trainingValues(
+      [{ kind: "drill", stat: "luck", delta: 1 }],
+      SORAYUT,
+      { pointValue: PV },
+    );
+    expect(luck.values[0].gold).toBeGreaterThan(0);
+    expect(a.values[2].gold - b.values[2].gold).toBeCloseTo(
+      luck.values[0].gold / 3,
+      12,
+    );
+  });
+  it("caps the toolbox chance in Luck's note", () => {
+    const r = trainingValues(
+      [HAND[1]],
+      { ...SORAYUT, luck: 20 },
+      { pointValue: PV },
+    );
+    expect(r.values[0].note).toContain(
+      "toolbox chance +0% an hour, not priced",
+    );
+  });
+  it("compares fixed pool prices, valuing Second wind from the expected best other hand", () => {
+    const trainee = { ...SORAYUT, potential: 1, potentialMax: 12 };
+    const pool = hiring.trainingPool(trainee);
+    const others = pool.filter((c) => c.kind !== "secondWind");
+    // With no future hands, the ordinary card rules price Luck at zero.
+    const prices = trainingValues(
+      others,
+      { ...trainee, potential: 12 },
+      { pointValue: PV },
+    ).values;
+    const priced = others.map((c, i) => ({ ...c, gold: prices[i].gold }));
+    const odds = hiring.trainingOdds(trainee.luck);
+    const expectedOther = hiring.bestOfHand(priced, odds);
+    for (const c of pool.filter((c) => c.kind === "secondWind"))
+      priced.push({
+        ...c,
+        gold: c.delta * Math.max(0, expectedOther - ENERGY_GOLD),
+      });
+    const perHand =
+      hiring.bestOfHand(priced, hiring.trainingOdds(trainee.luck + 2)) -
+      hiring.bestOfHand(priced, odds);
+    const r = trainingValues([HAND[1]], trainee, { pointValue: PV });
+    expect(r.values[0].gold).toBeCloseTo(10 * perHand, 10);
+  });
+});
+
+describe("future training hands", () => {
+  it("shifts the game's rarity weights at Luck 0 and 10 with leadership 0", () => {
+    expect(hiring.trainingOdds(0)).toEqual({
+      common: 0.55,
+      uncommon: 0.25,
+      rare: 0.13,
+      epic: 0.05,
+      legendary: 0.02,
+    });
+    expect(hiring.trainingOdds(10)).toEqual({
+      common: 0.45,
+      uncommon: 0.3,
+      rare: 0.16,
+      epic: 0.065,
+      legendary: 0.025,
+    });
+    const high = hiring.trainingOdds(100);
+    expect(high.common).toBe(0);
+    expect(Object.values(high).reduce((s, x) => s + x, 0)).toBeCloseTo(1, 12);
+  });
+  it("builds the employee's pool with rehab, habits and positive pairs", () => {
+    const pool = hiring.trainingPool({
+      production: 5,
+      wageChip: -0.04,
+      potentialMax: 12,
+      traits: ["greedy", "homesick", "gambler", "handy"],
+    });
+    const counts = (key) =>
+      pool.reduce((out, c) => {
+        out[c[key]] = (out[c[key]] ?? 0) + 1;
+        return out;
+      }, {});
+    expect(counts("kind")).toEqual({
+      drill: 12,
+      rehab: 3,
+      cleanSlate: 1,
+      habit: 335,
+      wild: 1,
+      secondWind: 2,
+      negotiation: 2,
+    });
+    expect(counts("rarity")).toEqual({
+      common: 4,
+      uncommon: 6,
+      rare: 13,
+      epic: 29,
+      legendary: 304,
+    });
+    expect(pool.filter((c) => c.kind === "rehab")).toEqual([
+      { kind: "rehab", rarity: "rare", trait: "greedy" },
+      { kind: "rehab", rarity: "rare", trait: "homesick" },
+      { kind: "rehab", rarity: "uncommon", trait: "gambler" },
+    ]);
+    const habits = pool.filter((c) => c.kind === "habit");
+    expect(
+      habits.every((c) =>
+        c.traitTo.every((t) => !["handy", "gambler"].includes(t)),
+      ),
+    ).toBe(true);
+    const pairs = habits.filter((c) => c.rarity === "legendary");
+    expect(pairs).toHaveLength(300);
+    expect(
+      pairs.every(
+        (c) =>
+          c.traitTo.length === 2 &&
+          c.traitTo.every((t) => TRAITS[t].polarity === "positive"),
+      ),
+    ).toBe(true);
+    expect(
+      new Set(pairs.map((c) => [...c.traitTo].sort().join(","))).size,
+    ).toBe(300);
+  });
+  it("limits Second wind by the potential cap and Negotiation by the expectation floor", () => {
+    const pool = (potentialMax, wageChip, traits = []) =>
+      hiring.trainingPool({
+        production: 2,
+        potentialMax,
+        wageChip,
+        traits,
+      });
+    const deltas = (cards, kind) =>
+      cards.filter((c) => c.kind === kind).map((c) => c.delta);
+    expect(deltas(pool(11, 0), "secondWind")).toEqual([2, 3, 4]);
+    expect(deltas(pool(13, 0), "secondWind")).toEqual([2]);
+    expect(deltas(pool(14, 0), "secondWind")).toEqual([]);
+    expect(deltas(pool(null, 0), "secondWind")).toEqual([]);
+    expect(deltas(pool(15, -0.3), "negotiation")).toEqual([]);
+    expect(deltas(pool(15, -0.25), "negotiation")).toEqual([5]);
+    expect(deltas(pool(15, -0.2), "negotiation")).toEqual([5, 10]);
+    expect(deltas(pool(15, -0.1), "negotiation")).toEqual([5, 10, 20]);
+    expect(deltas(pool(15, 0.8 * 1.2 - 1, ["greedy"]), "negotiation")).toEqual([
+      5, 10,
+    ]);
+    const allTraits = pool(15, 0, Object.keys(TRAITS));
+    expect(allTraits.some((c) => c.kind === "habit" || c.kind === "wild")).toBe(
+      false,
+    );
+    expect(pool(15, 0, ["greedy"]).some((c) => c.kind === "cleanSlate")).toBe(
+      false,
+    );
+  });
+  it("computes the exact CDF-powered maximum, drawing a rarity then a uniform card", () => {
+    const pool = [
+      { rarity: "common", gold: 0 },
+      { rarity: "common", gold: 4 },
+      { rarity: "uncommon", gold: 10 },
+    ];
+    // Rare is absent: common and uncommon renormalise to 1/2 each.
+    const odds = {
+      common: 0.2,
+      uncommon: 0.2,
+      rare: 0.6,
+      epic: 0,
+      legendary: 0,
+    };
+    // P(max=0)=1/64; P(max=4)=7/64; P(max=10)=7/8.
+    expect(hiring.bestOfHand(pool, odds)).toBeCloseTo(9.1875, 12);
+    expect(hiring.bestOfHand(pool, odds, 1)).toBeCloseTo(6, 12);
+    expect(hiring.bestOfHand(pool, odds, 0)).toBe(0);
+    expect(hiring.bestOfHand([], odds)).toBe(0);
+    expect(hiring.bestOfHand([{ rarity: "common", gold: -4 }], odds)).toBe(-4);
   });
 });
 

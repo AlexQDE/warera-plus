@@ -200,6 +200,12 @@ export function readTrainDialog(root = document) {
     const wageChip = iconed
       ? pcts.find((p) => p !== bonusChip && p.icon !== icons[0])
       : pcts.find((p) => p !== bonusChip);
+    const potentialNode = textNodes(dialog, /^(\d+)\s*\/\s*(\d+)$/).find(
+      (e) => !row.contains(e),
+    );
+    const potential = /^(\d+)\s*\/\s*(\d+)$/.exec(
+      potentialNode?.textContent?.trim() ?? "",
+    );
     const hiredNode = textNodes(dialog, /^hired\s+\d+\s*d\b/i)[0];
     const hired = hiredNode
       ? Number(/(\d+)/.exec(hiredNode.textContent ?? "")?.[1])
@@ -220,6 +226,8 @@ export function readTrainDialog(root = document) {
         production: values[0],
         responsibility: values[1],
         luck: values[2],
+        potential: potential ? Number(potential[1]) : null,
+        potentialMax: potential ? Number(potential[2]) : null,
         wageChip: wageChip?.value ?? null,
         bonus: bonusChip?.value ?? 0,
         hiredDays: Number.isFinite(hired) ? hired : 0,
