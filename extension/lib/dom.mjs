@@ -1094,12 +1094,12 @@ export function mapLootItem(root = document) {
           : null,
       };
   }
+  // the label first: it rules out nearly every element, and runs on every scan of every page
   const els = [...root.querySelectorAll("button, div, span, p, a")].filter(
-    (e) => {
-      if (e.closest("[data-lens], .ss-trip")) return false;
-      const t = (e.textContent || "").trim();
-      return t.startsWith(NEAREST_CASE_LABEL) && nativeText(e).length < 320;
-    },
+    (e) =>
+      (e.textContent || "").trim().startsWith(NEAREST_CASE_LABEL) &&
+      !e.closest("[data-lens], .ss-trip") &&
+      nativeText(e).length < 320,
   );
   if (!els.length) return null;
   const withHops = els.filter((e) => REGIONS_AWAY_RE.test(nativeText(e)));
