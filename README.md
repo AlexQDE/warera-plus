@@ -8,7 +8,7 @@ WarEra Plus is not made, endorsed or supported by the makers of WarEra.
 
 ## What it shows
 
-**On the equipment market.** A bar above the offers with three tabs, **Market**, **Craft** and **Ledger**, none open until you pick one. Under each offer card from another player, one block: a tag, the gain of the tagged route (dismantle the piece for its scraps, or sell it on) and what pieces with these stats sell for. **Details** opens the evidence: the bids its scraps would fill, the sales it is compared with, how fast such pieces sell. A SNIPE or FLIP card is outlined. Your own offers are left untagged.
+**On the equipment market.** A bar above the offers with three tabs, **Market**, **Craft** and **Ledger**, none open until you pick one. Under each offer card from another player, one block: a tag, the gain of the tagged route (dismantle the piece for its scraps, or sell it on) and what pieces with these stats sell for. **Details** opens the evidence: the bids its scraps would fill, the sales it is compared with, how fast such pieces sell. A SNIPE card is framed green and a FLIP card purple. Your own offers are left untagged.
 
 | Tag       | Meaning                                                                                                                  |
 | --------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -27,12 +27,13 @@ WarEra Plus is not made, endorsed or supported by the makers of WarEra.
 **In the game's own windows.**
 
 - The craft window: what the craft costs and is worth now, your results with that tier and today's crafts.
-- The case window: what opening it is worth against selling it sealed, your results with that case, and what your last opening gave when it was this case.
+- The case window: what opening it is worth against selling it sealed, your results with that case, and what your last opening gave when it was this case. The wooden case's window adds what buying one at the ask would gain, and your openings' drops at their day's prices and at today's bids.
+- The Sell items window: under each piece's price, what pieces of both its stats sell for, the asks it competes with, a **use** button for that piece, and a red line when the game's starting price comes from an offer with other stats and sits under what these stats sell for.
 - The item picker and Quick dismantle: how you got each piece (crafted, from a case, bought, loot; needs a key), and behind **⇅ by crit** a list of one item's pieces from the best roll down with what each sells for. A click on a piece in that list selects it in the game's list.
 - The Recruit window (Companies, a company's **Recruit** button): one line per candidate, with his Production (as his card shows it, or estimated from his wage when the card hides it), the wage chip he will show once hired and the gold until he retires; the details are on its "?". The best pick is outlined.
 - The Train window: each of the three dealt cards gets its gold for that employee until he turns 65, the best card is outlined, and its "?" says why.
 
-**Cases and travel.** On the market and in the inventory, what each case is worth opened against sold sealed: a wooden case's resources at the current bids; the other cases' gear at the game's average prices from the rarity you sell from (Epic by default, in the settings) and at its scraps below it. On the map, what a trip to the nearest wooden case costs.
+**Cases and travel.** On the market and in the inventory, what each case is worth opened against sold sealed: a wooden case's resources at the current bids; the other cases' gear at the game's average prices from the rarity you sell from (Epic by default, in the settings) and at its scraps below it. The wooden case also shows its ask; with **Flip** chosen in the settings (Advanced), it is tagged FLIP when buying one at the ask and opening it beats your minimum ROI. The Ledger's **Wooden** chip lists your wooden case drops by resource. On the map, what a trip to the nearest wooden case costs.
 
 ## How it works
 
@@ -61,7 +62,7 @@ It adds its own lines, the bar and the outlines. Beyond that it touches the game
 
 - **⇅ by crit** (**⇅ by stat** on armour) scrolls the game's item list through to read it, hidden while it does, puts it back where it was, and reads it again if it changes while the list is open;
 - a click on a piece in its list scrolls the game's list to that piece and clicks its tile, and clicks again if that click unselected a piece already selected;
-- **use** writes a suggested price into the price field of the old sell form; the game's button is still yours to press.
+- **use** writes a suggested price into one piece's price field in the sell form; PUT ON SALE is still yours to press.
 
 It never presses Buy, Sell, Withdraw, Craft, Open, Dismantle, Hire, Train, Travel or any confirmation, never submits a form, never loads more offers or reloads the page by itself, and has no alerts or sounds. After an update it shows a **Reload page** link; the reload is yours.
 
@@ -102,8 +103,7 @@ Estimates, not promises; quotes are snapshots, not reserved liquidity.
 
 ## Not working on the live game yet
 
-- The sell-price suggestion reads the old sell form; the live v0.27 "Sell items" form is not adapted.
-- 3.8.0 reads the live market cards and the Recruit window from their real markup, and the Train window from the game's code. It has not yet run end to end on the live page: the [release checklist](docs/RELEASE-CHECKLIST.md) covers what is left.
+- 3.9.0's Sell items hints and wooden case panel are built from those windows' live structure (read on 2026-10-27); the Train window from the game's code. The [release checklist](docs/RELEASE-CHECKLIST.md) covers what is left to see on the live page.
 
 ## Privacy and permissions
 

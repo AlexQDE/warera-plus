@@ -2,6 +2,21 @@
 
 What changed in each release of WarEra Plus, newest first. Every number here was measured as it says; a synthetic page or market says so.
 
+## 3.9.0
+
+What a walk through every surface on the live page found on 2026-10-27, and wooden cases priced like the battle cases.
+
+- **A price for each piece in Sell items.** v0.27's Sell items window starts every piece at "the price of the offer with the closest stats", and for a weapon its similar offers are matched on the second stat: that day a high-attack legendary tank started, and sold, at 166 where tanks of its stats sell for about 200. The hint read only the old form, so this window had none. Each piece now gets its own line under its own price: what pieces of both its stats sell for, the asks it competes with (the window's similar offers and the market's), a **use** button that writes that piece's price only, and a red line when the game's start sits more than 5% under what these stats sell for. PUT ON SALE stays the player's. The market's asks are its cards' tax-included prices, the window's are before tax: the same for a player in a 0% country.
+- **SNIPE green, FLIP purple.** A tagged card is framed in its colour all round, 3 px with a glow, its line tinted to match, so the two read apart at a glance (they were a thin green and a thin blue).
+- **Wooden cases, hold or flip.** Settings, Advanced, Wooden cases: Hold (the default: the opening against the sealed bid) or Flip (buy at the ask, open, sell the drops: FLIP when the opening value beats the best ask by the SNIPE minimum ROI, never for a buy that loses). The strip shows the ask beside the sealed bid, and in flip mode the gain a case and how many cases the asks hold at that ROI. The ask is the order book's as listed; a buyer in a taxed country pays that tax on top.
+- **The wooden case window** gets a panel like the battle cases': Open, Sell and Buy, today's and all-time openings (drops at the day's prices, all-time also at today's bids beside the model's value), the last drop, and how many of the game's "Total cases opened" the history holds.
+- **A mini ledger of the drops.** The Ledger's Wooden chip opens a table per resource for the window: openings, quantity, value at the day's prices and at today's bids, the cases' cost and the net. The player's sales of those resources are shown as context, never as profit from the cases: resources from cases mix with every other source.
+- **The picker's bar under its title again.** Since 2026-10-27 Sell an item's picker and Quick dismantle put role="dialog" on the card itself, whose first child is the close button's absolutely placed box; the bar fell into that box and floated over "0/5", CLEAR and the game's tabs.
+- **The cases strip** prints each label over its value ("Sealed bid" over "7.500 g"), no longer run into it.
+- **Filtered markets.** `?item=` no longer claims a card whose stats fit no tier of the item; Details says the stats fit no tier. Details also names a frame whose colours say another tier than the stats.
+
+The Sell items hints and the wooden panel are built from those windows' structure as read live on 2026-10-27 (`fixtures/v027-live-sell.html`, `fixtures/v027-wooden-window-synthetic.html`); the colours, the bar and the strip were set against the live page's markup.
+
 ## 3.8.1
 
 The market's line on the live v0.27 cards, after 3.8.0's first look at the live page (2026-10-27, client build `D256KTEyoPbDLXMnwL_LR`).

@@ -2,6 +2,17 @@
 
 Go through the newest release's section and the manual gate on the live game, with your own account, before publishing. Then [CHROME-WEB-STORE.md](CHROME-WEB-STORE.md).
 
+## 3.9.0 on the live page (v0.27)
+
+Reload the extension itself first (its card must read 3.9.0), then the game. Nothing here needs a listing, an opening or a purchase: pick pieces, read, close.
+
+- **The picker's bar.** Market → Sell an item → a "+" slot: the bar sits under "Items", in the flow, above "0/5" and CLEAR, never over them; the card's CLOSE stays in reach. Inventory → Dismantle: the same under "Quick dismantle", the game's tabs uncovered.
+- **The cases strip.** Each cell's label sits over its value ("Sealed bid" over "7.500 g"); the wooden row shows the Ask too.
+- **Sell items.** Pick a weapon and an armour piece: each gets its own line under its own price, from sales of both its stats. A piece whose game start comes from an offer with other stats (a high-attack weapon among same-crit offers) gets the red line. **use** writes only into its own piece's price. Close without PUT ON SALE.
+- **Colours.** A SNIPE card is framed green all round and a FLIP card purple, each with its line tinted; they read apart at a glance on Cheapest and after Load more.
+- **Wooden cases.** Settings, Advanced, Wooden cases: Flip, then the strip's wooden row reads FLIP or PASS with "+X g a case · N cases under it"; back to Hold, the old tag. Open a wooden case's window (if you hold one) without pressing OPEN: the panel shows Open / Sell / Buy, Today, All, Last and, when they differ, how many of the game's "Total cases opened" the history holds.
+- **The Ledger's Wooden chip** opens the drops by resource for the window; a second click closes it.
+
 ## 3.8.1 on the live page (v0.27)
 
 Reload the extension itself first (its card on the extensions page must read 3.8.1), then the game. A reload of the game page alone runs the new code with the stylesheet the extension was loaded with: seen on 2026-10-27 as 3.8.1's "pay … tax incl." in a 52 px line that still ran past its card.
@@ -32,7 +43,7 @@ Reload the extension itself first (its card on the extensions page must read 3.8
 - **The case window.** Open the inventory windows for a battle case, wooden case and toolbox without pressing Open: only the battle case gets a panel.
 - **Grid.** Open "+" → Select an item, pick an item, close it: cards keep their rarity.
 
-The 3.6.0–3.1.0 sections describe their original versions; current acceptance is the 3.8.1 and 3.8.0 sections plus the Manual gate.
+The 3.6.0–3.1.0 sections describe their original versions; current acceptance is the 3.9.0, 3.8.1 and 3.8.0 sections plus the Manual gate; where they differ, the newer section holds.
 
 ## 3.6.0 on the live page
 
@@ -96,7 +107,7 @@ These checks require a real Chromium browser and the user's own WarEra account; 
 - **Market tab:** confirm the six scrap floors match the game's resource market walked through the bids; select an item in the grid and confirm the fills line (count, median, low, high, last) against the game's transaction list; with the network off, refresh and confirm `last read failed` stays until a read succeeds.
 - **Craft tab:** confirm the scrap and steel asks match the resource market; for one tier compare the random cost with the game's craft dialog at those prices (scraps × ask + steel × ask; the dialog shows the random steel, a chosen slot doubles it); confirm each slot's average in the opened tier matches the "Current value" the game prints on that item; with the averages still loading, confirm `k/6` and no EV, never a guess.
 - **History and Ledger:** reload the extension and the game. While the history fills, keep the tab visible: the Ledger head shows its progress on five-second polls until it reaches the profile's start; note read errors or cooldowns. Reload again: the stored history comes back without a new fill. Compare one day's Got/Cashed and piece results with your sales and scraps that day. Change the API key for the same player: the history stays.
-- **Case window:** open a battle case in inventory: above the Open buttons, check `Open ~X · Sell Y`, OPEN/SELL/EVEN, Today, All and Last. Wooden cases and toolboxes get no panel. After a deliberate battle-case opening, history reads are requested at 2.5 and 7 s; wait for Today to count it and Last to show the drop/value, checking for read errors rather than a fixed completion deadline.
+- **Case window:** open a battle case in inventory: above the Open buttons, check `Open ~X · Sell Y`, OPEN/SELL/EVEN, Today, All and Last. Toolboxes get no panel; the wooden case's is in the 3.9.0 section. After a deliberate battle-case opening, history reads are requested at 2.5 and 7 s; wait for Today to count it and Last to show the drop/value, checking for read errors rather than a fixed completion deadline.
 - **Craft window:** open Craft items, pick a tier: check random cost at the asks, worth at game averages and your craft history above the buttons. Pick a slot: check chosen cost/value, including doubled steel. After a deliberate craft, wait through the 2.5/7 s history polls for its piece, stats, value and cost; check errors if it has not arrived.
 - **Tax notice:** the market tax is the buyer's; confirm no extra tax adjustment is applied to bar quotes or the cards' tax-inclusive offer prices.
 - Change the selected item while fills are loading. Verify the displayed fills match the selected item and unknown picker tiles remain visible. Show all and close the picker; no game width or visibility should remain changed.

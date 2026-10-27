@@ -492,14 +492,24 @@
   opacity: 0.6;
 }
 
-/* Offer rows */
+/* Offer rows and cards: SNIPE green, FLIP purple, the whole card framed and glowing so it reads at a glance */
 [data-scrap-sniper="hit"] {
-  outline: 2px solid #5fbf95;
-  outline-offset: -2px;
+  outline: 3px solid #22c55e;
+  outline-offset: -3px;
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.55);
 }
 [data-scrap-sniper="flip"] {
-  outline: 2px solid #6ea8ff;
-  outline-offset: -2px;
+  outline: 3px solid #a855f7;
+  outline-offset: -3px;
+  box-shadow: 0 0 14px rgba(168, 85, 247, 0.55);
+}
+[data-scrap-sniper="hit"] > .ss-verdict[data-lens] {
+  background:
+    linear-gradient(rgba(34, 197, 94, 0.18), rgba(34, 197, 94, 0.18)), #141c29;
+}
+[data-scrap-sniper="flip"] > .ss-verdict[data-lens] {
+  background:
+    linear-gradient(rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.2)), #141c29;
 }
 [data-scrap-sniper="near"] {
   outline: 1px dashed #dab878;
@@ -623,12 +633,14 @@
   white-space: nowrap;
 }
 [data-lens] .lens-tag[data-kind="hit"] {
-  color: var(--lens-good);
-  border-color: #3f8f6a;
+  color: #86efac;
+  border-color: #22c55e;
+  background: rgba(34, 197, 94, 0.22);
 }
 [data-lens] .lens-tag[data-kind="flip"] {
-  color: var(--lens-blue);
-  border-color: #4f78b3;
+  color: #d8b4fe;
+  border-color: #a855f7;
+  background: rgba(168, 85, 247, 0.24);
 }
 [data-lens] .lens-tag[data-kind="near"] {
   color: var(--lens-warn);
