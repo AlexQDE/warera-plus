@@ -2,6 +2,15 @@
 
 Go through the newest release's section and the manual gate on the live game, with your own account, before publishing. Then [CHROME-WEB-STORE.md](CHROME-WEB-STORE.md).
 
+## 3.8.1 on the live page (v0.27)
+
+Reload the extension itself first (its card on the extensions page must read 3.8.1), then the game. A reload of the game page alone runs the new code with the stylesheet the extension was loaded with: seen on 2026-10-27 as 3.8.1's "pay … tax incl." in a 52 px line that still ran past its card.
+
+- **The line in its card.** `/market/equipments`: every card's line is inside the card, at its bottom, level with the lines beside it; nothing of the next row (seller, price, tile) is under a line; the line's text is not cut mid-word except a long sales phrase at its end. Open Details on one card: the card grows, the next row moves down, nothing is covered; close it again.
+- **The price.** On a card, the line's "pay … tax incl." is the card's own price digit for digit (three decimals, e.g. 43.798), not the Buy chip's.
+- **Thousands.** Most expensive: a card at 1,000 gold or more reads "pay 1.234K tax incl." (as the card prints it) and gets a tag, not "price unreadable".
+- **Sort and filters.** Cheapest → New → Most expensive, an item picked in "+", a stat typed into the filter, Load more: every card has its line within a moment of showing, none without one.
+
 ## 3.8.0 on the live page (v0.27)
 
 3.8.0 was checked on the test suite (37 files, 507 tests), with the live market and the Recruit window as the live page drew them on 2026-10-26 (`fixtures/v027-live-*.html`, classes stripped, computed gradients inlined). It has not run on the live page. The fixtures carry no layout (no flex direction, no widths), so the placement below is what only the live page shows. Reload the extension itself first, then the game.

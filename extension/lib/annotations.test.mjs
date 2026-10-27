@@ -348,7 +348,10 @@ describe("row annotation", () => {
     expect(region.textContent).toContain(
       "8 sales of common knife in 7 d, any stats",
     );
-    expect(region.textContent).toContain("percentile of the matched sales");
+    // 2 of the 8 sales under 1 g and one at it: (2 + 0.5) / 8
+    expect(region.textContent).toContain(
+      "this price sits at the 31st percentile of the matched sales",
+    );
     expect(region.textContent).toContain("fresh");
     region.click(); // selecting or clicking the Details text is ours, not the row's
     expect(rowClicks).not.toHaveBeenCalled();

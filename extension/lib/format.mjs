@@ -35,6 +35,16 @@ export const gold = (v) => {
   const a = Math.abs(Number(v));
   return fmt(Number(v), a >= 100 ? 0 : a >= 10 ? 1 : 2);
 };
+/** A rank as words read it, rounded: 1st, 2nd, 3rd, 4th, 11th, 21st, 112th. @param {number} n */
+export const ordinal = (n) => {
+  const r = Math.round(n);
+  const last2 = Math.abs(r) % 100;
+  /** @type {Record<number, string>} */
+  const suffixes = { 1: "st", 2: "nd", 3: "rd" };
+  const suffix =
+    last2 >= 11 && last2 <= 13 ? "th" : (suffixes[last2 % 10] ?? "th");
+  return `${r}${suffix}`;
+};
 /** A gold result with its sign. @param {number | null | undefined} v */
 export const signedGold = (v) =>
   v == null || !Number.isFinite(v)

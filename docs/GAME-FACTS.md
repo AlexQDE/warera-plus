@@ -232,7 +232,10 @@ tiers are intentional, so a stat value maps back to its rarity unambiguously.
   was 383.8 on 2026-09-03).
 - Reloading an unpacked extension does not replace the content script in
   open tabs; the game page must be reloaded too, or the old script runs with
-  a dead runtime.
+  a dead runtime. The other way round, reloading the page alone runs the new
+  `lib/` code (imported from disk) with the old `content.css` (read when the
+  extension was loaded): seen in Brave on 2026-10-27, 3.8.1's lines in
+  3.8.0's 52 px box until the extension itself was reloaded.
 
 ## 8. The API
 
@@ -437,6 +440,29 @@ newest | mostExpensive, limit: 12, cursor?}` (the sort is kept in the
   included: the seller's price plus the N% market tax of your country …".
   Frames seen: common `rgb(35, 55, 59)`, epic `rgb(59, 35, 95)`. Sanitized
   markup: `fixtures/v027-live-market.html`, `fixtures/v027-live-market-sniper.html`.
+- **The card's layout and numbers** (read 2026-10-27 off build
+  `D256KTEyoPbDLXMnwL_LR`'s bundle, keyless, from the landing page; module
+  98170 is as on 2026-10-26). The card (module 25620, size sm) is a block,
+  `position: relative`, padding 8 px, `h: 100%` of its grid cell (the grid's
+  gap 8 px); its one child is a flex row, also `h: 100%` (nowrap, items at the
+  top, gap 8 px): the item tile, then a column (gap 4 px: the seller line, the
+  price line, the Buy box with 4 px under it). Anything placed after that row
+  inside the card lands below the card, over the next row of cards.
+  Numbers go through module 37686's `ZV(value, precision)` (the card's price
+  at precision 3; the Buy chip was seen with two decimals at most, 43.798 as
+  43.8 and 1.49 as 1.49, not read in the code): below 1,000 `toFixed`, trailing zeros
+  cut ("1.49", "43.798"); from 1,000 the value in K, from a million in M,
+  from a billion in B, each to three decimals, trailing zeros cut again
+  ("1.234K", "1.235M", whole thousands "7K"; 1e50 is "1e+41B"). Module 18156 splits the text at the point: the whole part, then
+  a span with "." and the rest as text nodes of their own ("1", ".", "234K").
+  A price of 1,000 or more is known only to the gold, to 1,000 gold from a
+  million.
+- **The list redraws.** The grid sits in a `Loadable` (module 7378): while a
+  query loads (a new sort, item or stat filter, not Load more) it unmounts the
+  grid and draws a skeleton, then a new grid. Load more appends 12 cards to
+  the same grid. The section around it holds the tax notice, Sell an item, the
+  item selector ("+", or the picked item's tile with its average) with the sort
+  tabs and, for a picked item, its minimum-stat inputs, then the list.
 - **Selling** is the "Sell an item" button: a "Sell items" window, up to 5
   pieces at 100% durability, each with its own price (`price-<itemId>`,
   0.7-1.6x the game's estimate, `itemOffer.getPriceSuggestions {itemIds}` →

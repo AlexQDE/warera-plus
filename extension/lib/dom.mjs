@@ -203,14 +203,18 @@ export function itemLabel(code) {
 export const slotName = (code) =>
   itemLabel(code).split(" ").slice(1).join(" ") || String(code ?? "");
 
-/** "392.991", "1,234.5", "1.858K" -> number; anything else -> null. */
+/**
+ * "392.991", "1,234.5", "1.858K", "12.5M", "2.5B" -> number; anything else
+ * (the "1e+41B" of an offer priced 1e50, not for sale) -> null. Rounded to
+ * the thousandth the game prints (1.001K is 1001, not 1000.9999999999999).
+ */
 export function parsePrice(text) {
-  const m = /^\s*([\d,]+(?:\.\d+)?)\s*([KkMm])?\s*$/.exec(String(text ?? ""));
+  const m = /^\s*([\d,]+(?:\.\d+)?)\s*([KkMmBb])?\s*$/.exec(String(text ?? ""));
   if (!m) return null;
   const n = Number(m[1].replace(/,/g, ""));
   if (!Number.isFinite(n)) return null;
-  const mult = m[2] ? { k: 1e3, m: 1e6 }[m[2].toLowerCase()] : 1;
-  return n * mult;
+  const mult = m[2] ? { k: 1e3, m: 1e6, b: 1e9 }[m[2].toLowerCase()] : 1;
+  return Math.round(n * mult * 1000) / 1000;
 }
 
 /** Item images carry a skin name; avatars and flags are the other images in a row. */
@@ -574,7 +578,8 @@ const AGE_RE = /^(\d+\s*[dhm]\s*)+$/i;
  * nodes or the text of the buttons inside it.
  * What the page prints in pieces is joined: a "%" to the number before it,
  * a decimal's "." and digits to its whole part ("277", ".", "927" ->
- * "277.927"), an age's units ("3h", "47m" -> "3h47m").
+ * "277.927"; from 1,000 up the game counts in K, M and B: "1", ".", "234K"
+ * -> "1.234K"), an age's units ("3h", "47m" -> "3h47m").
  * @param {Element} el
  * @returns {string[]}
  */
@@ -592,9 +597,9 @@ export function cardTokens(el) {
     if (!v) continue;
     const last = out.at(-1) ?? "";
     if (v === "%" && out.length) out[out.length - 1] += "%";
-    else if (/^\.\d*$/.test(v) && /^\d[\d,]*$/.test(last))
+    else if (/^\.\d*[KMB]?$/.test(v) && /^\d[\d,]*$/.test(last))
       out[out.length - 1] += v;
-    else if (/^\d+$/.test(v) && /^\d[\d,]*\.$/.test(last))
+    else if (/^\d+[KMB]?$/.test(v) && /^\d[\d,]*\.$/.test(last))
       out[out.length - 1] += v;
     else if (AGE_RE.test(v) && AGE_RE.test(last)) out[out.length - 1] += v;
     else out.push(v);

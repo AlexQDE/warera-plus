@@ -8,7 +8,15 @@ import * as dom from "./dom.mjs";
 import { SCRAP_LADDER, scrapYield } from "./ladder.mjs";
 import { DEFAULTS } from "./settings.mjs";
 import { quote, freshness, TTL, positive } from "./quality.mjs";
-import { fmt, signed, gold, signedGold, escapeHtml, ago } from "./format.mjs";
+import {
+  fmt,
+  signed,
+  gold,
+  signedGold,
+  escapeHtml,
+  ago,
+  ordinal,
+} from "./format.mjs";
 import { setHtml, helpMark, SOURCE_TAGS } from "./ui.mjs";
 import {
   tileTokens,
@@ -646,13 +654,19 @@ export function createEquipment({
         `Dismantle: <b>${SCRAP_LADDER[r.rarity]}</b> scraps (${escapeHtml(r.rarity)}) at the observed bids = <b>${fmt(r.q.value)} g</b>${r.q.complete ? "" : ` · only ${r.q.filled} covered by observed bids`}`,
       );
     else lines.push("Rarity unreadable: the frame border is off-palette");
+    // a live card prints what the buyer pays, tax included; its Buy chip rounds that
+    const offer =
+      r.kind === "card"
+        ? `You pay <b>${escapeHtml(r.priceText)} g</b>, tax incl. (the card's price; the Buy chip rounds it)`
+        : `Offer <b>${fmt(r.price)} g</b>`;
     if (r.v.margin != null)
       lines.push(
-        `Offer <b>${fmt(r.price)} g</b> · scrap covers ${r.v.coverPct.toFixed(0)}% of it · ${r.v.ratio.toFixed(2)}× its scrap floor`,
+        `${offer} · scrap covers ${r.v.coverPct.toFixed(0)}% of it · ${r.v.ratio.toFixed(2)}× its scrap floor`,
       );
     else if (r.price == null) lines.push("Price unreadable on this row");
+    else if (r.kind === "card") lines.push(offer);
     lines.push(
-      `This piece: ${escapeHtml(statWords(r))}${r.stats.durability != null ? ` · ${r.stats.durability}% durability` : ""}${r.statRank?.status === "ok" ? ` · ${r.statRank.percentile.toFixed(0)}th percentile among ${r.statRank.n} listed` : ""}`,
+      `This piece: ${escapeHtml(statWords(r))}${r.stats.durability != null ? ` · ${r.stats.durability}% durability` : ""}${r.statRank?.status === "ok" ? ` · ${ordinal(r.statRank.percentile)} percentile among ${r.statRank.n} listed` : ""}`,
     );
     if (value) {
       const gap = r.price != null ? value.amount - r.price : null;
@@ -668,7 +682,7 @@ export function createEquipment({
         });
         const liq = liquidity(fills, { now: now(), hours: WINDOW_HOURS });
         lines.push(
-          `${fills.length} sales of ${escapeHtml(dom.itemLabel(r.code))} in 7 d, any stats${r.sales.complete ? "" : " (sample capped)"} · ${liq.perDay.toFixed(1)}/day · last ${escapeHtml(ago(liq.lastAt, now()))}${rank?.status === "ok" ? ` · this price sits at the ${rank.percentile.toFixed(0)}th percentile of the matched sales` : ""}${!value.matched ? " · no tag: too few sales with these stats" : ""}`,
+          `${fills.length} sales of ${escapeHtml(dom.itemLabel(r.code))} in 7 d, any stats${r.sales.complete ? "" : " (sample capped)"} · ${liq.perDay.toFixed(1)}/day · last ${escapeHtml(ago(liq.lastAt, now()))}${rank?.status === "ok" ? ` · this price sits at the ${ordinal(rank.percentile)} percentile of the matched sales` : ""}${!value.matched ? " · no tag: too few sales with these stats" : ""}`,
         );
       } else if (value.source === "avg")
         lines.push(
@@ -680,7 +694,7 @@ export function createEquipment({
         `Listed now with these stats: ${peers.n} other${peers.n === 1 ? "" : "s"} from <b>${fmt(peers.cheapest)} g</b>${r.price != null && peers.cheapest > r.price ? ` · this one is ${signed(((peers.cheapest - r.price) / r.price) * 100, 1)}% under the cheapest of them` : ""}`,
       );
     lines.push(
-      `Quote ${book?.at ? escapeHtml(ago(book.at, now())) : "missing"} · ${fresh ? "fresh" : "not fresh: no tag"} · displayed price, the market tax is the buyer's · read-only`,
+      `Quote ${book?.at ? escapeHtml(ago(book.at, now())) : "missing"} · ${fresh ? "fresh" : "not fresh: no tag"} · ${r.kind === "card" ? "every gain is against the price you pay, tax incl." : "displayed price, the market tax is the buyer's"} · read-only`,
     );
     return `<div class="lens-details" role="region" aria-label="Offer details">${lines.map((l) => `<span>${l}</span>`).join("")}</div>`;
   }
@@ -727,10 +741,18 @@ export function createEquipment({
         : `scrap · ${escapeHtml(why)}`;
     const mark =
       value && !(value.source === "fills" && value.basis === "same") ? "≈" : "";
+    // A live card's strip is one short line under the gain: the price as the card prints it (the one every gain is
+    // against), then each route's figure; how many sales the value rests on is in Details.
+    const card = r.kind === "card";
     const sells = value
-      ? `sells ${mark}${gold(value.amount)} · ${escapeHtml(value.source === "avg" ? "game avg" : value.label)}`
+      ? `sells ${mark}${gold(value.amount)}${card ? "" : ` · ${escapeHtml(value.source === "avg" ? "game avg" : value.label)}`}`
       : `sells · ${escapeHtml(salesState)}`;
-    return `<span class="lens-tag" data-kind="${kind}">${TAGS[kind]}</span><span class="lens-kv">${big}<small>${scrap} · ${sells}</small></span><button type="button" data-action="details" aria-expanded="${open}" aria-label="${open ? "Hide" : "Show"} details for this offer">${open ? "▾" : "▸"}</button>${open ? detailsHtml(r, ctx) : ""}`;
+    const small = card
+      ? r.price != null
+        ? `pay ${escapeHtml(r.priceText)} tax incl. · ${scrap} · ${sells}`
+        : `${escapeHtml(why)} · ${sells}`
+      : `${scrap} · ${sells}`;
+    return `<span class="lens-tag" data-kind="${kind}">${TAGS[kind]}</span><span class="lens-kv">${big}<small>${small}</small></span><button type="button" data-action="details" aria-expanded="${open}" aria-label="${open ? "Hide" : "Show"} details for this offer">${open ? "▾" : "▸"}</button>${open ? detailsHtml(r, ctx) : ""}`;
   }
   /** Scan the rows and annotate them; returns the counts for the bar's pulse. */
   function render(state) {

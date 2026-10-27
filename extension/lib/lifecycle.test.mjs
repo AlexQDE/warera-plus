@@ -746,6 +746,63 @@ describe("SPA lifecycle and DOM work", () => {
     await settle(40);
     expect(app.metrics.scans).toBeGreaterThan(after);
   });
+  it("annotates the v0.27 list the game draws again after a sort tab or a stat filter, its next pages and its new order, with no click to look for them", async () => {
+    window.history.replaceState({}, "", "/market/equipments");
+    const page = (name) => {
+      const t = document.createElement("template");
+      t.innerHTML = readFileSync(`fixtures/${name}.html`, "utf8");
+      return t.content;
+    };
+    document.body.replaceChildren(
+      document.importNode(page("v027-live-market").firstElementChild, true),
+    );
+    app = await startLens(marketRuntime({}));
+    await settle();
+    const grid = () => document.querySelector('[style="display: grid"]');
+    const strips = () => [
+      ...document.querySelectorAll(".ss-verdict[data-card]"),
+    ];
+    const own = () =>
+      strips().every((s) => s.parentElement.parentElement === grid());
+    expect(strips()).toHaveLength(3);
+    // past the start's discovery window, and no click since: a stat typed into the filter
+    await settle(16_000);
+    // the game swaps its list for a skeleton while the new query loads, then draws a new list
+    const skeleton = document.createElement("div");
+    grid().parentElement.replaceWith(skeleton);
+    await settle(300); // the new query's read
+    const sniper = page("v027-live-market-sniper");
+    skeleton.replaceWith(
+      document.importNode(
+        sniper.querySelector('[style="display: grid"]').parentElement,
+        true,
+      ),
+    );
+    await settle(40);
+    expect(strips()).toHaveLength(3);
+    expect(own()).toBe(true);
+    expect(strips()[0].textContent).toContain("pay 43.798 tax incl.");
+    // Load more: the next page's read, then its cards are added to the same grid
+    await settle(300);
+    for (const card of [
+      ...sniper.querySelector('[style="display: grid"]').children,
+    ])
+      grid().appendChild(document.importNode(card, true));
+    await settle(40);
+    expect(strips()).toHaveLength(6);
+    expect(own()).toBe(true);
+    // another sort, its query read: the game moves the cards it keeps, each with its own strip
+    await settle(300);
+    const last = grid().lastElementChild;
+    const strip = last.querySelector(":scope > .ss-verdict");
+    grid().prepend(last);
+    await settle(40);
+    expect(grid().firstElementChild.querySelector(":scope > .ss-verdict")).toBe(
+      strip,
+    );
+    expect(strips()).toHaveLength(6);
+    expect(own()).toBe(true);
+  });
   it("hands a press of the game's CRAFT button to the worker with the window's pick, and asks the worker for the Ledger's other pages", async () => {
     window.history.replaceState({}, "", "/market/equipments");
     marketFixture();

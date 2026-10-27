@@ -94,6 +94,93 @@ it("joins split prices and ages without reading buttons or its own annotations",
   expect(read.lines.at(-1)).toBe("3h47m");
 });
 
+/** The tax-included price beside a card's "tax incl.", as the game writes it: the whole part, then a span with the point and the rest as text nodes of their own. */
+const setPrice = (row, whole, ...rest) => {
+  const label = [...row.querySelectorAll("span")].find(
+    (e) => e.textContent === "tax incl.",
+  );
+  const amount = label.previousElementSibling.querySelector("span span");
+  const inner = document.createElement("span");
+  inner.append(whole);
+  if (rest.length) {
+    const decimals = document.createElement("span");
+    decimals.append(...rest);
+    inner.append(decimals);
+  }
+  amount.replaceChildren(inner);
+};
+
+it("reads a card priced in thousands or millions as the game prints it, and leaves a not-for-sale marker unread", () => {
+  fixture(true);
+  const [a, b, c] = dom.cardRows().map((r) => r.row);
+  // the game's number format: three decimals of K from 1,000 up, of M from a million, of B from a billion
+  setPrice(a, "1", ".", "001K");
+  setPrice(b, "12", ".", "5M");
+  setPrice(c, "1e+41B"); // 1e50, the price an offer not for sale carries
+  expect(dom.cardRows().map((r) => [r.priceText, r.price])).toEqual([
+    ["1.001K", 1001],
+    ["12.5M", 12_500_000],
+    ["1e+41B", null],
+  ]);
+  setPrice(a, "2", ".", "5B");
+  setPrice(b, "7K");
+  expect(dom.cardRows().map((r) => r.price)).toEqual([2.5e9, 7000, null]);
+});
+
+it("prints the price it measures against as the card prints it, named as what the buyer pays with tax", () => {
+  fixture(true);
+  const equipment = createEquipment({
+    settings: () => ({ ...DEFAULTS, picker: false }),
+    requestSales: vi.fn(),
+  });
+  const state = {
+    book: {
+      at: new Date().toISOString(),
+      bids: [{ price: 0.2, quantity: 2000 }],
+    },
+  };
+  setPrice(dom.cardRows()[2].row, "1", ".", "234K");
+  equipment.render(state);
+  const strips = [...document.querySelectorAll(".ss-verdict[data-card]")];
+  expect(
+    strips.map((s) => s.querySelector("small").textContent.split(" · ")[0]),
+  ).toEqual([
+    "pay 43.798 tax incl.",
+    "pay 43.799 tax incl.",
+    "pay 1.234K tax incl.",
+  ]);
+  // never the Buy chip's rounded 43.8
+  expect(strips[0].textContent).not.toMatch(/43\.8(?!\d)/);
+  strips[0].querySelector('[data-action="details"]').click();
+  equipment.render(state);
+  expect(strips[0].querySelector(".lens-details").textContent).toContain(
+    "You pay 43.798 g, tax incl.",
+  );
+  equipment.clear();
+});
+
+it("keeps its strip inside the card: while it is there the card's own content takes its own height, not the whole card's", () => {
+  // The card's content row is the card's full height (h: 100%, client module 98170), so a strip after it went
+  // below the card, onto the next row of cards. jsdom lays nothing out: the rules are read off the stylesheet.
+  const style = document.createElement("style");
+  style.textContent = readFileSync("extension/content.css", "utf8");
+  document.head.append(style);
+  const rules = [...style.sheet.cssRules].filter((r) => r.selectorText);
+  const release = rules.find((r) =>
+    /:has\(>\s*\.ss-verdict\[data-card\]\)\s*>\s*div:not\(\[data-lens\]\)/.test(
+      r.selectorText,
+    ),
+  );
+  expect(release?.style.getPropertyValue("height")).toBe("auto");
+  const strip = rules.find(
+    (r) => r.selectorText === ".ss-verdict[data-lens][data-card]",
+  );
+  expect(
+    parseFloat(strip.style.getPropertyValue("height")),
+  ).toBeLessThanOrEqual(40);
+  style.remove();
+});
+
 it("reads the new tax notice and its country's rate", () => {
   expect(dom.taxNotice()?.textContent).toContain("Prices include your tax");
   expect(dom.taxRateFromText(dom.taxNotice()?.textContent)).toBe(0);
