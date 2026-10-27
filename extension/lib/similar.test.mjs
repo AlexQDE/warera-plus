@@ -7,7 +7,11 @@ import {
   listedPeers,
   statSlopes,
   windowFills,
+  marketTrend,
   MIN_SLOPE_PAIRS,
+  MIN_TREND_SALES,
+  MIN_TREND_DAYS,
+  MAX_TREND_DROP,
 } from "./similar.mjs";
 import { STAT_RANGES } from "./stats.mjs";
 
@@ -316,5 +320,104 @@ describe("what a stat is worth, and sales brought to the piece's stats", () => {
     expect(windowFills(sales, NOW + 30_000)).toBe(a);
     expect(windowFills(sales, NOW + 61_000)).not.toBe(a);
     expect(windowFills(null, NOW)).toEqual([]);
+  });
+});
+
+describe("the market's fall, and sales brought to today", () => {
+  // A week of jets, three rolls a day (2, 9 and 16 hours into each day back), stats paying nothing; a sale
+  // d days old sold at level(d). The piece's roll sells once a day, so its value reaches back 72 hours.
+  const ROLLS = [
+    { attack: 260, criticalChance: 45 },
+    { attack: 230, criticalChance: 42 },
+    { attack: 290, criticalChance: 48 },
+  ];
+  const piece = ROLLS[0];
+  const week = (level, days = 7) =>
+    Array.from({ length: days * 3 }, (_, i) => {
+      const hours = Math.floor(i / 3) * 24 + 2 + (i % 3) * 7;
+      return {
+        price: level(hours / 24),
+        at: iso(hours),
+        code: "jet",
+        skills: ROLLS[i % 3],
+      };
+    });
+  const falling = (d) => 400 / 0.96 ** d; // 4% a day, 400 today
+  it("reads the week's fall off the sales and brings each sale alike down to today's level", () => {
+    const fills = week(falling);
+    const trend = marketTrend("jet", fills);
+    expect(trend.perDay).toBeCloseTo(-0.04, 9);
+    expect(trend).toMatchObject({ n: 21, days: 7 });
+    expect(marketTrend("jet", fills)).toBe(trend); // worked out once per list
+    const v = sv("jet", piece, fills);
+    expect(v).toMatchObject({ level: "same", n: 3, hours: 72 });
+    expect(v.value).toBeCloseTo(400, 6);
+    expect(v.trend).toBeCloseTo(-0.04, 9);
+    // as it was: the median of the three is the one a day and 2 hours old, 4.5% above today
+    const plain = sv("jet", piece, fills, { trend: false });
+    expect(plain.value).toBeCloseTo(falling(26 / 24), 6);
+    expect(plain.trend).toBeNull();
+  });
+  it("lifts no sale when the market rose, and takes a fall steeper than 10% a day as 10%", () => {
+    const rising = week((d) => 400 * 0.96 ** d);
+    expect(marketTrend("jet", rising).perDay).toBe(0);
+    const v = sv("jet", piece, rising);
+    expect(v.trend).toBeNull();
+    expect(v.value).toBe(sv("jet", piece, rising, { trend: false }).value);
+    const crash = week((d) => 400 / 0.8 ** d); // 20% a day
+    expect(marketTrend("jet", crash).perDay).toBeCloseTo(-MAX_TREND_DROP, 9);
+    // brought down 10% a day only: still above today's 400
+    expect(sv("jet", piece, crash).value).toBeCloseTo(
+      400 * (0.9 / 0.8) ** (26 / 24),
+      6,
+    );
+  });
+  it("corrects nothing below eight sales, or on fewer than three days", () => {
+    expect(MIN_TREND_SALES).toBe(8);
+    expect(MIN_TREND_DAYS).toBe(3);
+    const seven = week(falling).filter((f) => f.skills === piece); // one a day
+    expect(marketTrend("jet", seven)).toMatchObject({ perDay: 0, n: 7 });
+    const twoDays = week(falling, 2); // six sales on two days
+    expect(marketTrend("jet", twoDays)).toMatchObject({ perDay: 0, days: 2 });
+    const burst = [...twoDays, ...week(falling, 2)]; // twelve sales, still two days
+    expect(marketTrend("jet", burst)).toMatchObject({ perDay: 0, n: 12 });
+  });
+  it("takes the stats off first: a week that sold worse rolls later reads as no fall", () => {
+    // A flat market where attack pays (its whole range e^0.6): the oldest sales are the best rolls, so the
+    // prices as they are fall through the week; brought to one roll, they do not move.
+    const fills = Array.from({ length: 200 }, (_, i) => {
+      const hours = i * 0.84;
+      const attack = Math.min(
+        300,
+        Math.max(
+          221,
+          221 + Math.round((79 * hours) / 168) + ((i * 7) % 11) - 5,
+        ),
+      );
+      return {
+        price: 300 * Math.exp((0.6 * (attack - 221)) / 79),
+        at: iso(hours),
+        code: "jet",
+        skills: { attack, criticalChance: 45 },
+      };
+    });
+    const median = (xs) => [...xs].sort((a, b) => a - b)[xs.length >> 1];
+    const today = median(fills.slice(0, 28).map((f) => f.price));
+    const weekAgo = median(fills.slice(-28).map((f) => f.price));
+    expect(today).toBeLessThan(weekAgo * 0.7);
+    expect(statSlopes("jet", fills).attack).toBeCloseTo(0.6, 6);
+    expect(marketTrend("jet", fills).perDay).toBe(0);
+    const v = sv("jet", piece, fills);
+    expect(v.trend).toBeNull();
+    expect(v.value).toBe(sv("jet", piece, fills, { trend: false }).value);
+  });
+  it("never brings the item's own median down: only sales alike are", () => {
+    const any = sv("jet", { attack: 221, criticalChance: 50 }, week(falling));
+    expect(any).toMatchObject({ level: "item", trend: null });
+    expect(any.value).toBe(
+      sv("jet", { attack: 221, criticalChance: 50 }, week(falling), {
+        trend: false,
+      }).value,
+    );
   });
 });

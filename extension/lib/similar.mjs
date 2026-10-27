@@ -11,8 +11,11 @@
 // a tag. Each sale alike is first brought to the piece's own stats by what
 // a stat is worth on this item's market (statSlopes), so a piece at the top
 // of its range is not priced down by the lower rolls it is grouped with, nor
-// one at the bottom up. Pure; equipment.mjs, craftdesk.mjs and the worker
-// render the result.
+// one at the bottom up. When the item's market has been falling
+// (marketTrend), each sale alike is also brought down to today's level, so a
+// week of older, dearer sales does not price a piece above what it sells for
+// now; a rising market lifts nothing. Pure; equipment.mjs, craftdesk.mjs and
+// the worker render the result.
 import { STAT_RANGES } from "./stats.mjs";
 import { WEAPONS } from "./items.mjs";
 import { positive } from "./quality.mjs";
@@ -53,7 +56,8 @@ export const PERCENT = new Set([
 ]);
 
 /** @typedef {{ price: number, at: string, skills?: Record<string, number> | null, listedAt?: string | null }} Fill */
-/** @typedef {{ value: number | null, level: "same" | "similar" | "item" | null, n: number, matched: boolean, span: Record<string, [number, number]>, low: number | null, high: number | null, sellsHours: number | null, hours: number | null, label: string, detail: string, fills: Fill[], adjusted: boolean }} SimilarValue */
+/** @typedef {{ value: number | null, level: "same" | "similar" | "item" | null, n: number, matched: boolean, span: Record<string, [number, number]>, low: number | null, high: number | null, sellsHours: number | null, hours: number | null, label: string, detail: string, fills: Fill[], adjusted: boolean, trend: number | null }} SimilarValue */
+/** @typedef {{ perDay: number, log: number, n: number, days: number }} Trend */
 
 /** The newest sales a stat's worth is read from. */
 export const SLOPE_SALES = 200;
@@ -65,6 +69,18 @@ export const SLOPE_OTHER = 0.3;
 export const MIN_SLOPE_PAIRS = 40;
 /** At most this much log price over a stat's whole range: the top roll at most e^2 = 7.4 times the bottom one. */
 export const MAX_SLOPE = 2;
+/** The newest sales a market's trend is read from. */
+export const TREND_SALES = 200;
+/** A trend needs this many sales ... */
+export const MIN_TREND_SALES = 8;
+/** ... sold on this many different days (24-hour periods back from the newest sale). */
+export const MIN_TREND_DAYS = 3;
+/** Two sales closer in time than this tell no trend. */
+export const TREND_PAIR_HOURS = 12;
+/** The steepest fall a trend reports, a day: a few odd sales cannot make a crash. */
+export const MAX_TREND_DROP = 0.1;
+/** A fall under this a day is no trend (rounding, not a market). */
+export const MIN_TREND_FALL = 0.001;
 
 /** Where a stat sits in its range, 0 at the bottom and 1 at the top. @param {readonly [number, number]} range @param {number} v */
 const share = ([lo, hi], v) => (v - lo) / Math.max(1, hi - lo);
@@ -150,6 +166,73 @@ export function statSlopes(code, fills, tune = undefined) {
   const out = Object.fromEntries(keys.map((k, s) => [k, slopes[s]]));
   if (tune) return out;
   if (!byCode) slopeCache.set(fills, (byCode = new Map()));
+  byCode.set(code, out);
+  return out;
+}
+
+/** @type {WeakMap<object, Map<string, Trend>>} */
+const trendCache = new WeakMap();
+
+/**
+ * How an item's market moved over the sales read: the Theil-Sen slope, over
+ * pairs of sales sold TREND_PAIR_HOURS apart or more, of the log price a day,
+ * each price first taken to the bottom of every stat's range by what the stat
+ * is worth (statSlopes), so a week that sold better rolls later does not read
+ * as a rise, nor worse ones as a fall. Only a fall counts, from MIN_TREND_FALL
+ * a day and at most MAX_TREND_DROP a day: a rising market lifts no old sale (a
+ * false FLIP costs gold, a missed one only a chance), and a few odd sales
+ * cannot make a crash.
+ * No trend below MIN_TREND_SALES sales on MIN_TREND_DAYS days. Worked out once
+ * per list of fills. `perDay` is the fall a day as a share (−0.04), 0 without
+ * one; `log` the same in log price.
+ * @param {string} code @param {ReadonlyArray<Fill> | null | undefined} fills
+ * @returns {Trend}
+ */
+export function marketTrend(code, fills) {
+  const ranges = STAT_RANGES[code];
+  if (!ranges || !fills?.length) return { perDay: 0, log: 0, n: 0, days: 0 };
+  let byCode = trendCache.get(fills);
+  const hit = byCode?.get(code);
+  if (hit) return hit;
+  const slopes = statSlopes(code, fills);
+  const keys = Object.keys(ranges);
+  /** @type {Array<{ t: number, lp: number }>} */
+  const sales = [];
+  for (const f of fills) {
+    const t = Date.parse(f?.at);
+    if (positive(f?.price) == null || !Number.isFinite(t)) continue;
+    const z = keys.map((k) => Number(f.skills?.[k]));
+    if (z.some((v) => !Number.isFinite(v))) continue;
+    // the log price at the bottom of every range: what the stats add comes off
+    const worth = keys.reduce(
+      (d, k, i) => d + (slopes[k] ?? 0) * share(ranges[k], z[i]),
+      0,
+    );
+    sales.push({ t, lp: Math.log(f.price) - worth });
+  }
+  sales.sort((a, b) => b.t - a.t);
+  sales.length = Math.min(sales.length, TREND_SALES);
+  const days = new Set(
+    sales.map((x) => Math.floor((sales[0].t - x.t) / 86400e3)),
+  ).size;
+  let log = 0;
+  if (sales.length >= MIN_TREND_SALES && days >= MIN_TREND_DAYS) {
+    /** @type {number[]} */
+    const perDay = [];
+    for (let i = 0; i < sales.length; i++)
+      for (let j = i + 1; j < sales.length; j++) {
+        // sales[i] is the newer: a fall reads negative
+        const dt = (sales[i].t - sales[j].t) / 86400e3;
+        if (dt * 24 >= TREND_PAIR_HOURS)
+          perDay.push((sales[i].lp - sales[j].lp) / dt);
+      }
+    const m = median(perDay);
+    if (m != null && m < Math.log(1 - MIN_TREND_FALL))
+      log = Math.max(Math.log(1 - MAX_TREND_DROP), m);
+  }
+  /** @type {Trend} */
+  const out = { perDay: Math.expm1(log), log, n: sales.length, days };
+  if (!byCode) trendCache.set(fills, (byCode = new Map()));
   byCode.set(code, out);
   return out;
 }
@@ -243,22 +326,34 @@ export function statDistance(ranges, a, b) {
  * narrowest window holding MIN_ITEM ("any stats", not matched). A sale alike
  * counts at the price it would have fetched with the piece's own stats, by
  * what each stat is worth on this item's market (statSlopes; `adjust: false`
- * takes the prices as they are); the item's own median never is. Every
- * answer names the sales it rests on and the window.
+ * takes the prices as they are), and down to today's level by the market's
+ * fall (marketTrend; `trend: false` leaves it out); the item's own median
+ * never is. Every answer names the sales it rests on and the window.
  * @param {string} code @param {Record<string, number> | null | undefined} skills @param {ReadonlyArray<Fill> | null | undefined} fills
- * @param {{ now?: number, adjust?: boolean, slopes?: Record<string, number> }} [options] `slopes`: the stats' worth worked out elsewhere
+ * @param {{ now?: number, adjust?: boolean, slopes?: Record<string, number>, trend?: boolean }} [options] `slopes`: the stats' worth worked out elsewhere
  * @returns {SimilarValue}
  */
 export function similarValue(
   code,
   skills,
   fills,
-  { now = Date.now(), adjust = true, slopes: given = undefined } = {},
+  {
+    now = Date.now(),
+    adjust = true,
+    slopes: given = undefined,
+    trend: useTrend = true,
+  } = {},
 ) {
   const ranges = STAT_RANGES[code] ?? null;
   const slopes =
     adjust && ranges && skills ? (given ?? statSlopes(code, fills)) : {};
   const moves = Object.values(slopes).some((b) => b > 0);
+  const trend = useTrend && ranges ? marketTrend(code, fills ?? []) : null;
+  // the market's fall in log price an hour of a sale's age, 0 when it did not fall
+  const fall = trend && trend.log < 0 ? trend.log / 24 : 0;
+  /** A sale's price at today's level of the market. @param {Fill} f */
+  const toNow = (f) =>
+    Math.exp(fall * Math.max(0, (now - Date.parse(f.at)) / 3600e3));
   /** The price a sale alike would have fetched with the piece's own stats. @param {Fill} f */
   const atPiece = (f) => {
     let d = 0;
@@ -295,11 +390,13 @@ export function similarValue(
       : "no sales of this item in 7 d",
     fills: [],
     adjusted: false,
+    trend: null,
   });
   /** @param {Fill[]} list @param {"same" | "similar" | "item"} level @param {number} hours */
   const answer = (list, level, hours) => {
     const prices = list.map((f) => f.price);
     const adjusted = moves && level !== "item";
+    const trended = fall < 0 && level !== "item";
     /** @type {Record<string, [number, number]>} */
     const span = {};
     if (ranges && level !== "item")
@@ -314,7 +411,14 @@ export function similarValue(
       .filter((h) => Number.isFinite(h) && h >= 0);
     const when = windowWords(hours);
     return /** @type {SimilarValue} */ ({
-      value: median(adjusted ? list.map(atPiece) : prices),
+      value: median(
+        level === "item"
+          ? prices
+          : list.map(
+              (f) =>
+                (adjusted ? atPiece(f) : f.price) * (trended ? toNow(f) : 1),
+            ),
+      ),
       level,
       n: list.length,
       matched: level !== "item",
@@ -327,6 +431,7 @@ export function similarValue(
       detail: `${list.length} sales · ${level === "item" ? "any stats" : spanWords(span)} · ${when}${adjusted ? " · brought to these stats" : ""}`,
       fills: list,
       adjusted,
+      trend: trended && trend ? trend.perDay : null,
     });
   };
   /** @param {Array<{ f: Fill, age: number }>} list @param {number} hours */

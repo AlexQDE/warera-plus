@@ -386,6 +386,26 @@ describe("row annotation", () => {
     );
     expect(text).not.toContain("under the cheapest");
   });
+  it("says in Details how fast the market fell and that the sales were brought to today; a rising one says nothing", () => {
+    // a week of knives of these stats every 8 hours, the market falling 4% a day to 1.5 today
+    const week = (level) =>
+      sales(
+        Array.from({ length: 21 }, (_, i) => 1 + 8 * i).map((h) =>
+          fill(level(h / 24), h),
+        ),
+      );
+    state.salesByCode = { knife: week((d) => 1.5 / 0.96 ** d) };
+    equipment.render(state);
+    details().click();
+    equipment.render(state);
+    const text = () => annotation().querySelector(".lens-details").textContent;
+    expect(text()).toContain("Sells for 1.500 g · 3 sales · atk 30 · crit 3%");
+    expect(text()).toContain("trend −4%/day, sales brought to today");
+    state.salesByCode = { knife: week((d) => 1.5 * 0.96 ** d) };
+    equipment.render(state);
+    expect(text()).toContain("Sells for 1.477 g");
+    expect(text()).not.toContain("trend");
+  });
   it("keeps Details per row when two listings look identical", () => {
     mount("knife", 2);
     const second = document.getElementById("offer2");
