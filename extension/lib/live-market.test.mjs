@@ -37,7 +37,6 @@ it("reads all three live armour cards without seller levels becoming stats", () 
     ["chest1", "common", [1], 100, 1.5, false],
   ]);
   expect(dom.offerRows()).toHaveLength(0);
-  expect(dom.auctionRows()).toHaveLength(0);
   expect(dom.offerButtonCount()).toBe(3);
 });
 
@@ -66,6 +65,33 @@ it("reads exact taxed prices, not rounded cost chips or the selected item's aver
     attack: 110,
     criticalChance: 18,
   });
+});
+
+it("joins split prices and ages without reading buttons or its own annotations", () => {
+  fixture(true);
+  const first = dom.cardRows()[0];
+  const label = [...first.row.querySelectorAll("span")].find(
+    (e) => e.textContent === "tax incl.",
+  );
+  label.previousElementSibling.innerHTML = "43<span>.</span><span>798</span>";
+  const age = [...first.row.querySelectorAll("span")].find(
+    (e) => e.textContent === "2m",
+  );
+  age.innerHTML = "3h<span>47m</span>";
+  first.tile.insertAdjacentHTML("beforeend", "<div data-lens>888%</div>");
+  first.button.insertAdjacentHTML(
+    "beforeend",
+    "<span>999%</span><span>9d</span>",
+  );
+  first.row.insertAdjacentHTML(
+    "beforeend",
+    "<div data-lens>777<span>m</span></div>",
+  );
+  const read = dom.cardRows()[0];
+  expect(read.price).toBe(43.798);
+  expect(read.stats.stats).toEqual([102, 17]);
+  expect(read.stats.durability).toBe(100);
+  expect(read.lines.at(-1)).toBe("3h47m");
 });
 
 it("reads the new tax notice and its country's rate", () => {

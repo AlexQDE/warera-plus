@@ -77,8 +77,8 @@ export function readStats(lines) {
 }
 
 /**
- * The numbers a v0.27 auction card prints before the item's name, from its
- * tokens (dom.auctionTokens): a weapon `151`, `33%`, `100%` (attack, crit,
+ * The numbers a v0.27 offer card prints on its item tile, from its
+ * tokens (dom.cardTokens): a weapon `151`, `33%`, `100%` (attack, crit,
  * durability), an armour piece `23%`, `100%`. The last percentage of that
  * leading run is the durability and every number before it a stat; nothing
  * after the run is read (the card's amounts follow). Same shape as readStats.

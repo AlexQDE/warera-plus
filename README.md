@@ -1,6 +1,6 @@
 # WarEra Plus
 
-An unofficial browser extension for [WarEra](https://app.warera.io). It puts estimates next to what the game already shows you: what an offer on the equipment market is worth, what a craft costs and returns, what opening a case gives, how your own crafting and trading has done, which candidate to hire and which training card to keep. It does not play for you: it never buys, sells, lists, crafts, opens a case, dismantles, hires, trains, bids or travels. Formerly **WarEra Lens**, originally **WarEra Scrap Sniper**: the same extension, settings and key.
+An unofficial browser extension for [WarEra](https://app.warera.io). It puts estimates next to what the game already shows you: what an offer on the equipment market is worth, what a craft costs and returns, what opening a case gives, how your own crafting and trading has done, which candidate to hire and which training card to keep. It does not play for you: it never buys, sells, lists, crafts, opens a case, dismantles, hires, trains or travels. Formerly **WarEra Lens**, originally **WarEra Scrap Sniper**: the same extension, settings and key.
 
 [Changelog](CHANGELOG.md) · [Privacy policy](docs/PRIVACY.md) · [How it works inside](docs/ARCHITECTURE.md) · [Game facts it rests on](docs/GAME-FACTS.md)
 
@@ -61,9 +61,9 @@ It adds its own lines, the bar and the outlines. Beyond that it touches the game
 
 - **⇅ by crit** (**⇅ by stat** on armour) scrolls the game's item list through to read it, hidden while it does, puts it back where it was, and reads it again if it changes while the list is open;
 - a click on a piece in its list scrolls the game's list to that piece and clicks its tile, and clicks again if that click unselected a piece already selected;
-- **use** writes a suggested price into the price field of the old sell form, and the start and max prices into the dev server's auction form; the game's button is still yours to press.
+- **use** writes a suggested price into the price field of the old sell form; the game's button is still yours to press.
 
-It never presses Buy, Sell, Withdraw, Craft, Open, Dismantle, Hire, Train, Bid, Travel or any confirmation, never submits a form, never loads more offers or reloads the page by itself, and has no alerts or sounds. After an update it shows a **Reload page** link; the reload is yours.
+It never presses Buy, Sell, Withdraw, Craft, Open, Dismantle, Hire, Train, Travel or any confirmation, never submits a form, never loads more offers or reloads the page by itself, and has no alerts or sounds. After an update it shows a **Reload page** link; the reload is yours.
 
 ## The game's rules
 
@@ -103,7 +103,6 @@ Estimates, not promises; quotes are snapshots, not reserved liquidity.
 ## Not working on the live game yet
 
 - The sell-price suggestion reads the old sell form; the live v0.27 "Sell items" form is not adapted.
-- The auction support (the BID tag, the prices for Start an auction) was built on the dev server on 17 October 2026; the live game kept item offers.
 - 3.8.0 reads the live market cards and the Recruit window from their real markup, and the Train window from the game's code. It has not yet run end to end on the live page: the [release checklist](docs/RELEASE-CHECKLIST.md) covers what is left.
 
 ## Privacy and permissions
@@ -136,7 +135,7 @@ Before a release, go through [docs/RELEASE-CHECKLIST.md](docs/RELEASE-CHECKLIST.
 
 ## Ukratko
 
-WarEra Plus je neoficijalna ekstenzija za WarEra. Pored onoga što igra već prikazuje stavlja procene: koliko vredi ponuda na tržištu opreme, koliko košta i vredi craft, šta daje otvaranje kutije, kako ti idu craft i trgovina, kog kandidata da zaposliš i koju kartu za trening da zadržiš. Ne igra umesto tebe: nikad ne kupuje, ne prodaje, ne listira, ne craftuje, ne otvara kutije, ne rastavlja, ne zapošljava, ne trenira, ne licitira i ne putuje.
+WarEra Plus je neoficijalna ekstenzija za WarEra. Pored onoga što igra već prikazuje stavlja procene: koliko vredi ponuda na tržištu opreme, koliko košta i vredi craft, šta daje otvaranje kutije, kako ti idu craft i trgovina, kog kandidata da zaposliš i koju kartu za trening da zadržiš. Ne igra umesto tebe: nikad ne kupuje, ne prodaje, ne listira, ne craftuje, ne otvara kutije, ne rastavlja, ne zapošljava, ne trenira i ne putuje.
 
 Ima samo dva izvora. Prvi je stranica koju imaš otvorenu: čita tekst koji je igra već nacrtala u tvom tabu (cenu pored „tax incl.“, statove, platu kandidata), ne vidi zahteve igre i nikad ne čita tvoju sesiju. Drugi je javni API igre na `api2.warera.io`, samo za čitanje: sedam procedura iz tabele iznad, sa tvojim ključem ili bez njega. Četiri od njih nisu u zastareloj dokumentaciji API-ja, a admin igre je potvrdio da ekstenzija sme da ih koristi sa javnim ključem.
 

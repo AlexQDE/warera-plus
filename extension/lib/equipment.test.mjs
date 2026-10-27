@@ -96,9 +96,8 @@ it("keeps the palette read off the grid after the grid closes (v0.27 shows it in
   expect(row.textContent).toContain("scrap 292");
 });
 it("says so when the page shows offer buttons it cannot read", () => {
-  window.history.replaceState({}, "", "/market/auctions");
   document.body.innerHTML =
-    '<main><div id="tax"><span>10% market tax</span></div><article id="card"><div style="background:rgb(12,12,12)"><img alt="rifle"></div><button id="bid">BID 5</button></article></main>';
+    '<main><div id="tax"><span>10% market tax</span></div><article id="card"><div style="background:rgb(12,12,12)"><img alt="rifle"></div><button id="buy">Buy<span>5</span></button></article></main>';
   const r = equipment.render(state);
   expect(r.count).toBe(0);
   expect(r.unread).toBe(1);

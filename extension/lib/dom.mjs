@@ -383,16 +383,16 @@ export function offerRows(
 }
 
 /**
- * The game's buttons that look like an offer's (BUY, BUY NOW, BID) on the page: when the page shows some and no
- * row reads, the game changed under the reader and the bar says so instead of staying silent.
+ * The game's Buy buttons on the page: when the page shows some and no row
+ * reads, the game changed under the reader and the bar says so instead of staying silent.
  * @param {ParentNode} [root]
  */
 export function offerButtonCount(root = document) {
   let n = 0;
   for (const b of root.querySelectorAll("button"))
-    // the amount follows the word with no space in textContent ("Bid218.9"), so no \b after it
+    // the live card's cost chip follows Buy with no space in textContent ("Buy1.5")
     if (
-      /^\s*(buy|bid)(?![a-z])/i.test(b.textContent || "") &&
+      /^\s*buy(?:\s*\d|\s*$)/i.test(b.textContent || "") &&
       !b.closest("[data-lens]")
     )
       n++;
@@ -475,16 +475,16 @@ export function cardRows(
     if (!tile) continue;
     if (!read?.card || read.text !== text) {
       if (cache) cache.reads++;
-      const tokens = auctionTokens(tile);
-      const priceTokens = auctionTokens(label.parentElement);
+      const tokens = cardTokens(tile);
+      const priceTokens = cardTokens(label.parentElement);
       const priceText =
         priceTokens.length === 2 && /^tax incl\.$/i.test(priceTokens[1])
           ? priceTokens[0]
           : null;
       // the offer's age ("22m", "3h"; the player's own offer shows "Yours"
       // instead), off the card's tokens: the sell form's asks are dated by it
-      // (auctionTokens skips the extension's own line and joins "3h" "47m")
-      const age = auctionTokens(row).find((t) => /^(?:\d+\s*[dhm])+$/i.test(t));
+      // (cardTokens skips the extension's own line and joins "3h" "47m")
+      const age = cardTokens(row).find((t) => /^(?:\d+\s*[dhm])+$/i.test(t));
       read = {
         card: true,
         text,
@@ -566,34 +566,19 @@ export function cardRows(
   return out;
 }
 
-// ---------- v0.27: the auction house (dev 2026-10-17) ----------
-
-/** One part of a countdown, or a whole one: "5h", "35m", "28s", "6d23h26m6s". */
-const COUNTDOWN_RE = /^(\d+\s*[dhms]\s*)+$/i;
-/** An amount as the auction cards print it: "199", "277.927", "1,234.5". */
-const AMOUNT_RE = /^\d[\d,]*(\.\d+)?$/;
-const UNIT_SECONDS = { d: 86_400, h: 3_600, m: 60, s: 1 };
-
-/** A card's countdown in seconds ("5h35m28s" -> 20128); null for what reads as none (a translated one). */
-export function countdownSeconds(text) {
-  const t = String(text ?? "").trim();
-  if (!COUNTDOWN_RE.test(t)) return null;
-  let seconds = 0;
-  for (const [, n, unit] of t.matchAll(/(\d+)\s*([dhms])/gi))
-    seconds += Number(n) * UNIT_SECONDS[unit.toLowerCase()];
-  return seconds;
-}
+/** One part of an offer's age, or a whole one: "3h", "47m", "1d3h47m". */
+const AGE_RE = /^(\d+\s*[dhm]\s*)+$/i;
 
 /**
  * An element's text as tokens, in page order, without the extension's own
- * nodes and (unless `buttons`) without the text of the buttons inside it.
+ * nodes or the text of the buttons inside it.
  * What the page prints in pieces is joined: a "%" to the number before it,
  * a decimal's "." and digits to its whole part ("277", ".", "927" ->
- * "277.927"), a countdown's units ("5h", "35m", "28s" -> "5h35m28s").
- * @param {Element} el @param {{ buttons?: boolean }} [options]
+ * "277.927"), an age's units ("3h", "47m" -> "3h47m").
+ * @param {Element} el
  * @returns {string[]}
  */
-export function auctionTokens(el, { buttons = false } = {}) {
+export function cardTokens(el) {
   /** @type {string[]} */
   const out = [];
   const walk = el.ownerDocument.createTreeWalker(el, 4 /* SHOW_TEXT */);
@@ -601,10 +586,8 @@ export function auctionTokens(el, { buttons = false } = {}) {
     const node = walk.currentNode;
     const parent = node.parentElement;
     if (parent?.closest("[data-lens]")) continue;
-    if (!buttons) {
-      const b = parent?.closest("button");
-      if (b && b !== el && el.contains(b)) continue;
-    }
+    const b = parent?.closest("button");
+    if (b && b !== el && el.contains(b)) continue;
     const v = String(node.nodeValue ?? "").trim();
     if (!v) continue;
     const last = out.at(-1) ?? "";
@@ -613,166 +596,8 @@ export function auctionTokens(el, { buttons = false } = {}) {
       out[out.length - 1] += v;
     else if (/^\d+$/.test(v) && /^\d[\d,]*\.$/.test(last))
       out[out.length - 1] += v;
-    else if (COUNTDOWN_RE.test(v) && COUNTDOWN_RE.test(last))
-      out[out.length - 1] += v;
+    else if (AGE_RE.test(v) && AGE_RE.test(last)) out[out.length - 1] += v;
     else out.push(v);
-  }
-  return out;
-}
-
-/**
- * The amount a button carries ("Buy now" 305.72, "Bid" 218.9): its last token, when that is an amount after a
- * label (a pager's "2" is no price).
- */
-function buttonAmount(button) {
-  // most of the page's buttons carry no digit at all: they are passed over before any text walk
-  if (!/\d/.test(button.textContent || "")) return null;
-  const tokens = auctionTokens(button, { buttons: true });
-  const t = tokens.at(-1) ?? "";
-  return AMOUNT_RE.test(t) &&
-    tokens.slice(0, -1).some((x) => !AMOUNT_RE.test(x))
-    ? { text: t, value: parsePrice(t) }
-    : null;
-}
-
-/**
- * What an auction card says, by position (its labels are translated): the
- * stats before the item's name, the countdown, then two amounts, the start
- * (the current bid once someone bid) and the max price, both before tax.
- * Without a countdown the amounts are the first two after the name.
- * @param {ReadonlyArray<string>} tokens
- */
-export function readAuctionTokens(tokens) {
-  let i = 0;
-  while (i < tokens.length && /^\d+%?$/.test(tokens[i])) i++;
-  // the countdown comes before the prices: a seller called "24h" after them is not one
-  const first = tokens.findIndex((t, k) => k > i && AMOUNT_RE.test(t));
-  const cd = tokens.findIndex(
-    (t, k) => k > i && (first < 0 || k < first) && COUNTDOWN_RE.test(t),
-  );
-  /** @type {Array<{ text: string, value: number }>} */
-  const amounts = [];
-  for (let k = cd >= 0 ? cd + 1 : i + 1; k < tokens.length; k++) {
-    if (amounts.length === 2) break;
-    if (AMOUNT_RE.test(tokens[k]))
-      amounts.push({
-        text: tokens[k],
-        value: Number(tokens[k].replace(/,/g, "")),
-      });
-  }
-  return {
-    name: tokens[i] ?? null,
-    ends: cd >= 0 ? tokens[cd] : null,
-    start: amounts[0]?.value ?? null,
-    max: amounts[1]?.value ?? null,
-  };
-}
-
-/**
- * Every auction card under `root` (v0.27): a card shows one piece and carries
- * exactly two buttons with a labelled amount, buy-now then bid, whose amounts
- * include the buyer's market tax; the card's own start and max price do not,
- * so its buy now is its max price and a tax of 0 to 50%. Rows
- * have offerRows' shape (row, button, img, alt, tile, border, rarity,
- * priceText, price = the buy-now amount, lines) plus kind "auction", the bid
- * button and its amount, start, max, the countdown and the card's tokens. A
- * card whose native text did not change reuses its read (the cache).
- */
-export function auctionRows(
-  root = document,
-  palette = RARITY_PALETTE,
-  cache = null,
-) {
-  const out = [];
-  const cards = new Set();
-  for (const button of root.querySelectorAll("button")) {
-    if (button.closest("[data-lens]") || !buttonAmount(button)) continue;
-    let card = button;
-    let img = null;
-    for (let k = 0; k < 10 && card.parentElement; k++) {
-      card = card.parentElement;
-      img =
-        [...card.querySelectorAll("img")].find(
-          (i) => isItemImageAlt(i.getAttribute("alt")) && !i.closest("button"),
-        ) ?? null;
-      if (img) break;
-    }
-    if (!img || cards.has(card)) continue;
-    cards.add(card);
-    // a card shows one piece: an ancestor that shows more is a list, whatever buttons it holds
-    const pieces = [...card.querySelectorAll("img")].filter(
-      (i) => !i.closest("button") && slotFromAlt(i.getAttribute("alt")),
-    );
-    if (pieces.length > 1) continue;
-    const priced = [...card.querySelectorAll("button")].filter(
-      (b) => !b.closest("[data-lens]") && buttonAmount(b),
-    );
-    if (priced.length !== 2) continue;
-    const [buy, bidButton] = priced;
-    const text = nativeRowText(card);
-    let read = cache?.rows.get(card);
-    if (!read || read.text !== text || !read.auction) {
-      if (cache) cache.reads++;
-      const tokens = auctionTokens(card);
-      const buyAmount = buttonAmount(buy);
-      const bidAmount = buttonAmount(bidButton);
-      read = {
-        text,
-        auction: true,
-        tokens,
-        ...readAuctionTokens(tokens),
-        priceText: buyAmount?.text ?? null,
-        price: buyAmount?.value ?? null,
-        bidText: bidAmount?.text ?? null,
-        bid: bidAmount?.value ?? null,
-        // the countdown changes the text every second, not the frame: its read stays (checked below)
-        style: read?.style,
-      };
-      cache?.rows.set(card, read);
-    }
-    // a lone piece above two labelled numbers (a pager) has no max price its first number is a tax away from
-    const slack = Math.max(0.02, 0.002 * (read.price ?? 0));
-    if (
-      !(read.price > 0 && read.max > 0) ||
-      read.price < read.max - slack ||
-      read.price > read.max * 1.5 + slack
-    )
-      continue;
-    if (
-      !read.style ||
-      read.style.epoch !== (cache?.epoch ?? 0) ||
-      read.style.img !== img ||
-      !read.style.tile?.isConnected
-    ) {
-      if (cache) cache.styleReads++;
-      const tile = tileOf(img);
-      read.style = {
-        epoch: cache?.epoch ?? 0,
-        img,
-        tile,
-        border: tile ? getComputedStyle(tile).borderColor : null,
-      };
-    }
-    out.push({
-      kind: "auction",
-      row: card,
-      button: buy,
-      bidButton,
-      img,
-      alt: img.getAttribute("alt"),
-      tile: read.style.tile,
-      border: read.style.border,
-      rarity: rarityFromBorder(read.style.border, palette),
-      tokens: read.tokens,
-      lines: read.tokens,
-      priceText: read.priceText,
-      price: read.price,
-      bidText: read.bidText,
-      bid: read.bid,
-      start: read.start,
-      max: read.max,
-      ends: read.ends,
-    });
   }
   return out;
 }
@@ -786,35 +611,6 @@ export function buildId(root = document) {
   );
   buildIdSeen = m ? m[1] : null;
   return buildIdSeen;
-}
-
-/**
- * The buyer's tax an auction card's buttons carry: the notice's rate (in
- * percent) when it prints one, checked against the card (BUY NOW is the max
- * price plus the tax, to the game's rounding: 0.02 or 0.2%); without a rate
- * on the page the card's own BUY NOW / max - 1, between 0 and 50%. ok false:
- * the card and the notice disagree, or the card cannot say; no verdict rests
- * on the card then.
- * @param {{ price: number | null, max: number | null }} card @param {number | null} noticePct
- * @returns {{ rate: number | null, source: "notice" | "card" | null, ok: boolean }}
- */
-export function auctionTax({ price, max }, noticePct) {
-  if (!(Number(price) > 0) || !(Number(max) > 0))
-    return { rate: null, source: null, ok: false };
-  const p = Number(price);
-  const m = Number(max);
-  if (noticePct != null && Number.isFinite(Number(noticePct))) {
-    const rate = Number(noticePct) / 100;
-    return {
-      rate,
-      source: "notice",
-      ok: Math.abs(p - m * (1 + rate)) <= Math.max(0.02, 0.002 * p),
-    };
-  }
-  const rate = Math.round((p / m - 1) * 1000) / 1000;
-  return rate >= 0 && rate <= 0.5
-    ? { rate, source: "card", ok: true }
-    : { rate: null, source: null, ok: false };
 }
 
 /** The smallest element holding every row, or null: the scope later scans start from. */

@@ -8,13 +8,8 @@ import {
   readSellForm,
   renderSellHint,
   sellHintHtml,
-  findAuctionForm,
-  readAuctionForm,
-  auctionHintHtml,
-  renderAuctionHint,
 } from "./sellform.mjs";
-import { suggestPrice, suggestAuction } from "./pricing.mjs";
-import { SCRAP_LADDER } from "./ladder.mjs";
+import { suggestPrice } from "./pricing.mjs";
 import { windowFills } from "./similar.mjs";
 import { createCraftDesk } from "./craftdesk.mjs";
 import { createDialogs } from "./dialogs.mjs";
@@ -26,9 +21,8 @@ import { panel, setHtml, notice, clock } from "./ui.mjs";
 import { createScheduler } from "./scheduler.mjs";
 import { CRAFT_CODES, describeCode } from "./craftdata.mjs";
 
-// The equipment market: its offers (v0.26) or, since v0.27, its auctions (dev 2026-10-17: /market/equipments
-// redirects there).
-const ON_MARKET = /^\/market\/(equipments|auctions)\/?$/;
+// The equipment market: offer rows (v0.26) or offer cards (v0.27).
+const ON_MARKET = /^\/market\/equipments\/?$/;
 
 export async function startLens(runtime = chrome.runtime) {
   const state = {
@@ -765,43 +759,6 @@ export async function startLens(runtime = chrome.runtime) {
           ),
         );
       nextRoots.push(sell);
-    }
-    // v0.27's Start an auction form: a start and a max price for one picked piece, from the sales of its
-    // stats, the game's estimate and what its scraps fetch at the bids.
-    const auctionForm =
-      state.settings.equipment && !state.setup ? findAuctionForm() : null;
-    if (auctionForm) {
-      const read = readAuctionForm(auctionForm);
-      for (const it of read.items) requestSales(it.code);
-      if (read.items.length) {
-        const one = read.items.length === 1 ? read.items[0] : null;
-        const sales = one ? state.salesByCode[one.code] : null;
-        const rarity = one ? dom.rarityFromItemCode(one.code) : null;
-        const now = Date.now();
-        renderAuctionHint(
-          read,
-          auctionHintHtml({
-            count: read.items.length,
-            noKey: !state.hasKey,
-            s:
-              one && (sales || !state.hasKey)
-                ? suggestAuction({
-                    code: one.code,
-                    skills: one.skills,
-                    fills: sales ? windowFills(sales, now) : [],
-                    avg: state.avg?.values?.[one.code],
-                    scrap:
-                      rarity && state.book?.bids
-                        ? quote(SCRAP_LADDER[rarity], state.book.bids).value
-                        : null,
-                    range: read.range,
-                    now,
-                  })
-                : null,
-          }),
-        );
-      } else auctionForm.querySelector(".ss-auction")?.remove();
-      nextRoots.push(auctionForm);
     }
     observe(nextRoots);
     freshSignature = signature();

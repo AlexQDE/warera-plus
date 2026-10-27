@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import * as recruit from "./recruit.mjs";
-import { findSellForm, findAuctionForm } from "./sellform.mjs";
+import { findSellForm } from "./sellform.mjs";
 import { pickerDialog } from "./dom.mjs";
 
 beforeEach(() => {
@@ -290,12 +290,10 @@ it("fails closed on a malformed candidate and removes nodes from replaced dialog
 it("never identifies Recruit as a picker or sell form, or Sell items as Recruit", () => {
   expect(recruit.readRecruitDialog).toBeTypeOf("function");
   expect(findSellForm()).toBeNull();
-  expect(findAuctionForm()).toBeNull();
   expect(pickerDialog()).toBeNull();
   document.body.innerHTML =
     '<div role="dialog">Sell items<img alt="gsg9Gloves"><input name="price-abc"><button>Sell</button></div>';
   expect(recruit.readRecruitDialog()).toBeNull();
   expect(pickerDialog()).toBeNull();
   expect(findSellForm()).toBeNull();
-  expect(findAuctionForm()).toBeNull();
 });

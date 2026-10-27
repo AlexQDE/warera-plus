@@ -2,10 +2,32 @@ import { describe, it, expect } from "vitest";
 import {
   codeFor,
   readStats,
+  readStatBlock,
   summarizeOffers,
   statRanks,
   offerDimensions,
 } from "./offers.mjs";
+
+describe("readStatBlock", () => {
+  it("reads the leading numbers: the last percentage is the durability, the numbers before it the stats", () => {
+    expect(readStatBlock(["151", "33%", "100%", "Tank"])).toMatchObject({
+      readable: true,
+      stats: [151, 33],
+      stat: 151,
+      durability: 100,
+    });
+    expect(readStatBlock(["23%", "100%", "Elite Gloves"])).toMatchObject({
+      readable: true,
+      stats: [23],
+      durability: 100,
+    });
+    expect(readStatBlock(["Tank", "199"])).toMatchObject({
+      readable: false,
+      stats: [],
+      durability: null,
+    });
+  });
+});
 
 describe("codeFor", () => {
   it("names armour by slot and tier digit, weapons by rarity", () => {

@@ -345,7 +345,7 @@ unmerged in the private repository; its row reader reads **labelled** numbers
 only, which is the right answer to the checklist's open question about the
 live row layout.
 
-## 11. v0.27 on the dev server (read 2026-10-17)
+## 11. v0.27 on the dev server (read 2026-10-17) — historical: the auction house did not ship, and 3.8.0 dropped its support
 
 The game's next version, read on dev.warera.io (client 0.27.0-beta, build
 `JWLllTElOSrQkss76XV1d`) against live 0.26.2-beta. Dev is a test world: its
@@ -376,7 +376,7 @@ prices are not live prices. Nothing was listed, bid or hired to read this.
   times 1 + 0.05 × the mean of where each stat sits in its range (§4, 0 at the
   bottom, 1 at the top), to three decimals: 72 of 72 active auctions, and the
   form's "From 82.404 to 131.846" for an epic sniper 123/16 at an 80.87
-  average (`pricing.estimatedValue`). Two legendary/mythic pants carried an
+  average. Two legendary/mythic pants carried an
   estimate while the public average answered 0.
 - **The card** prints the stats, the item's name, the countdown (separate
   text nodes "5h", "35m", "28s"), "Starting price" (or "Current bid" once bid
