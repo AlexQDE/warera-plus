@@ -179,7 +179,7 @@ describe("casesSummary with a drop policy", () => {
     );
     expect(c1.openMarket).toBeCloseTo(100, 6);
     expect(c1.policy.rows).toHaveLength(6);
-    expect(s.rows[0].openValue).toBeCloseTo(6.117759, 5);
+    expect(s.rows[0].openValue).toBeCloseTo(7.840861, 5);
     const all = casesSummary({ books, avg, sellFrom: "common" });
     expect(all.rows[1].openValue).toBeCloseTo(100, 6);
     expect(all.rows[1].verdict).toBe("open");

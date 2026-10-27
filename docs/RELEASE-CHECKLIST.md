@@ -2,6 +2,22 @@
 
 Go through the newest release's section and the manual gate on the live game, with your own account, before publishing. Then [CHROME-WEB-STORE.md](CHROME-WEB-STORE.md).
 
+## 3.8.0 on the live page (v0.27)
+
+3.8.0 was checked on the test suite (38 files, 532 tests), with the live market and the Recruit window as the live page drew them on 2026-10-26 (`fixtures/v027-live-*.html`, classes stripped, computed gradients inlined). It has not run on the live page. The fixtures carry no layout (no flex direction, no widths), so the placement below is what only the live page shows. Reload the extension itself first, then the game.
+
+- **The market's cards.** `/market/equipments`: the bar no longer says "offers not read"; every card carries a line, and the line sits **below** the card's contents, full width, not beside them; the card's price and Buy do not move while the line fills; the grid keeps its columns (each card at least 260 px). Open Details on one: the price is the card's own (three decimals, e.g. 43.798), not the rounded Buy chip.
+- **Your own offer.** List a cheap piece: its card (Withdraw, "Yours") has no line and is not counted in the bar's head; the sell form's price for another of the same item does not undercut your own listing.
+- **Filtered.** `?item=sniper`: every card is the sniper of its tier; set the Attack / Crit. chance filters: the picker's lit pieces follow them. Switch items in the "+" window: no card is tagged as the new item before the list is replaced.
+- **Tiers.** A skinned piece of each tier you can find (uncommon, rare, legendary, mythic: their live frame colours were not sampled) reads its tier and gets a line; Details show no frame disagreement.
+- **Ages.** Wait a minute on the market: lines stay, and the sell form's "cheapest ask … 3m" ages advance.
+- **Recruit.** Companies, a company's Recruit: a WarEra Plus head line under "Candidates · Roster" naming the point value, the company's product and its point at the bids, the bonus; every candidate has a block above Hire (not inside it), Hire, Reroll all and Close untouched and working; one ★ Best pick, or the "None of these pays" line. Open Recruit from a second company: the head names that company. A candidate whose Production is shown reads "Production N" and an exact wage chip.
+- **Sell form.** The live sell window ("Sell items", one `price-<itemId>` field per piece) is not adapted: `lib/sellform.mjs` reads the old form only, so no price suggestion shows there yet.
+- **Compact.** Each candidate's block is one line with a "?" whose tooltip holds the details; the head is "WarEra Plus · ★ name" with its own "?"; the best candidate's card has a green outline, and only it.
+- **Train.** Open an employee's pending training (never draw a new hand to test: a draw costs 10 energy): a line under the three cards with each card's gold, ★ on the best, that card outlined green; the "?" names every card's reason. A drill card's stat is the one its icon shows (compare with the header chips). A New habit card: the "?" names the trait it teaches (and the one it replaces, faded on the card) as the card does. An employee without a bonus chip: his wage chip still reads. Picking a card and closing the window removes the line and the outline.
+- **Settings.** Hiring and training advisor off: the blocks and the outlines go at once; on: they come back.
+- **Cases.** The cases strip prints one wooden case value (no floor/round band) and its tooltip names the v0.27 drops.
+
 ## 3.7.0 on the dev page (v0.27) and the live page (v0.26)
 
 3.7.0 was checked on the test suite, with the auction cards and the Start an auction form built from what the dev page showed on 2026-10-17 (`fixtures/v027-auctions.json`). It has not run on the dev page. `npm run build:dev`, load `dist/dev` unpacked (it only runs on dev.warera.io and asks apidev.warera.io; give it your dev API key), reload the game.

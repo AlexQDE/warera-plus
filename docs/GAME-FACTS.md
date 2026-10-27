@@ -183,6 +183,7 @@ tiers are intentional, so a stat value maps back to its rarity unambiguously.
   skill's value, at most 5 held, expire after 48 h, a 20-code resource pool.
   **CLIENT**. Travel costs 10 stamina per region hop when the bar covers the
   whole trip, else 2 oil per hop, never both (**CLIENT**, confirmed in game).
+  What a wooden case drops changed in v0.27: §12.
 
 ## 7. The page
 
@@ -409,4 +410,88 @@ caliper` 1-6, `isTradable: false`, a production stat) come out of the
 {itemCode: "toolbox"}` answers 404 "Itemtradings not found."
 - **Wooden cases can drop cases** (client config `caseDrops: case1 1-10,
 toolbox 1-10, case2 1`; the chance is not in the client): an `openCase` row
-  with the case's code, a quantity and no item (toolbox ×7, ×8 seen).
+  with the case's code, a quantity and no item (toolbox ×7, ×8 seen). **Not
+  in the live v0.27** (§12): the live client has no `caseDrops` and 13,155
+  live wooden opens gave resources only.
+
+## 12. v0.27 live (2026-10-26)
+
+v0.27 went live on 2026-10-26 (client build `XmH-E6LDGflCh7NUJ-csh`, read
+22:00 UTC on the live page with the player's own session; nothing was bought,
+listed or hired). Several things differ from what the dev server showed in §11.
+
+- **No auction house.** `/market/equipments` lists item offers as before,
+  from `itemOffer.getItemOffers {itemCode?, minSkills?, sort: cheapest |
+newest | mostExpensive, limit: 12, cursor?}` (the sort is kept in the
+  cookie `item-offers-sort`, the item in `?item=`). Offers are cards in a CSS
+  grid (`repeat(auto-fill, minmax(min(100%, 260px), 1fr))`), then Load more.
+  A card (client module 98170): the item tile (frame with a
+  `linear-gradient(45deg, <rarity> 0%, <dark> 100%)` background and no
+  border, the image's alt the skin key or the plain code, the stat chips, a
+  durability bar and "100%"), the seller (avatar, flag, name, a level badge
+  whose number is an SVG `<text>`), the offer's age ("22m") or "Yours" on the
+  player's own offer, the price **the buyer pays, tax included** (3 decimals,
+  e.g. 43.798) and "tax incl.", then **Buy** with a cost chip holding the
+  rounded amount (43.8), or **Withdraw** on the player's own offer. The
+  notice: "Prices include your tax · Every price here is what you pay, tax
+  included: the seller's price plus the N% market tax of your country …".
+  Frames seen: common `rgb(35, 55, 59)`, epic `rgb(59, 35, 95)`. Sanitized
+  markup: `fixtures/v027-live-market.html`, `fixtures/v027-live-market-sniper.html`.
+- **Selling** is the "Sell an item" button: a "Sell items" window, up to 5
+  pieces at 100% durability, each with its own price (`price-<itemId>`,
+  0.7-1.6x the game's estimate, `itemOffer.getPriceSuggestions {itemIds}` →
+  `{itemId, suggestedPrice, priceRange, similarOffers[3]}`), then
+  `itemOffer.createItemOffers {items: [{itemId, price}]}`. A click on one of
+  the three similar offers sets the price 0.001 under it.
+- **Wooden cases** (patch notes §15, client module 30899
+  `productionValueByRarity`): a rarity is rolled 60 / 25 / 12 / 3 (was
+  65/20/13/2), one resource of that rarity uniformly, and a budget of
+  production points by rarity: common 20-40, uncommon 40-70, rare 80-130,
+  epic 160-260 (every case was 20-80). Units = **round**(budget / the
+  resource's productionPoints), at least 1. **MEASURED**: 13,155 live opens
+  from the global `openCase` feed (2026-10-26 16:00-19:39 UTC; a wooden open
+  is a row whose `itemCode` is the resource and whose `quantity` the units, no
+  item): rarities 60.4 / 24.8 / 11.9 / 2.9% (|z| ≤ 1.0), every amount inside
+  the round rule (χ² 219.8 on 265 df), e.g. livestock 1 or 2 at 47.5 / 52.5%
+  (round 47.6 / 52.4, floor would be 95 / 5), cooked fish 7 twice (260 / 40 =
+  6.5 rounds up). No case or toolbox drops. At the 2026-10-26 22:30 UTC bids
+  an open was worth 7.80 against a sealed bid of 7.43 (EVEN); the old rules
+  gave about 6.1.
+- **Candidates** (Companies → a company's Recruit button, client module 3906):
+  3 a day per company (+1 with a Recruiter trait), each card showing the
+  name, nationality, age, the **wage a day** (24 × the hourly wage, up to two
+  decimals, "1.2 / day"), three stat chips always in the order Production,
+  Responsibility, Luck ("?" when hidden), the revealed trait as a
+  `role="img"` badge labelled with its title, a "?" badge per hidden trait
+  (tooltip "Hidden trait"; no badge means no trait), "Potential N" when the
+  training potential is the revealed hint, and Hire. The gauge on Hire and
+  Reroll all is the **player's current energy** (a skill bar marking the
+  cost), not the cost: hiring costs 10 energy (`hireEnergyCost`), Reroll all
+  10 (`rerollEnergyCost`; the patch notes say it doubles after the first).
+  `employee.getCandidates {companyId}` is session-only and sends hidden stats
+  as 0 with `revealed: false`, the potential not at all: nothing hidden can
+  be read ahead of hiring. The wage can: wage = Production / 4 × the point
+  value × the expectation (`wageExpectationSpread` 0.3: 70-130%) × 1.2
+  Greedy / 0.85 Modest, so wage a day / (6 × point value) = Production ×
+  expectation × trait, and `lib/hiring.mjs` reads Production back from it
+  (live: 1.2 / day at 0.1019 is Production 2 for certain, 2.82 is 4).
+- **The point value** is `gameStat.getPpMoneyValue` (GET, no input; the
+  procedure takes void and refuses `input={}`): `{"result":{"data":0.1012}}`,
+  public, keyless. It moved from 0.1019 to 0.1012 within the day.
+- **Training** (client module 3906, the card 81658; config `training`): one
+  draw a day per employee (+1 with a Trainer coworker), 10 energy, a hand of
+  3, keep one; a pending hand is `employee.pendingTraining.offers` and
+  reopening it draws nothing (pressing train without one draws and pays).
+  Cards: Drill / Intensive drill +1 common, +2 uncommon, +3 epic, +4
+  legendary to one stat (no rare drill); Negotiation −5 / −10 / −20 points
+  of wage expectation (common / uncommon / rare), never below 0.7; Wild card
+  a random hidden trait and +1 to a random stat; New habit a mixed (rare) or
+  positive (epic) trait, two positives (legendary), shown on the card; Rehab
+  one negative (rare) or mixed (uncommon) trait; Clean slate every negative
+  (legendary, dealt with 2+); Second wind +2 / +3 / +4 potential; Mentoring
+  never dealt. The window's header prints his stats, a happiness chip, his
+  production bonus (pickaxe, "+0.9%"), his wage chip (coin, "+13.8%":
+  (expectation + Climber drift) × (1 + Greedy 0.2 / Modest −0.15) − 1,
+  "Market rate" at 0) and his potential ("1/3"); a card shows its rarity,
+  title and effect ("-10%" "Expected wage", "+2" with the stat's icon and
+  "Now 1").

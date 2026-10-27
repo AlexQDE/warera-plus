@@ -11,6 +11,7 @@ import {
 } from "./dom.mjs";
 import { createScheduler } from "./scheduler.mjs";
 import { setHtml } from "./ui.mjs";
+import { readFileSync } from "node:fs";
 
 const ME = "697b55e4bcecf3b37667e0d1";
 let app;
@@ -28,6 +29,7 @@ beforeEach(() => {
 afterEach(() => {
   app?.dispose();
   app = null;
+  vi.restoreAllMocks();
   vi.useRealTimers();
   document.body.innerHTML = "";
 });
@@ -55,12 +57,154 @@ function mockRuntime(overrides = {}) {
         return { cases: { at: new Date().toISOString(), books: {} } };
       if (msg.type === "avg")
         return { avg: { at: new Date().toISOString(), values: {}, times: {} } };
+      if (msg.type === "pointValue")
+        return { pointValue: { at: new Date().toISOString(), value: 0.1012 } };
       return {};
     }),
   };
 }
 
 describe("SPA lifecycle and DOM work", () => {
+  it("reads books and the point value for Recruit only while visible and enabled, then removes its UI", async () => {
+    window.history.replaceState({}, "", "/companies");
+    document.body.innerHTML = "<main></main>";
+    const runtime = mockRuntime({ hasKey: false });
+    app = await startLens(runtime);
+    await settle();
+    const reads = () =>
+      runtime.sendMessage.mock.calls.filter(([m]) => m.type === "cases").length;
+    const pointReads = () =>
+      runtime.sendMessage.mock.calls.filter(([m]) => m.type === "pointValue")
+        .length;
+    expect(reads()).toBe(0);
+    expect(pointReads()).toBe(0);
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      readFileSync("fixtures/v027-live-recruit.html", "utf8"),
+    );
+    await settle();
+    expect(reads()).toBe(1);
+    // wages rest on the point value: read when the window opens
+    expect(pointReads()).toBeGreaterThan(0);
+    expect(document.querySelectorAll(".ss-recruit-value")).toHaveLength(4);
+    expect(document.querySelectorAll("[data-lens]")).toHaveLength(5);
+    const pointsWhenShown = pointReads();
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    await settle(610_000);
+    expect(reads()).toBe(1);
+    expect(pointReads()).toBe(pointsWhenShown);
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
+    document.querySelector('[role="dialog"]').remove();
+    document.dispatchEvent(new Event("visibilitychange"));
+    await settle();
+    expect(reads()).toBe(1);
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      readFileSync("fixtures/v027-live-recruit.html", "utf8"),
+    );
+    app.scan();
+    await settle();
+    expect(reads()).toBe(2);
+    runtime.info.settings.recruit = false;
+    runtime.info.revision++;
+    await settle(5100);
+    expect(document.querySelector("[data-lens]")).toBeNull();
+    const pointsWhenOff = pointReads();
+    await settle(610_000);
+    expect(reads()).toBe(2);
+    // disabled: nothing more is read, the point value included
+    expect(pointReads()).toBe(pointsWhenOff);
+  });
+  it("reads the point value only for an open Train window, renders without clicking, and clears on close", async () => {
+    window.history.replaceState({}, "", "/companies");
+    document.body.innerHTML = "<main></main>";
+    const runtime = mockRuntime({ hasKey: false });
+    const clicks = vi.spyOn(window.HTMLElement.prototype, "click");
+    app = await startLens(runtime);
+    await settle();
+    const reads = () =>
+      runtime.sendMessage.mock.calls.filter(([m]) => m.type === "pointValue")
+        .length;
+    expect(reads()).toBe(0);
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      readFileSync("fixtures/v027-train-synthetic.html", "utf8"),
+    );
+    const dialog = document.querySelector('[role="dialog"]');
+    const buttons = [...dialog.querySelectorAll("button")];
+    const original = buttons.map((b) => b.outerHTML);
+    await settle();
+    expect(reads()).toBe(1);
+    expect(document.querySelectorAll(".ss-train-value")).toHaveLength(1);
+    expect(
+      [...document.querySelectorAll(".ss-train-cell")].map(
+        (c) => c.textContent,
+      ),
+    ).toEqual(["★ +7.6 g", "≈ 0 g", "+2.8 g"]);
+    const best = dialog.querySelector("[data-ss-best]");
+    expect(best).not.toBeNull();
+    expect(buttons.map((b) => b.outerHTML)).toEqual(original);
+    expect(clicks).not.toHaveBeenCalled();
+    await settle(10_000);
+    expect(reads()).toBe(1);
+    dialog.remove();
+    app.scan();
+    await settle();
+    expect(dialog.querySelector(".ss-train-value")).toBeNull();
+    expect(best.hasAttribute("data-ss-best")).toBe(false);
+    await settle(610_000);
+    expect(reads()).toBe(1);
+    clicks.mockRestore();
+  });
+  it("waits for a fresh point value before marking a Train card and clears on dispose", async () => {
+    window.history.replaceState({}, "", "/companies");
+    document.body.innerHTML = readFileSync(
+      "fixtures/v027-train-synthetic.html",
+      "utf8",
+    );
+    const runtime = mockRuntime({ hasKey: false });
+    const send = runtime.sendMessage.getMockImplementation();
+    let finish;
+    runtime.sendMessage.mockImplementation((msg) =>
+      msg.type === "pointValue"
+        ? new Promise((resolve) => {
+            finish = resolve;
+          })
+        : send(msg),
+    );
+    app = await startLens(runtime);
+    await settle();
+    expect(document.querySelector(".ss-train-value").textContent).toContain(
+      "reading point value",
+    );
+    expect(document.querySelector("[data-ss-best]")).toBeNull();
+    finish({ pointValue: { at: new Date().toISOString(), value: 0.1012 } });
+    await settle();
+    expect(document.querySelector("[data-ss-best]")).not.toBeNull();
+    app.dispose();
+    expect(document.querySelector(".ss-train-value")).toBeNull();
+    expect(document.querySelector("[data-ss-best]")).toBeNull();
+  });
+  it("does not read or render Train while the hiring and training advisor is disabled", async () => {
+    window.history.replaceState({}, "", "/companies");
+    document.body.innerHTML = readFileSync(
+      "fixtures/v027-train-synthetic.html",
+      "utf8",
+    );
+    const runtime = mockRuntime({ settings: { ...DEFAULTS, recruit: false } });
+    app = await startLens(runtime);
+    await settle();
+    expect(document.querySelector(".ss-train-value")).toBeNull();
+    expect(
+      runtime.sendMessage.mock.calls.some(([m]) => m.type === "pointValue"),
+    ).toBe(false);
+  });
   it("ignores its own renders and clock mutations; stationary UI does not rescan on every tick", async () => {
     const runtime = mockRuntime();
     app = await startLens(runtime);

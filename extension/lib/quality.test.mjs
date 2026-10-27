@@ -117,7 +117,6 @@ describe("quote quality and safe decisions", () => {
     ).toBe(false);
     const w = woodenCaseValue(
       () => 1,
-      "floor",
       (code, qty) =>
         quote(qty, [
           { price: 1, quantity: code === WOODEN_CODES[0] ? 1 : 1000 },
@@ -128,7 +127,7 @@ describe("quote quality and safe decisions", () => {
       caseVerdict({ bid: 100, openValue: 5, complete: false }).verdict,
     ).toBeNull();
   });
-  it("checks the entire wooden floor/round band before recommending", () => {
+  it("checks an entire value band before recommending", () => {
     expect(
       caseVerdict({ bid: 11, openValue: 10, band: [10, 11] }).verdict,
     ).toBe("even");

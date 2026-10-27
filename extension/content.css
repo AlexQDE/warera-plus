@@ -1,4 +1,48 @@
 /* WarEra Plus: scoped UI, the game's layout stays in control. */
+/* Recruit and Train windows. */
+.ss-recruit-head[data-lens],
+.ss-recruit-value[data-lens],
+.ss-train-value[data-lens] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  background: #141c29;
+  border: 1px solid #2b3a4e;
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin: 3px 0;
+  min-width: 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+.ss-recruit-head[data-lens] > span,
+.ss-recruit-value[data-lens] > span,
+.ss-train-value[data-lens] > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ss-recruit-head[data-lens] .lens-help,
+.ss-recruit-value[data-lens] .lens-help,
+.ss-train-value[data-lens] .lens-help {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  font-size: 9.5px;
+}
+/* the best pick: the game's own card, outlined */
+[data-ss-best] {
+  outline: 2px solid #3fb950 !important;
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+.ss-train-value[data-lens] .ss-train-cell {
+  flex: 1 1 0;
+  text-align: center;
+  font-weight: 700;
+}
 [data-lens] {
   --lens-bg: #121a26;
   --lens-bg-2: #19243300;
@@ -494,6 +538,22 @@
 }
 .ss-verdict[data-lens][data-open] {
   width: 100%;
+  flex-wrap: wrap;
+}
+/* Live market: below the native card contents, always the same size while
+   quotes fill. Fits a 260px card without moving its price or Buy button. */
+.ss-verdict[data-lens][data-card] {
+  box-sizing: border-box;
+  width: calc(100% - 8px);
+  height: 52px;
+  flex: 0 0 auto;
+  min-width: 0;
+  gap: 3px 5px;
+  overflow: hidden;
+}
+.ss-verdict[data-lens][data-card][data-open] {
+  height: auto;
+  min-height: 52px;
   flex-wrap: wrap;
 }
 .ss-verdict[data-lens] > .lens-tag {

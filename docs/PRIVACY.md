@@ -1,6 +1,6 @@
 # WarEra Plus privacy policy
 
-Effective 17 October 2026, for version 3.6.0 and later.
+Effective 27 October 2026, for version 3.8.0 and later.
 
 WarEra Plus is a browser extension for the browser game WarEra. It is not made, endorsed or supported by the makers of WarEra. This policy says what data the extension handles, where that data goes and how to remove it. The short version: everything stays in your browser, except your API key, which goes only to the game's own API with the extension's requests, and the extension has no server, no analytics and no third party.
 
@@ -10,9 +10,9 @@ WarEra Plus is a browser extension for the browser game WarEra. It is not made, 
 
 **Your game history, read from the WarEra API with your key.** Your own transactions in the game (crafts, market buys and sales, dismantles, case openings, battle loot and resource trades) and your public player card (your username). They are kept in the extension's local storage, by month, so the Ledger can show your results since the start of your profile without reading them again. They never leave your browser.
 
-**Public market data, read from the WarEra API.** Order books, the game's average prices and recent sales of items, with your key or without one. Kept in local storage as short-lived caches.
+**Public market data, read from the WarEra API.** Order books, the game's average prices and its production point value, with your key or without one, and recent sales of items, with your key. Kept in local storage as short-lived caches.
 
-**What the game's page shows.** On `https://app.warera.io` the extension reads the page to find the offers, their prices and item stats, your own player id (from the page's links to your own profile) and, when you press the game's CRAFT button, whether you picked a slot in the craft window. This is processed in your browser. The craft picks are kept in local storage until the extension ties each to the craft it made in your history (then only that craft's mark, chosen slot or random, is kept).
+**What the game's page shows.** On `https://app.warera.io` the extension reads the page to find the offers, their prices and item stats, your own player id (from the page's links to your own profile), the candidates' cards in a Recruit window (wage, shown stats, traits, age, nationality) with the company whose Recruit button you pressed, the employee and the dealt cards in a Train window and, when you press the game's CRAFT button, whether you picked a slot in the craft window. This is processed in your browser. The craft picks are kept in local storage until the extension ties each to the craft it made in your history (then only that craft's mark, chosen slot or random, is kept).
 
 **Your settings.** Thresholds, the modules turned on, the tab open under the bar and the other preferences, in local storage.
 

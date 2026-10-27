@@ -3,6 +3,7 @@ import {
   fetchBooks,
   fetchSales,
   fetchEquipmentAvg,
+  fetchPointValue,
   fetchHistoryPage,
   fetchInputAverages,
   fetchOwner,
@@ -162,6 +163,8 @@ export function createController({
         if (kind === "book") result = (await fetchBook(fetchImpl, key)).book;
         else if (kind === "cases")
           result = await fetchBooks(fetchImpl, key, CASE_BOOKS);
+        else if (kind === "pointValue")
+          result = { value: await fetchPointValue(fetchImpl, key) };
         else if (kind === "sales") {
           // A last read whose fills carry their ids is brought up to date: only the sales newer than the
           // first one it holds are read (usually one page instead of ten), the rest kept inside the window.
@@ -263,7 +266,7 @@ export function createController({
             await storage.remove(
               Object.keys(all).filter(
                 (k) =>
-                  ["book", "cases", "avg"].includes(k) ||
+                  ["book", "cases", "avg", "pointValue"].includes(k) ||
                   k.startsWith("sales:") ||
                   k.startsWith("crafts:"),
               ),
@@ -313,7 +316,7 @@ export function createController({
         await storage.remove(
           Object.keys(all).filter(
             (k) =>
-              ["book", "cases", "avg"].includes(k) ||
+              ["book", "cases", "avg", "pointValue"].includes(k) ||
               k.startsWith("sales:") ||
               k.startsWith("crafts:"),
           ),
@@ -335,7 +338,7 @@ export function createController({
       const all = await storage.get(null);
       const keys = Object.keys(all).filter(
         (k) =>
-          ["book", "cases", "avg"].includes(k) ||
+          ["book", "cases", "avg", "pointValue"].includes(k) ||
           k.startsWith("sales:") ||
           k.startsWith("crafts:"),
       );
@@ -753,7 +756,7 @@ export function createController({
             await storage.remove(
               Object.keys(keys).filter(
                 (k) =>
-                  ["book", "cases", "avg"].includes(k) ||
+                  ["book", "cases", "avg", "pointValue"].includes(k) ||
                   k.startsWith("sales:"),
               ),
             );
@@ -1066,7 +1069,7 @@ export function createController({
         });
       }
       if (msg?.type === "craftPick") return recordPick(msg);
-      if (["book", "cases", "avg", "sales"].includes(msg?.type)) {
+      if (["book", "cases", "avg", "pointValue", "sales"].includes(msg?.type)) {
         if (msg.type === "sales" && !ITEM_CODES.has(msg.itemCode))
           return { error: "bad-item", message: "Unknown equipment item" };
         return read(msg.type, !!msg.force, msg.itemCode);

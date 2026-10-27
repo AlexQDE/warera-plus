@@ -22,6 +22,8 @@ export const BOOK_URL = withInput("tradingOrder.getTopOrders", {
   itemCode: "scraps",
   limit: 100,
 });
+// This procedure takes no input; even an empty object is rejected.
+export const POINT_VALUE_URL = `${TRPC}gameStat.getPpMoneyValue`;
 export const KEYLESS_LIMIT = 100;
 export const TIMEOUT_MS = 10_000; // a call that has not answered by then is given up, not left hanging
 
@@ -212,6 +214,20 @@ export async function fetchBook(
   });
   const depth = parseBook(data, 100);
   return { book: { ...summarizeBook(data), ...depth }, limit, remaining };
+}
+
+/** The game's gold value of one production point, with the player's key or keyless. */
+export async function fetchPointValue(
+  fetchImpl,
+  key,
+  { timeoutMs = TIMEOUT_MS } = {},
+) {
+  const { data } = await call(fetchImpl, cleanKey(key), POINT_VALUE_URL, {
+    timeoutMs,
+  });
+  if (typeof data !== "number" || !Number.isFinite(data) || data <= 0)
+    throw new ApiError("Invalid point value schema", "schema");
+  return data;
 }
 
 /**
@@ -461,14 +477,7 @@ export async function fetchOwner(
 }
 
 // ---------------------------------------------------------------- v0.26 cases -
-// Two procedures the game client uses that openapi.json does not list (probed
-// 2026-09-16, both answer an accepted key from the 500 bucket; the editor
-// chose to use them): tradingOrder.getTopOrdersPerItemCode reads every code's
-// book in one call, gameStat.getEquipmentAvgByCode is the "Current value" the
-// game prints on a tile. The documented tradingOrder.getTopOrders stays wired
-// as the fallback for the books, batched: tRPC GET batching (?batch=1) is
-// counted as ONE request by the rate limiter (verified: 499 -> 498 for a
-// batch of three).
+// tRPC GET batching (?batch=1), the transport the game's own client uses.
 
 /** Batch URLs are kept under this length: a ~2,050-char URL died in the proxy chain (HANDOFF trpcPairs). */
 export const BATCH_URL_BUDGET = 1400;
@@ -479,7 +488,7 @@ export const BATCH_URL_BUDGET = 1400;
  * launch, and the project's rule is to print depth, never just the top of book.
  */
 export const BOOK_DEPTH = 20;
-/** Every code's best orders: the multi-code procedure, BOOK_DEPTH a side. */
+/** The procedure the game's own client uses to read several books at once, BOOK_DEPTH a side. */
 export const booksUrl = (codes) =>
   withInput("tradingOrder.getTopOrdersPerItemCode", {
     itemCodes: codes,
@@ -596,8 +605,7 @@ export function parseBook(d, cap = BOOK_DEPTH) {
 /**
  * The best bid and ask of every code in `codes`: { books: { code: { bid, ask,
  * bidQty, askQty } }, source, limit, remaining }. One call to the multi-code
- * procedure; when that one is gone (an API error or a 4xx) the documented
- * getTopOrders is asked in batches instead.
+ * procedure; on an API error or HTTP 404/405, getTopOrders is asked in batches.
  */
 export async function fetchBooks(
   fetchImpl,
@@ -607,6 +615,8 @@ export async function fetchBooks(
 ) {
   const k = cleanKey(key);
   const list = [...new Set((codes ?? []).map(String))];
+  if (!list.length)
+    return { books: {}, source: "getTopOrders", limit: null, remaining: null };
   try {
     const { data, limit, remaining } = await call(
       fetchImpl,

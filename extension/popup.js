@@ -6,6 +6,7 @@ const toggles = [
   "cases",
   "travel",
   "picker",
+  "recruit",
   "casesCollapsed",
   "roundTrip",
 ];

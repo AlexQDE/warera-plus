@@ -9,28 +9,40 @@
 // has to buy it. No tax on either leg.
 
 // ---------------------------------------------------------- the wooden case -
-// Patch notes v0.26.0 (article 6aa97af2c0e0960dfc3ca750) and the codex entry
-// "Wooden cases on the map": a rarity tier is rolled (65/20/13/2), then one
-// resource of that tier uniformly, then a budget of 20..80 production points
-// is spent on it: units = floor(budget / productionPoints), never below one.
-// The notes' seven amount bands come out of floor and of round alike, so the
-// round rule is carried as the upper edge of a band.
+// v0.27 (live 2026-10-26; patch notes section 15 and the client config,
+// module 30899 productionValueByRarity): a rarity is rolled 60/25/12/3 (was
+// 65/20/13/2), then one resource of that rarity uniformly, then a budget of
+// production points that depends on the rarity (common 20-40, uncommon
+// 40-70, rare 80-130, epic 160-260; every case was 20-80 before) is spent on
+// it: units = round(budget / productionPoints), never below one. The rule is
+// round, not floor: 13,155 live opens from the global openCase feed
+// (2026-10-26 16:00-19:39 UTC) all fall inside the round rule's amounts
+// (chi-square 219.8 on 265 df), livestock 1 or 2 at 47.5% / 52.5% where floor
+// would give 95% / 5%. No case drops: the dev client's case-drop config never
+// reached the live game (no row of those 13,155 was a case or a toolbox).
 import { RARITIES, GEAR_CODES } from "./items.mjs";
 import { positive, quote } from "./quality.mjs";
 import { SCRAP_LADDER } from "./ladder.mjs";
 export { GEAR_CODES, ALL_GEAR_CODES } from "./items.mjs";
 
 export const WOODEN_TIERS = [
-  { tier: "epic", pct: 2, items: ["cookedFish", "heavyAmmo", "cocain"] },
-  { tier: "rare", pct: 13, items: ["ammo", "steak"] },
+  {
+    tier: "epic",
+    pct: 3,
+    budget: [160, 260],
+    items: ["cookedFish", "heavyAmmo", "cocain"],
+  },
+  { tier: "rare", pct: 12, budget: [80, 130], items: ["ammo", "steak"] },
   {
     tier: "uncommon",
-    pct: 20,
+    pct: 25,
+    budget: [40, 70],
     items: ["concrete", "steel", "bread", "oil", "paper", "lightAmmo"],
   },
   {
     tier: "common",
-    pct: 65,
+    pct: 60,
+    budget: [20, 40],
     items: [
       "grain",
       "iron",
@@ -44,7 +56,7 @@ export const WOODEN_TIERS = [
     ],
   },
 ];
-/** productionPoints per unit, gameConfig.getGameConfig items[] (pinned 2026-09-16). */
+/** productionPoints per unit, gameConfig.getGameConfig items[] (pinned 2026-09-16, unchanged in v0.27). */
 export const WOODEN_PP = {
   cookedFish: 40,
   heavyAmmo: 16,
@@ -67,7 +79,6 @@ export const WOODEN_PP = {
   livestock: 20,
   fish: 40,
 };
-export const WOODEN_BUDGET = { min: 20, max: 80 };
 export const RESOURCE_NAMES = {
   cookedFish: "Cooked Fish",
   heavyAmmo: "Heavy Ammo",
@@ -92,51 +103,52 @@ export const RESOURCE_NAMES = {
 };
 export const WOODEN_CODES = WOODEN_TIERS.flatMap((t) => t.items);
 
-/** Expected units of a resource per case: the budget, uniform over 20..80, divided by its production points. */
+/** Units a case gives of a resource at a budget: round(budget / pp), at least one. */
+export const woodenUnits = (budget, pp) => Math.max(1, Math.round(budget / pp));
+
+/**
+ * Expected units of a resource per case: its rarity's budget, every whole
+ * number in the band equally likely, divided by its production points and
+ * rounded, never below one.
+ */
 const quantityCache = new Map();
-export function expectedQty(pp, rule = "floor") {
-  if (positive(pp) == null || !["floor", "round"].includes(rule))
+export function expectedQty(pp, budget) {
+  const [lo, hi] = budget ?? [];
+  if (positive(pp) == null || !(Number.isInteger(lo) && hi >= lo))
     throw new RangeError("Invalid production model");
-  const key = `${pp}:${rule}`;
+  const key = `${pp}:${lo}:${hi}`;
   if (quantityCache.has(key)) return quantityCache.get(key);
-  const f = rule === "round" ? Math.round : Math.floor;
   let sum = 0;
-  let n = 0;
-  for (let b = WOODEN_BUDGET.min; b <= WOODEN_BUDGET.max; b++) {
-    sum += Math.max(1, f(b / pp));
-    n++;
-  }
-  quantityCache.set(key, sum / n);
-  return sum / n;
+  for (let b = lo; b <= hi; b++) sum += woodenUnits(b, pp);
+  const e = sum / (hi - lo + 1);
+  quantityCache.set(key, e);
+  return e;
 }
 
 /**
  * What a wooden case opens for, with `priceOf(code)` the gold a unit fetches
- * (the best bid). { ev, evRound, rows, tiers, complete, missing }; a resource
- * without a price counts zero and is named in `missing`.
+ * (the best bid). { ev, rows, tiers, complete, missing }; a resource without
+ * a price counts zero and is named in `missing`. With `quoteOf(code, units)`
+ * each amount is walked through that resource's book instead.
  */
-export function woodenCaseValue(priceOf, rule = "floor", quoteOf = null) {
+export function woodenCaseValue(priceOf, quoteOf = null) {
   const rows = [];
   const missing = [];
   for (const t of WOODEN_TIERS) {
+    const [lo, hi] = t.budget;
     for (const code of t.items) {
       const price = priceOf(code);
       let ok = positive(price) != null;
-      const eQty = expectedQty(WOODEN_PP[code], rule);
+      const eQty = expectedQty(WOODEN_PP[code], t.budget);
       let gold = ok ? eQty * Number(price) : 0;
       if (quoteOf) {
         let total = 0;
-        for (
-          let budget = WOODEN_BUDGET.min;
-          budget <= WOODEN_BUDGET.max;
-          budget++
-        ) {
-          const units = Math.max(1, Math[rule](budget / WOODEN_PP[code]));
-          const q = quoteOf(code, units);
+        for (let budget = lo; budget <= hi; budget++) {
+          const q = quoteOf(code, woodenUnits(budget, WOODEN_PP[code]));
           if (!q.complete) ok = false;
           total += q.value ?? 0;
         }
-        gold = total / (WOODEN_BUDGET.max - WOODEN_BUDGET.min + 1);
+        gold = total / (hi - lo + 1);
       }
       if (!ok) missing.push(code);
       rows.push({
@@ -163,17 +175,7 @@ export function woodenCaseValue(priceOf, rule = "floor", quoteOf = null) {
     };
   });
   const ev = tiers.reduce((s, t) => s + t.contribution, 0);
-  const round =
-    rule === "round" ? null : woodenCaseValue(priceOf, "round", quoteOf);
-  const evRound = round?.ev ?? ev;
-  return {
-    ev,
-    evRound,
-    rows,
-    tiers,
-    complete: missing.length === 0 && (round?.complete ?? true),
-    missing: [...new Set([...missing, ...(round?.missing ?? [])])],
-  };
+  return { ev, rows, tiers, complete: missing.length === 0, missing };
 }
 
 // --------------------------------------------------------- the battle cases -
@@ -484,7 +486,7 @@ export function casesSummary({ books, avg, sellFrom = "never" }) {
   const bidOf = (c) => num(b[c]?.bid);
   const avgOf = (c) => (avg ? num(avg[c]) : null);
   const scrapBid = bidOf("scraps");
-  const wooden = woodenCaseValue(bidOf, "floor", (code, units) =>
+  const wooden = woodenCaseValue(bidOf, (code, units) =>
     quote(units, b[code]?.bids),
   );
   const rows = CASE_CODES.map((code) => {
@@ -499,7 +501,6 @@ export function casesSummary({ books, avg, sellFrom = "never" }) {
     let policy = null;
     if (code === "woodenCase") {
       openValue = wooden.ev;
-      openBand = [wooden.ev, wooden.evRound];
       complete = wooden.complete;
     } else {
       const scrapQuote = caseScrapQuote(code, b.scraps?.bids);

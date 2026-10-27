@@ -790,6 +790,7 @@ export function createEquipment({
     const readRows = (root) => [
       ...dom.offerRows(root, palette, rowCache),
       ...dom.auctionRows(root, palette, rowCache),
+      ...dom.cardRows(root, palette, rowCache),
     ];
     const scoped = listRoot?.isConnected && !periodic ? readRows(listRoot) : [];
     let rows = scoped;
@@ -835,17 +836,30 @@ export function createEquipment({
     const valuations = rows.map((r) => {
       const auction = r.kind === "auction";
       const slot = dom.slotFromAlt(r.alt);
-      const stats = auction ? readStatBlock(r.tokens) : readStats(r.lines);
+      const stats =
+        r.kind === "card"
+          ? r.stats
+          : auction
+            ? readStatBlock(r.tokens)
+            : readStats(r.lines);
       // Trust the row first; a just-changed grid selection can precede replacement of the list. The row's image
       // named by its item code says the rarity outright; a skin's name does not, and then its frame does (an
       // auction card's frame has no border: there the tier its stat falls in says it, as in the picker).
       const named = dom.rarityFromItemCode(r.alt) ? r.alt : null;
       const borderRarity = dom.rarityFromBorder(r.border, palette);
-      const rowCode = auction
-        ? (named ?? tileCode(slot, stats.stats) ?? codeFor(slot, borderRarity))
-        : (codeFor(slot, dom.rarityFromItemCode(r.alt) ?? borderRarity) ??
-          named);
-      const rarity = dom.rarityFromItemCode(rowCode ?? r.alt) ?? borderRarity;
+      const rowCode =
+        r.kind === "card"
+          ? r.code
+          : auction
+            ? (named ??
+              tileCode(slot, stats.stats) ??
+              codeFor(slot, borderRarity))
+            : (codeFor(slot, dom.rarityFromItemCode(r.alt) ?? borderRarity) ??
+              named);
+      const rarity =
+        r.kind === "card"
+          ? r.rarity
+          : (dom.rarityFromItemCode(rowCode ?? r.alt) ?? borderRarity);
       // an auction card's buttons include the tax and its prices do not: no verdict until the two agree
       const tax = auction
         ? dom.auctionTax({ price: r.price, max: r.max }, noticeTax)
@@ -940,9 +954,12 @@ export function createEquipment({
         bidding,
       };
     });
-    // the asks on the page, for the sell form's suggestion (an auction's prices are not asks)
+    // the asks on the page, for the sell form's suggestion (an auction's prices are not asks, and the
+    // player's own offers are not asks to undercut)
     lastAsks = valuations
-      .filter((r) => r.kind !== "auction" && r.code && r.price > 0)
+      .filter(
+        (r) => r.kind !== "auction" && !r.ownOffer && r.code && r.price > 0,
+      )
       .map((r) => ({
         code: r.code,
         price: r.price,
@@ -960,12 +977,12 @@ export function createEquipment({
         delete row.dataset.scrapSniper;
       }
     const dupes = new Map();
-    // a card that failed the tax check has no price another row can be measured against
+    // a card that failed the tax check, or the player's own offer, has no price another row can be measured against
     const peerRows = valuations.map((r) =>
-      r.taxBad ? { ...r, price: null } : r,
+      r.taxBad || r.ownOffer ? { ...r, price: null } : r,
     );
     for (const [i, r] of valuations.entries()) {
-      if (setup) {
+      if (setup || r.ownOffer) {
         r.row.querySelector(":scope > .ss-verdict")?.remove();
         delete r.row.dataset.scrapSniper;
         continue;
@@ -1019,6 +1036,7 @@ export function createEquipment({
         el = document.createElement("div");
         el.className = "ss-verdict";
         el.dataset.lens = "";
+        if (r.kind === "card") el.dataset.card = "";
         el.addEventListener("click", onAnnotationClick);
         r.row.appendChild(el);
       }
@@ -1073,11 +1091,12 @@ export function createEquipment({
       });
     else removePicker();
     const summary = summarizeOffers(valuations);
+    const actionable = valuations.filter((r) => !r.ownOffer);
     last = {
-      hits: fresh ? valuations.filter((r) => r.v.hit).length : 0,
-      flips: fresh ? valuations.filter((r) => r.flip && !r.v.hit).length : 0,
+      hits: fresh ? actionable.filter((r) => r.v.hit).length : 0,
+      flips: fresh ? actionable.filter((r) => r.flip && !r.v.hit).length : 0,
       bids: fresh
-        ? valuations.filter((r) => r.bidding?.hit && !r.v.hit && !r.flip).length
+        ? actionable.filter((r) => r.bidding?.hit && !r.v.hit && !r.flip).length
         : 0,
       scanned: summary.scanned,
       readable: summary.readable,

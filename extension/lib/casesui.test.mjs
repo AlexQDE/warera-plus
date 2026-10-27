@@ -38,7 +38,7 @@ describe("safe case rendering", () => {
     expect(html).toContain('data-status="fresh"');
     expect(html).toContain("12s ago");
     expect(html).toContain("Top bid depth 20k");
-    expect(html).toContain("Floor/round model band");
+    expect(html).toContain("v0.27 drops: 60/25/12/3 by rarity");
     expect(html).toContain('data-verdict="sell"');
     expect(html).toContain('data-verdict="even"');
   });

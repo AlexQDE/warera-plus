@@ -14,6 +14,8 @@
 // and the selected tile is drawn on top with the others dimmed.
 
 import { RARITIES, WEAPONS } from "./items.mjs";
+import { STAT_RANGES } from "./stats.mjs";
+import { readStatBlock } from "./offers.mjs";
 export { RARITIES } from "./items.mjs";
 export { escapeHtml, fmtQty } from "./format.mjs";
 
@@ -59,6 +61,7 @@ export const RARITY_PALETTE = [
   sample("rare", [23, 48, 101], 12),
   sample("uncommon", [10, 61, 40], 12),
   sample("common", [26, 56, 62], 12),
+  sample("common", [35, 55, 59], 12), // live v0.27 gradient, 2026-10-26
   // hovered frame: theme 700
   sample("mythic", [113, 31, 32], 12),
   sample("legendary", [86, 87, 36], 12),
@@ -285,7 +288,8 @@ export function tileOf(img) {
 }
 
 // textContent, not innerText: this runs for every button on the page and must not force layout.
-const isBuyButton = (b) => /^\s*buy\s*$/i.test(b.textContent || "");
+const isBuyButton = (b) =>
+  !b.closest("[data-lens]") && /^\s*buy\s*$/i.test(b.textContent || "");
 
 /** A row's own text, without the nodes this extension appended to it: cheap (no layout) and stable across our own writes. */
 function nativeRowText(row) {
@@ -393,6 +397,173 @@ export function offerButtonCount(root = document) {
     )
       n++;
   return n;
+}
+
+// ---------- v0.27 live: fixed-price equipment cards (2026-10-26) ----------
+
+/** The first colour stop of the item's gradient frame, never the card or a cost chip. */
+export function rarityFromGradient(gradient, palette = RARITY_PALETTE) {
+  const first = /^linear-gradient\([^,]+,\s*(rgba?\([^)]*\))/.exec(
+    gradient ?? "",
+  );
+  return first ? rarityFromBorder(first[1], palette) : null;
+}
+
+/**
+ * Live cards carry a single Buy (with a rounded cost chip) or Withdraw and
+ * a separate exact price beside "tax incl.". Read only the item's frame for
+ * stats: seller level badges, ages and cost chips are outside it. The outer
+ * card is the grid child, leaving room for a full-width annotation below its
+ * native content. Uses offerRows' cache without layout-derived innerText.
+ */
+export function cardRows(
+  root = document,
+  palette = RARITY_PALETTE,
+  cache = null,
+) {
+  const out = [];
+  const seen = new Set();
+  const filtered = filteredItemCode(
+    root.ownerDocument?.location?.search ?? document.location.search,
+  );
+  for (const button of root.querySelectorAll("button")) {
+    if (
+      button.closest("[data-lens]") ||
+      !/^\s*(?:buy(?![a-z])|withdraw\s*$)/i.test(button.textContent ?? "")
+    )
+      continue;
+    let row = button.parentElement;
+    let img = null;
+    for (let i = 0; row && i < 12; i++, row = row.parentElement) {
+      img = [...row.querySelectorAll("img")].find(
+        (e) =>
+          slotFromAlt(e.getAttribute("alt")) &&
+          !e.closest("[data-lens], button"),
+      );
+      if (img) break;
+    }
+    if (!row || !img) continue;
+    // The live grid holds outer cards, each with one content row. Do not
+    // climb to a list (or take the selected item's average tile as a card),
+    // nor onto the grid itself when the row already is its child.
+    const parent = row.parentElement;
+    if (
+      parent?.parentElement &&
+      getComputedStyle(parent).display !== "grid" &&
+      getComputedStyle(parent.parentElement).display === "grid"
+    )
+      row = parent;
+    if (seen.has(row)) continue;
+    seen.add(row);
+    const pieces = [...row.querySelectorAll("img")].filter(
+      (e) =>
+        slotFromAlt(e.getAttribute("alt")) && !e.closest("[data-lens], button"),
+    );
+    const buttons = [...row.querySelectorAll("button")].filter(
+      (e) => !e.closest("[data-lens]"),
+    );
+    const label = [...row.querySelectorAll("span")].find(
+      (e) =>
+        !e.closest("[data-lens]") &&
+        /^tax incl\.$/i.test(e.textContent?.trim() ?? ""),
+    );
+    if (pieces.length !== 1 || buttons.length !== 1 || !label?.parentElement)
+      continue;
+    const text = nativeRowText(row);
+    let read = cache?.rows.get(row);
+    const tile = tileOf(img);
+    if (!tile) continue;
+    if (!read?.card || read.text !== text) {
+      if (cache) cache.reads++;
+      const tokens = auctionTokens(tile);
+      const priceTokens = auctionTokens(label.parentElement);
+      const priceText =
+        priceTokens.length === 2 && /^tax incl\.$/i.test(priceTokens[1])
+          ? priceTokens[0]
+          : null;
+      // the offer's age ("22m", "3h"; the player's own offer shows "Yours"
+      // instead), off the card's tokens: the sell form's asks are dated by it
+      // (auctionTokens skips the extension's own line and joins "3h" "47m")
+      const age = auctionTokens(row).find((t) => /^(?:\d+\s*[dhm])+$/i.test(t));
+      read = {
+        card: true,
+        text,
+        tokens,
+        age: age || null,
+        stats: readStatBlock(tokens),
+        priceText,
+        price: parsePrice(priceText),
+        style: read?.style,
+      };
+      cache?.rows.set(row, read);
+    }
+    if (
+      !read.style ||
+      read.style.epoch !== (cache?.epoch ?? 0) ||
+      read.style.tile !== tile
+    ) {
+      if (cache) cache.styleReads++;
+      read.style = {
+        epoch: cache?.epoch ?? 0,
+        tile,
+        gradient: getComputedStyle(tile).backgroundImage,
+      };
+    }
+    const alt = img.getAttribute("alt");
+    const slot = slotFromAlt(alt);
+    const gradientRarity = rarityFromGradient(read.style.gradient, palette);
+    const matches = Object.entries(STAT_RANGES).filter(([code, ranges]) => {
+      const sameSlot = WEAPONS.includes(slot)
+        ? WEAPONS.includes(code)
+        : code.startsWith(slot);
+      const bounds = Object.values(ranges);
+      return (
+        sameSlot &&
+        bounds.length === read.stats.stats.length &&
+        bounds.every(
+          ([lo, hi], i) =>
+            read.stats.stats[i] >= lo && read.stats.stats[i] <= hi,
+        )
+      );
+    });
+    const inferred = matches.length === 1 ? matches[0][0] : null;
+    // The tiers' stat ranges have holes between them, so the stats name the
+    // code on their own. The frame's colour is only checked: live frames were
+    // seen for common and epic alone, and a palette miss must not drop a card
+    // the stats read. The selected item (?item=) only stands in when the
+    // stats name nothing and it is the card's own slot: the address changes
+    // a frame before the game replaces the list, and the old cards are not it.
+    const frameAgrees =
+      !inferred ||
+      !gradientRarity ||
+      rarityFromItemCode(inferred) === gradientRarity;
+    const code =
+      inferred ??
+      (targetFromCode(filtered) && slotFromAlt(filtered) === slot
+        ? filtered
+        : null);
+    const ownOffer = /^\s*withdraw\s*$/i.test(button.textContent ?? "");
+    out.push({
+      kind: "card",
+      row,
+      button,
+      img,
+      alt,
+      tile,
+      border: null,
+      rarity: rarityFromItemCode(code),
+      code,
+      frameRarity: gradientRarity,
+      frameAgrees,
+      stats: read.stats,
+      tokens: read.tokens,
+      lines: read.age ? [...read.tokens, read.age] : read.tokens,
+      priceText: read.priceText,
+      price: read.price,
+      ownOffer,
+    });
+  }
+  return out;
 }
 
 // ---------- v0.27: the auction house (dev 2026-10-17) ----------
@@ -674,6 +845,7 @@ export function taxNotice(root = document) {
   if (
     taxCache?.isConnected &&
     root.contains(taxCache) &&
+    !taxCache.closest("[data-lens]") &&
     /market tax/i.test(taxCache.textContent || "")
   )
     return taxCache;
@@ -682,6 +854,7 @@ export function taxNotice(root = document) {
     [...root.querySelectorAll("div")].find((e) => {
       const t = e.textContent || "";
       return (
+        !e.closest("[data-lens]") &&
         /market tax/i.test(t) &&
         t.length < 240 &&
         e.children.length > 0 &&

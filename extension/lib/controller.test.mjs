@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { createController } from "./controller.mjs";
-import { CACHE_VERSION } from "./quality.mjs";
+import { CACHE_VERSION, TTL } from "./quality.mjs";
 
 const NOW = Date.parse("2026-09-16T12:00:00Z");
 const bookData = {
@@ -68,7 +68,141 @@ function setup(fetchImpl = vi.fn(async () => response()), initial = {}) {
   };
 }
 
+describe("pointValue resource", () => {
+  it("shares in-flight reads, caches keyless values for ten minutes, then refreshes", async () => {
+    const pending = deferred();
+    const f = vi.fn(() => pending.promise);
+    const { controller, storage, advance } = setup(f, { settings: {} });
+    const first = controller.handle({ type: "pointValue" });
+    const second = controller.handle({ type: "pointValue", force: true });
+    await vi.waitFor(() => expect(f).toHaveBeenCalledOnce());
+    pending.resolve(response(0.1012, { limit: 100 }));
+    const [a, b] = await Promise.all([first, second]);
+    expect(a).toEqual(b);
+    expect(a).toEqual({
+      pointValue: {
+        value: 0.1012,
+        at: new Date(NOW).toISOString(),
+        attemptedAt: new Date(NOW).toISOString(),
+        cacheVersion: CACHE_VERSION,
+      },
+    });
+    expect(storage.data.pointValue).toEqual(a.pointValue);
+    expect(f.mock.calls[0][1].headers["x-api-key"]).toBeUndefined();
+    expect(TTL.pointValue).toBe(600_000);
+    advance(599_999);
+    expect(await controller.handle({ type: "pointValue" })).toEqual(a);
+    expect(f).toHaveBeenCalledOnce();
+    advance(1);
+    await controller.handle({ type: "pointValue" });
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it("backs off schema errors and keeps the last good value until recovery", async () => {
+    const f = vi
+      .fn()
+      .mockResolvedValueOnce(response(0.1012))
+      .mockResolvedValueOnce(response(0))
+      .mockResolvedValue(response(0.12));
+    const { controller, advance } = setup(f);
+    const first = await controller.handle({ type: "pointValue" });
+    advance(600_000);
+    const failed = await controller.handle({ type: "pointValue" });
+    expect(failed.error).toBe("schema");
+    expect(failed.pointValue).toEqual(first.pointValue);
+    const cooldown = await controller.handle({
+      type: "pointValue",
+      force: true,
+    });
+    expect(cooldown.error).toBe("schema");
+    expect(cooldown.message).toContain("retry in");
+    expect(f).toHaveBeenCalledTimes(2);
+    advance(5000);
+    const recovered = await controller.handle({ type: "pointValue" });
+    expect(recovered.error).toBeUndefined();
+    expect(recovered.pointValue.value).toBe(0.12);
+  });
+
+  it("honors global API cooldowns for the point value and other reads", async () => {
+    const f = vi.fn(async () => response({}, { status: 429 }));
+    const { controller, session } = setup(f);
+    expect((await controller.handle({ type: "pointValue" })).error).toBe(
+      "rate-limited",
+    );
+    expect((await controller.handle({ type: "book", force: true })).error).toBe(
+      "rate-limited",
+    );
+    expect(
+      (await controller.handle({ type: "pointValue", force: true })).error,
+    ).toBe("rate-limited");
+    expect(f).toHaveBeenCalledOnce();
+    expect(session.data.apiHoldUntil).toBe(NOW + 120_000);
+  });
+
+  it("clears the point value on a key change and discards an in-flight old response", async () => {
+    const pending = deferred();
+    const f = vi
+      .fn()
+      .mockResolvedValueOnce(response(0.1012))
+      .mockImplementation(() => pending.promise);
+    const { controller, storage } = setup(f);
+    await controller.handle({ type: "pointValue" });
+    const read = controller.handle({ type: "pointValue", force: true });
+    await vi.waitFor(() => expect(f).toHaveBeenCalledTimes(2));
+    await controller.handle(
+      { type: "saveSettings", settings: { apiKey: "new-test-key" } },
+      { trusted: true },
+    );
+    expect(storage.data.pointValue).toBeUndefined();
+    pending.resolve(response(0.12));
+    expect((await read).error).toBe("superseded");
+    expect(storage.data.pointValue).toBeUndefined();
+  });
+
+  it("clears the point value after key rejection and blocks further reads", async () => {
+    const f = vi.fn(async () => response(0.1012, { limit: 100 }));
+    const { controller, storage } = setup(f, {
+      pointValue: {
+        value: 0.1,
+        at: new Date(NOW).toISOString(),
+        cacheVersion: CACHE_VERSION,
+      },
+    });
+    const r = await controller.handle({ type: "pointValue", force: true });
+    expect(r).toMatchObject({ error: "key-rejected", pointValue: null });
+    expect(storage.data.pointValue).toBeUndefined();
+    expect((await controller.handle({ type: "pointValue" })).error).toBe(
+      "key-rejected",
+    );
+    expect(f).toHaveBeenCalledOnce();
+  });
+});
+
 describe("background controller", () => {
+  it("reads resource books through the multi-code procedure without a key", async () => {
+    const fetchImpl = vi.fn(async (url) => {
+      const parsed = new URL(url);
+      const input = JSON.parse(parsed.searchParams.get("input"));
+      expect(parsed.pathname).toBe(
+        "/trpc/tradingOrder.getTopOrdersPerItemCode",
+      );
+      expect(input.limit).toBe(20);
+      return response(
+        Object.fromEntries(input.itemCodes.map((code) => [code, bookData])),
+        { limit: 100 },
+      );
+    });
+    const { controller } = setup(fetchImpl, { settings: { apiKey: "" } });
+    const result = await controller.handle({ type: "cases" });
+    expect(result.error).toBeUndefined();
+    expect(result.cases.books.steel.bid).toBe(0.2);
+    expect(result.cases.books.iron.ask).toBe(0.21);
+    expect(result.cases.source).toBe("getTopOrdersPerItemCode");
+    const calls = fetchImpl.mock.calls.length;
+    expect(calls).toBe(1);
+    await controller.handle({ type: "cases" });
+    expect(fetchImpl).toHaveBeenCalledTimes(calls);
+  });
   it("lifts a stored SNIPE threshold of 0 from an older schema to the 3% default, but keeps a 0 the player saves", async () => {
     const { controller } = setup(undefined, {
       settings: { apiKey: "test-only-key", minMarginPct: 0, schemaVersion: 4 },

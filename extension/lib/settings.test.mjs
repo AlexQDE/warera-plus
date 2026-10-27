@@ -2,6 +2,12 @@ import { describe, it, expect } from "vitest";
 import { DEFAULTS, SELL_FROM, PANELS, preferences } from "./settings.mjs";
 
 describe("preferences", () => {
+  it("enables the Recruit advisor by default and retains an explicit off choice", () => {
+    expect(DEFAULTS.recruit).toBe(true);
+    expect(preferences().recruit).toBe(true);
+    expect(preferences({ recruit: false }).recruit).toBe(false);
+    expect(preferences({ recruit: "false" }).recruit).toBe(true);
+  });
   it("asks SNIPE for 3% at least by default, and lifts the old default of 0 once, never a chosen value", () => {
     expect(preferences({}).minMarginPct).toBe(3);
     // 0 stored by 3.2 and earlier was the default every save wrote, not a choice

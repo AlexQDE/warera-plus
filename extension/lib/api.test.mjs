@@ -4,6 +4,8 @@ import {
   KEYLESS_LIMIT,
   ApiError,
   fetchBook,
+  fetchPointValue,
+  POINT_VALUE_URL,
   fetchSales,
   fetchHistoryPage,
   fetchInputAverages,
@@ -201,6 +203,83 @@ describe("fetchInputAverages", () => {
   });
 });
 
+describe("fetchPointValue", () => {
+  it("reads the positive point value with no input parameter", async () => {
+    const { fetchImpl, calls } = fake({ body: { result: { data: 0.1012 } } });
+    await expect(fetchPointValue(fetchImpl, " my-key ")).resolves.toBe(0.1012);
+    expect(POINT_VALUE_URL).toBe(
+      "https://api2.warera.io/trpc/gameStat.getPpMoneyValue",
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe(POINT_VALUE_URL);
+    expect(new URL(calls[0].url).searchParams.has("input")).toBe(false);
+    expect(calls[0].opts).toMatchObject({
+      headers: { "x-api-key": "my-key" },
+      credentials: "omit",
+      redirect: "error",
+      cache: "no-store",
+      signal: expect.any(globalThis.AbortSignal),
+    });
+  });
+
+  it("allows keyless reads and rejects a keyless-bucket answer to a key", async () => {
+    const { fetchImpl, calls } = fake({
+      limit: KEYLESS_LIMIT,
+      body: { result: { data: 0.1012 } },
+    });
+    await expect(fetchPointValue(fetchImpl, " ")).resolves.toBe(0.1012);
+    expect(calls[0].opts.headers["x-api-key"]).toBeUndefined();
+    await expect(fetchPointValue(fetchImpl, "wrong")).rejects.toMatchObject({
+      code: "key-rejected",
+    });
+  });
+
+  it.each(
+    [
+      0,
+      -1,
+      NaN,
+      Infinity,
+      -Infinity,
+      null,
+      undefined,
+      true,
+      false,
+      "",
+      "0.1012",
+      {},
+      [],
+    ].map((data) => [data]),
+  )(
+    "rejects a point value that is not a finite positive number: %s",
+    async (data) => {
+      const { fetchImpl } = fake({ body: { result: { data } } });
+      await expect(fetchPointValue(fetchImpl, "")).rejects.toMatchObject({
+        code: "schema",
+      });
+    },
+  );
+
+  it("uses the request timeout and redacts a key echoed by a network error", async () => {
+    const hanging = (url, opts) =>
+      new Promise((_, reject) =>
+        opts.signal.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError")),
+        ),
+      );
+    await expect(
+      fetchPointValue(hanging, "k", { timeoutMs: 20 }),
+    ).rejects.toMatchObject({ code: "timeout" });
+    const down = async () => {
+      throw new Error("failed my-key");
+    };
+    await expect(fetchPointValue(down, "my-key")).rejects.toMatchObject({
+      code: "network",
+      message: "could not reach the API: failed [redacted]",
+    });
+  });
+});
+
 // transaction.getPaginatedTransactions with itemCode (documented in openapi.json)
 // and no userId is the global feed of one item's market fills, newest first,
 // 100 per page with a cursor. Probed 2026-09-03: 100 jet fills spanned ~30 h.
@@ -394,18 +473,14 @@ describe("holdUntil", () => {
   });
 });
 
-// v0.26 cases and trips (2026-09-16). Two procedures the client uses but
-// openapi.json does not list, both answering an accepted key at bucket 500:
-// tradingOrder.getTopOrdersPerItemCode (one call, every code) and
-// gameStat.getEquipmentAvgByCode (the "Current value" the game prints on a
-// tile). tRPC GET batching (?batch=1) verified live: a batch of 3 counted as
-// ONE request against the minute bucket (499 -> 498).
+// Cases and trips: tRPC GET batching (?batch=1), the transport the game's own client uses.
 import {
-  booksUrl,
   batchUrls,
+  booksUrl,
   fetchBooks,
   fetchEquipmentAvg,
   BATCH_URL_BUDGET,
+  BOOK_DEPTH,
 } from "./api.mjs";
 
 const top = (code, bid, ask) => ({
@@ -467,7 +542,7 @@ describe("batchUrls", () => {
 });
 
 describe("fetchBooks", () => {
-  it("reads every code in one call and flattens the best bid and ask per code", async () => {
+  it("tries the multi-code procedure first and flattens each book", async () => {
     const { fetchImpl, calls } = fake({
       body: {
         result: {
@@ -483,9 +558,17 @@ describe("fetchBooks", () => {
       "woodenCase",
       "oil",
       "scraps",
+      "oil",
     ]);
     expect(calls).toHaveLength(1);
+    const url = new URL(calls[0].url);
+    expect(url.pathname).toBe("/trpc/tradingOrder.getTopOrdersPerItemCode");
     expect(calls[0].url).toBe(booksUrl(["woodenCase", "oil", "scraps"]));
+    expect(url.searchParams.has("batch")).toBe(false);
+    expect(JSON.parse(url.searchParams.get("input"))).toEqual({
+      itemCodes: ["woodenCase", "oil", "scraps"],
+      limit: BOOK_DEPTH,
+    });
     expect(calls[0].opts.headers["x-api-key"]).toBe("my-key");
     expect(r.books.woodenCase).toMatchObject({
       bid: 7.5,
@@ -503,14 +586,49 @@ describe("fetchBooks", () => {
     expect(r.limit).toBe(500);
   });
 
+  it.each(["api", 404, 405])(
+    "falls back to getTopOrders batches after %s",
+    async (failure) => {
+      const first = fake({
+        status: failure === "api" ? 200 : failure,
+        body: { error: { message: "procedure unavailable" } },
+      });
+      const fallback = fake({
+        body: [
+          { result: { data: top("oil", 1, 2) } },
+          { result: { data: top("scraps", 3, 4) } },
+        ],
+      });
+      const calls = [];
+      const fetchImpl = (url, opts) => {
+        calls.push(url);
+        return (calls.length === 1 ? first : fallback).fetchImpl(url, opts);
+      };
+      const r = await fetchBooks(fetchImpl, "my-key", ["oil", "scraps", "oil"]);
+      expect(calls).toHaveLength(2);
+      expect(calls[0]).toBe(booksUrl(["oil", "scraps"]));
+      const url = new URL(calls[1]);
+      expect(url.pathname).toBe(
+        "/trpc/tradingOrder.getTopOrders,tradingOrder.getTopOrders",
+      );
+      expect(url.searchParams.get("batch")).toBe("1");
+      expect(JSON.parse(url.searchParams.get("input"))).toEqual({
+        0: { itemCode: "oil", limit: BOOK_DEPTH },
+        1: { itemCode: "scraps", limit: BOOK_DEPTH },
+      });
+      expect(fallback.calls[0].opts.headers["x-api-key"]).toBe("my-key");
+      expect(r.source).toBe("getTopOrders");
+      expect(r.books.oil).toMatchObject({ bid: 1, ask: 2 });
+      expect(r.books.scraps).toMatchObject({ bid: 3, ask: 4 });
+    },
+  );
+
   it("reads every book when one holds an order that trades nothing (dev 2026-10-17: bread bought at 0, 999,999 of it)", async () => {
     const bread = top("bread", 0.31, 0.33);
     bread.buyOrders.push({ ...bread.buyOrders[0], price: 0, quantity: 999999 });
     const { fetchImpl } = fake({
       body: {
-        result: {
-          data: { woodenCase: top("woodenCase", 7.5, 7.647), bread },
-        },
+        result: { data: { woodenCase: top("woodenCase", 7.5, 7.647), bread } },
       },
     });
     const r = await fetchBooks(fetchImpl, "", ["woodenCase", "bread"]);
@@ -520,44 +638,6 @@ describe("fetchBooks", () => {
       bidQty: 40,
       bids: [{ price: 0.31, quantity: 40 }],
     });
-  });
-
-  it("falls back to the documented getTopOrders, batched, when the multi-code procedure is gone", async () => {
-    const calls = [];
-    const fetchImpl = async (url, opts) => {
-      calls.push({ url, opts });
-      const headers = new Headers({
-        "ratelimit-limit": "500",
-        "ratelimit-remaining": "400",
-        "ratelimit-reset": "60",
-      });
-      if (url.includes("getTopOrdersPerItemCode"))
-        return {
-          ok: false,
-          status: 404,
-          headers,
-          json: async () => ({
-            error: { message: "No procedure found on path" },
-          }),
-        };
-      return {
-        ok: true,
-        status: 200,
-        headers,
-        json: async () => [
-          { result: { data: top("oil", 0.226, 0.242) } },
-          { result: { data: top("scraps", 0.221, 0.223) } },
-        ],
-      };
-    };
-    const r = await fetchBooks(fetchImpl, "k", ["oil", "scraps"]);
-    expect(calls).toHaveLength(2);
-    expect(calls[1].url).toContain(
-      "tradingOrder.getTopOrders,tradingOrder.getTopOrders?batch=1",
-    );
-    expect(r.books.oil.bid).toBe(0.226);
-    expect(r.books.scraps.ask).toBe(0.223);
-    expect(r.source).toBe("getTopOrders");
   });
 
   it("reads without a key, and rejects a keyless-bucket answer to a wrong one", async () => {
@@ -575,6 +655,61 @@ describe("fetchBooks", () => {
     await expect(
       fetchBooks(keyless.fetchImpl, "wrong", ["oil"]),
     ).rejects.toMatchObject({ code: "key-rejected" });
+  });
+
+  it.each([401, 403, 429, 500])(
+    "propagates HTTP %s without another path",
+    async (status) => {
+      const { fetchImpl, calls } = fake({ status });
+      await expect(fetchBooks(fetchImpl, "", ["oil"])).rejects.toMatchObject({
+        code:
+          status === 429
+            ? "rate-limited"
+            : [401, 403].includes(status)
+              ? "needs-key"
+              : "http",
+      });
+      expect(calls).toHaveLength(1);
+    },
+  );
+
+  it("rejects failed slots, malformed envelopes and malformed books", async () => {
+    for (const [body, code] of [
+      [[{ error: { message: "failed" } }], "api"],
+      [[{}], "api"],
+      [[], "schema"],
+      [[{ result: { data: {} } }], "schema"],
+    ]) {
+      const missing = fake({ body: { error: { message: "missing" } } });
+      const fallback = fake({ body });
+      const fetchImpl = (url, opts) =>
+        (new URL(url).searchParams.has("batch") ? fallback : missing).fetchImpl(
+          url,
+          opts,
+        );
+      await expect(fetchBooks(fetchImpl, "", ["oil"])).rejects.toMatchObject({
+        code,
+      });
+    }
+  });
+
+  it("propagates a malformed multi-code book without a fallback", async () => {
+    const { fetchImpl, calls } = fake({
+      body: { result: { data: { oil: {} } } },
+    });
+    await expect(fetchBooks(fetchImpl, "", ["oil"])).rejects.toMatchObject({
+      code: "schema",
+    });
+    expect(calls).toHaveLength(1);
+  });
+
+  it("does not request an empty list", async () => {
+    const { fetchImpl, calls } = fake();
+    expect(await fetchBooks(fetchImpl, "", [])).toMatchObject({
+      books: {},
+      source: "getTopOrders",
+    });
+    expect(calls).toHaveLength(0);
   });
 });
 

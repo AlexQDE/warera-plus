@@ -85,7 +85,7 @@ The screenshots show the extension's real interface and numbers its own code com
 
 - `storage`: Saves the user's settings, their optional WarEra API key, short-lived caches of market prices and the user's own game transaction history, all locally in this browser.
 - `unlimitedStorage`: The user's whole game transaction history (tens of thousands of rows, several MB) is kept locally so the Ledger can show results since the start of their profile without reading it again; it outgrows the default quota.
-- Host permission `https://api2.warera.io/*`: Reads market order books, average prices, item sales and, with the user's own key, the user's own transactions from the game's official API. No other host is contacted.
+- Host permission `https://api2.warera.io/*`: Reads market order books, average prices, the production point value, item sales and, with the user's own key, the user's own transactions from the game's official API. No other host is contacted.
 - Content script on `https://app.warera.io/*`: Shows tags and values on the game's market offers, a bar with the craft and ledger tabs, and estimates inside the game's craft and case windows. It only reads the page; it never presses the game's buttons or makes transactions.
 - Web accessible resources (if asked): The content script loads the extension's own modules with dynamic `import()`, which Chrome allows only for resources accessible to the page; they are code only, exposed to app.warera.io only.
 

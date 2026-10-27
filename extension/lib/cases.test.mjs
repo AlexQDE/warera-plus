@@ -5,6 +5,7 @@ import {
   CASE_ODDS,
   GEAR_CODES,
   expectedQty,
+  woodenUnits,
   woodenCaseValue,
   caseScrapValue,
   caseMarketValue,
@@ -16,7 +17,8 @@ import {
 } from "./cases.mjs";
 
 // Best bids pinned 2026-09-16T09:26Z (data/woodcase/pin-2026-09-16T09-26-23-574Z.json),
-// the pin src/woodcase/sim.mjs prints as "open EV at bid: 6.12 gold (floor) / 6.52 (round)".
+// the pin src/woodcase/sim.mjs prints as "open EV at bid: 6.12 gold (floor) / 6.52 (round)"
+// under the v0.26 rules; the v0.27 rules open the same bids for 7.84.
 const BIDS = {
   cookedFish: 7.981,
   heavyAmmo: 2.673,
@@ -46,32 +48,39 @@ const BIDS = {
 const bidOf = (c) => BIDS[c] ?? null;
 
 describe("the wooden case rules", () => {
-  it("carries the four tiers of the patch notes, 20 resources, 100% in all", () => {
-    expect(WOODEN_TIERS.map((t) => t.pct)).toEqual([2, 13, 20, 65]);
+  it("carries the four v0.27 rarities, their budgets, 20 resources, 100% in all", () => {
+    expect(WOODEN_TIERS.map((t) => t.pct)).toEqual([3, 12, 25, 60]);
+    expect(WOODEN_TIERS.map((t) => t.budget)).toEqual([
+      [160, 260],
+      [80, 130],
+      [40, 70],
+      [20, 40],
+    ]);
     expect(WOODEN_TIERS.flatMap((t) => t.items)).toHaveLength(20);
     expect(WOODEN_TIERS.reduce((s, t) => s + t.pct, 0)).toBe(100);
     for (const code of WOODEN_TIERS.flatMap((t) => t.items))
       expect(WOODEN_PP[code]).toBeGreaterThan(0);
   });
 
-  it("expects the budget divided by the production points, floored, never below one", () => {
-    expect(expectedQty(40)).toBeCloseTo(62 / 61, 6); // 20..39 -> 1 (floor 0 lifted), 40..79 -> 1, 80 -> 2
-    expect(expectedQty(16)).toBeCloseTo(161 / 61, 6);
-    expect(expectedQty(1)).toBe(50);
-    expect(expectedQty(200)).toBe(1);
-    expect(expectedQty(40, "round")).toBeCloseTo(
-      (20 * 1 + 20 * 1 + 20 * 2 + 1 * 2) / 61,
-      6,
-    ); // 20..39 -> 1 (0 or 1 lifted to 1), 40..59 -> 1, 60..80 -> 2
+  it("expects the rarity's budget divided by the production points, rounded, never below one", () => {
+    // livestock, common 20..40: 20..29 -> 1, 30..40 -> 2 (47.6% / 52.4%;
+    // 13,155 live opens gave 430 / 476 of 906)
+    expect(woodenUnits(29, 20)).toBe(1);
+    expect(woodenUnits(30, 20)).toBe(2);
+    expect(expectedQty(20, [20, 40])).toBeCloseTo(32 / 21, 9);
+    // cooked fish, epic 160..260: 4 x 20, 5 x 40, 6 x 40, 7 x 1 (130 / 20 = 6.5 rounds up)
+    expect(expectedQty(40, [160, 260])).toBeCloseTo(527 / 101, 9);
+    expect(expectedQty(1, [20, 40])).toBe(30);
+    expect(expectedQty(200, [160, 260])).toBe(1);
+    expect(() => expectedQty(20)).toThrow(RangeError);
   });
 
-  it("opens for 6.12 gold at the pinned bids (round rule 6.52 as the band)", () => {
+  it("opens for 7.84 gold at the pinned bids", () => {
     const v = woodenCaseValue(bidOf);
-    expect(v.ev).toBeCloseTo(6.117759, 5);
-    expect(v.evRound).toBeCloseTo(6.516059, 5);
+    expect(v.ev).toBeCloseTo(7.840861, 5);
     expect(v.complete).toBe(true);
     expect(v.rows).toHaveLength(20);
-    expect(v.rows.find((r) => r.code === "oil").gold).toBeCloseTo(12.05, 6);
+    expect(v.rows.find((r) => r.code === "oil").gold).toBeCloseTo(13.255, 6);
     expect(v.tiers.map((t) => t.tier)).toEqual([
       "epic",
       "rare",
@@ -84,7 +93,7 @@ describe("the wooden case rules", () => {
     const v = woodenCaseValue((c) => (c === "cocain" ? null : BIDS[c]));
     expect(v.complete).toBe(false);
     expect(v.missing).toEqual(["cocain"]);
-    expect(v.ev).toBeLessThan(6.117759);
+    expect(v.ev).toBeLessThan(7.840861);
   });
 });
 
@@ -261,9 +270,11 @@ describe("casesSummary", () => {
     expect(s.rows.map((r) => r.code)).toEqual(["woodenCase", "case1", "case2"]);
     const wooden = s.rows[0];
     expect(wooden.bid).toBe(7.55);
-    expect(wooden.openValue).toBeCloseTo(6.117759, 5);
+    expect(wooden.openValue).toBeCloseTo(7.840861, 5);
+    expect(wooden.openBand).toBeNull();
     expect(wooden.openScrap).toBeNull();
-    expect(wooden.verdict).toBe("sell");
+    // the bid sits within 10% of the opening value: EVEN (it was SELL at 6.12)
+    expect(wooden.verdict).toBe("even");
     const c1 = s.rows[1];
     expect(c1.openScrap).toBeCloseTo(
       caseScrapQuote("case1", books.scraps.bids).value,

@@ -18,6 +18,8 @@ import { SCRAP_LADDER } from "./ladder.mjs";
 import { windowFills } from "./similar.mjs";
 import { createCraftDesk } from "./craftdesk.mjs";
 import { createDialogs } from "./dialogs.mjs";
+import { createRecruit, readRecruitDialog } from "./recruit.mjs";
+import { createTrain, readTrainDialog } from "./train.mjs";
 import { casesStripHtml, tripLineHtml } from "./casesview.mjs";
 import { mountBar, headHtml, BAR_ID } from "./panel.mjs";
 import { panel, setHtml, notice, clock } from "./ui.mjs";
@@ -40,6 +42,7 @@ export async function startLens(runtime = chrome.runtime) {
     book: null,
     cases: null,
     avg: null,
+    pointValue: null,
     sales: null,
     salesByCode: {},
     salesErrors: {},
@@ -65,8 +68,12 @@ export async function startLens(runtime = chrome.runtime) {
   let freshSignature = "";
   let roots = [];
   let salesWanted = null;
+  let recruitRoot = null;
+  const recruit = createRecruit();
+  let trainRoot = null;
+  const trainer = createTrain();
   const signature = () =>
-    ["book", "cases", "avg"]
+    ["book", "cases", "avg", "pointValue"]
       .map((k) =>
         freshness(
           state[k]?.at,
@@ -111,6 +118,7 @@ export async function startLens(runtime = chrome.runtime) {
         state.book = null;
         state.cases = null;
         state.avg = null;
+        state.pointValue = null;
         state.sales = null;
         state.salesByCode = {};
         state.salesErrors = {};
@@ -196,6 +204,7 @@ export async function startLens(runtime = chrome.runtime) {
         state.book = null;
         state.cases = null;
         state.avg = null;
+        state.pointValue = null;
         state.sales = null;
         state.salesByCode = {};
         state.salesErrors = {};
@@ -652,6 +661,40 @@ export async function startLens(runtime = chrome.runtime) {
         : (dialogs.clear(), null);
     context.dialog = shown?.kind ?? null;
     if (shown?.root) nextRoots.push(shown.root);
+    const recruits =
+      state.settings.recruit && !state.setup
+        ? recruit.render({
+            pointValue: state.pointValue,
+            error: state.errors.pointValue,
+            books: state.cases?.books,
+            // a failed refresh of the books leaves them unpriced, as on the Cases strip
+            booksAt: state.errors.cases ? null : state.cases?.at,
+          })
+        : (recruit.clear(), null);
+    context.recruit = recruits?.root ?? null;
+    if (context.recruit) {
+      nextRoots.push(context.recruit);
+      if (recruitRoot !== context.recruit) {
+        // wages rest on the point value; the company's product and inputs are priced from the case books (all 20 resources)
+        void read("pointValue");
+        void read("cases");
+      }
+    }
+    recruitRoot = context.recruit;
+    const training =
+      state.settings.recruit && !state.setup && readTrainDialog()
+        ? trainer.render({
+            pointValue: state.pointValue,
+            error: state.errors.pointValue,
+            now: Date.now(),
+          })
+        : (trainer.clear(), null);
+    context.train = training?.root ?? null;
+    if (context.train) {
+      nextRoots.push(context.train);
+      if (trainRoot !== context.train) void read("pointValue");
+    }
+    trainRoot = context.train;
     // The craft window's tier: its six items' sales are read now, today's crafts of it first and ahead of the
     // market's queue, so a fresh craft is priced by its stats at once.
     if (shown?.tier) {
@@ -783,7 +826,19 @@ export async function startLens(runtime = chrome.runtime) {
       context.picker // the Scrap filter of the picker and the dismantle window prices scraps at the bids
     )
       jobs.push(read("book"));
-    if (context.cases || context.travel || craftOpen) jobs.push(read("cases"));
+    // a window closed with Escape leaves its root cached until the next full scan
+    if (
+      context.cases ||
+      context.travel ||
+      craftOpen ||
+      context.recruit?.isConnected
+    )
+      jobs.push(read("cases"));
+    if (
+      (context.recruit && readRecruitDialog()) ||
+      (context.train && readTrainDialog())
+    )
+      jobs.push(read("pointValue"));
     // Every row is valued at the game's average until its item's fills are read; the craft board is built from them.
     if (context.equipment || craftOpen || (context.cases && wantsAverages()))
       jobs.push(read("avg"));
@@ -838,6 +893,8 @@ export async function startLens(runtime = chrome.runtime) {
     observer.disconnect();
     removeBar();
     dialogs.dispose();
+    recruit.dispose();
+    trainer.clear();
     equipment.picker(null, false);
     document.getElementById("scrap-sniper-cases")?.remove();
     for (const el of document.querySelectorAll(".ss-trip")) el.remove();

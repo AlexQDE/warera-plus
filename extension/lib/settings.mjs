@@ -29,6 +29,7 @@ export const DEFAULTS = Object.freeze({
   cases: true,
   travel: true,
   picker: true,
+  recruit: true,
   sellFrom: "epic",
   craft: true,
   /** The player's own id for the ledger; null means "read it off the game page's own-profile links". */
@@ -83,6 +84,7 @@ export function preferences(input = {}) {
     cases: input.cases !== false,
     travel: input.travel !== false,
     picker: input.picker !== false,
+    recruit: input.recruit !== false,
     sellFrom: SELL_FROM.includes(/** @type {string} */ (input.sellFrom))
       ? /** @type {string} */ (input.sellFrom)
       : DEFAULTS.sellFrom,
