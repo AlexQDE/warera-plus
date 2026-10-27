@@ -3,6 +3,7 @@ import { beforeEach, afterEach, describe, it, expect, vi } from "vitest";
 import { createCraftDesk } from "./craftdesk.mjs";
 import { DEFAULTS, preferences } from "./settings.mjs";
 import { ALL_GEAR_CODES } from "./items.mjs";
+import { woodenSummary } from "./observed.mjs";
 
 const NOW = Date.parse("2026-10-03T12:00:00Z");
 const iso = (msAgo = 0) => new Date(NOW - msAgo).toISOString();
@@ -340,6 +341,84 @@ describe("the ledger", () => {
     salesWanted: ["tank"],
     approxBefore: "2026-09-08",
     at: iso(),
+  });
+
+  it("opens a windowed wooden ledger with current bids and separate all-source sales context", () => {
+    const openings = [
+      { at: iso(), code: "oil", q: 52, value: 10.6, cost: 7, approx: false },
+      {
+        at: iso(86400e3),
+        code: "iron",
+        q: 20,
+        value: 2,
+        cost: 7,
+        approx: false,
+      },
+    ];
+    const trades = { oil: { sold: 500, earned: 110 } };
+    state.craftsUserId = ME;
+    state.ledger = view();
+    state.cases.books.oil = book(0.25, 0.3);
+    state.cases.books.iron = book(0.1, 0.2);
+    for (const [key, rows] of [
+      ["today", openings.slice(0, 1)],
+      ["week", openings],
+      ["month", openings],
+      ["all", openings],
+    ]) {
+      state.ledger.windows[key].woodenLedger = woodenSummary(rows, trades);
+      state.ledger.windows[key].wooden = {
+        n: rows.length,
+        value: rows.reduce((s, r) => s + r.value, 0),
+        cost: rows.length * 7,
+      };
+    }
+    render("ledger");
+    expect(body.querySelector(".lens-wooden-ledger")).toBeNull();
+    click('[data-action="desk-wooden"]');
+    expect(body.querySelector(".lens-wooden-ledger").textContent).toContain(
+      "Wooden · today",
+    );
+    expect(body.querySelector(".lens-wooden-ledger").textContent).toContain(
+      "Day's prices",
+    );
+    expect(body.querySelector(".lens-wooden-ledger").textContent).toContain(
+      "Today's bids",
+    );
+    expect(body.querySelector('[data-resource="oil"]').textContent).toContain(
+      "13.0",
+    );
+    expect(text()).toContain(
+      "Your sales of these resources (all sources, all time)",
+    );
+    expect(text()).toContain("Context");
+    expect(text()).toContain("500");
+    for (const key of ["week", "month", "all"]) {
+      click(`[data-action="desk-window"][data-window="${key}"]`);
+      expect(
+        body.querySelectorAll(".lens-wooden-ledger [data-resource]"),
+      ).toHaveLength(2);
+      expect(body.querySelector(".lens-wooden-ledger").textContent).toContain(
+        "Cases' cost",
+      );
+      expect(body.querySelector(".lens-wooden-ledger").textContent).toContain(
+        "−1.40",
+      );
+    }
+    click('[data-action="desk-wooden"]');
+    expect(body.querySelector(".lens-wooden-ledger")).toBeNull();
+    state.ledger.windows.today.woodenLedger = woodenSummary([]);
+    state.ledger.windows.today.wooden = { n: 0, value: 0, cost: 0 };
+    click('[data-action="desk-window"][data-window="today"]');
+    click('[data-action="desk-wooden"]');
+    expect(text()).toContain("No wooden openings in this window.");
+    expect(
+      body
+        .querySelector('[data-action="desk-wooden"]')
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+    click('[data-action="desk-wooden"]');
+    expect(body.querySelector(".lens-wooden-ledger")).toBeNull();
   });
   it("shows the worker's view: the result, the money, the pieces, by activity and tier, the recent pieces", () => {
     state.craftsUserId = ME;

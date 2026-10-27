@@ -14,6 +14,7 @@ import {
   tripCost,
   regionsAwayFromText,
   casesSummary,
+  snapshotSummary,
 } from "./cases.mjs";
 
 // Best bids pinned 2026-09-16T09:26Z (data/woodcase/pin-2026-09-16T09-26-23-574Z.json),
@@ -264,6 +265,96 @@ describe("casesSummary", () => {
       .flatMap((g) => [g.weapon, ...g.gear])
       .map((c) => [c, 10]),
   );
+
+  it("compares wooden EV with the ask and walks each ask level at the SNIPE ROI threshold", () => {
+    const ev = casesSummary({ books, avg }).rows[0].openValue;
+    const asks = [
+      { price: ev / 1.2, quantity: 2 },
+      { price: ev / 1.1, quantity: 3 },
+      { price: ev, quantity: 4 },
+    ];
+    const input = { ...books, woodenCase: { ...books.woodenCase, asks } };
+    const row = casesSummary({ books: input, avg, minMarginPct: 5 }).rows[0];
+    expect(row.ask).toBeCloseTo(asks[0].price, 8);
+    expect(row.flipVerdict).toBe("flip");
+    expect(row.askDepth.n).toBe(5);
+    expect(row.askDepth.gain).toBeCloseTo(
+      2 * (ev - asks[0].price) + 3 * (ev - asks[1].price),
+    );
+    expect(row.verdict).toBe("even");
+    const pass = casesSummary({ books: input, avg, minMarginPct: 25 }).rows[0];
+    expect(pass.flipVerdict).toBe("pass");
+    expect(pass.askDepth).toEqual({ n: 0, gain: 0 });
+    // The immutable-snapshot cache includes the threshold.
+    expect(
+      snapshotSummary({ books: input, avg, minMarginPct: 5 }).rows[0]
+        .flipVerdict,
+    ).toBe("flip");
+    expect(
+      snapshotSummary({ books: input, avg, minMarginPct: 25 }).rows[0]
+        .flipVerdict,
+    ).toBe("pass");
+  });
+
+  it("requires complete drops and ask depth for flip, independently of a sealed bid", () => {
+    const input = {
+      ...books,
+      woodenCase: { bids: [], asks: [{ price: 1, quantity: 2 }] },
+    };
+    expect(casesSummary({ books: input, avg }).rows[0]).toMatchObject({
+      verdict: null,
+      flipVerdict: "flip",
+    });
+    expect(
+      casesSummary({ books: { ...input, fish: { bids: [] } }, avg }).rows[0]
+        .flipVerdict,
+    ).toBeNull();
+    expect(
+      casesSummary({
+        books: { ...books, woodenCase: { ...books.woodenCase, asks: [] } },
+        avg,
+      }).rows[0].flipVerdict,
+    ).toBeNull();
+    expect(
+      casesSummary({
+        books: {
+          ...books,
+          woodenCase: {
+            ...books.woodenCase,
+            asks: [{ price: 100, quantity: 3 }],
+          },
+        },
+        avg,
+        minMarginPct: -50,
+      }).rows[0].askDepth.n,
+    ).toBe(0);
+  });
+
+  it("includes an ask exactly at the ROI threshold, and never calls a losing buy a FLIP under a negative threshold", () => {
+    const ev = casesSummary({ books, avg }).rows[0].openValue;
+    const input = {
+      ...books,
+      woodenCase: { ...books.woodenCase, asks: [{ price: 4, quantity: 7 }] },
+    };
+    const edge = casesSummary({
+      books: input,
+      avg,
+      minMarginPct: ((ev - 4) / 4) * 100,
+    }).rows[0];
+    expect(edge.flipVerdict).toBe("flip");
+    expect(edge.askDepth.n).toBe(7);
+    const negative = casesSummary({
+      books: {
+        ...input,
+        woodenCase: { ...input.woodenCase, asks: [{ price: 8, quantity: 2 }] },
+      },
+      avg,
+      minMarginPct: -5,
+    }).rows[0];
+    // the ask (8) is over the opening value: buying it loses, whatever the threshold
+    expect(negative.flipVerdict).toBe("pass");
+    expect(negative.askDepth).toEqual({ n: 0, gain: 0 });
+  });
 
   it("gives one row per case with bid, open values and a verdict, plus the oil ask", () => {
     const s = casesSummary({ books, avg });

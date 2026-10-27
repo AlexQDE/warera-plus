@@ -705,6 +705,16 @@
   border-radius: 8px;
   align-items: center;
 }
+[data-lens] .lens-case-wooden {
+  grid-template-columns: minmax(95px, 1fr) repeat(3, minmax(80px, 1fr)) minmax(
+      150px,
+      1.5fr
+    );
+}
+[data-lens] .lens-case-wooden > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 /* a cell's label on its own line, above its value ("Sealed bid" over "7.500 g"), never run into it */
 [data-lens] .lens-case > div > small {
   display: block;
@@ -910,6 +920,47 @@
 }
 .ss-dialog[data-lens] .lens-section {
   font-size: 12.5px;
+}
+.ss-dialog[data-lens] .lens-wooden-prices {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px 7px;
+}
+.ss-dialog[data-lens] .lens-wooden-prices small {
+  display: block;
+  color: var(--lens-muted);
+  font-size: 10px;
+}
+.ss-dialog[data-lens] .lens-line {
+  overflow-wrap: anywhere;
+}
+[data-lens] button.lens-chip {
+  min-height: 24px;
+  font-size: 11px;
+}
+[data-lens] button.lens-chip[aria-expanded="true"] {
+  border-color: var(--lens-blue);
+}
+[data-lens] .lens-wooden-ledger,
+[data-lens] .lens-wooden-sales {
+  margin: 8px 0;
+  padding: 6px 0;
+  border-top: 1px solid var(--lens-line);
+  font-size: 11px;
+}
+[data-lens] .lens-wooden-ledger h3,
+[data-lens] .lens-wooden-sales h4 {
+  margin: 0 0 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+[data-lens] .lens-wooden-ledger .lens-scroll {
+  overflow-x: auto;
+}
+[data-lens] .lens-wooden-ledger tfoot th,
+[data-lens] .lens-wooden-ledger tfoot td {
+  border-top: 1px solid var(--lens-line);
 }
 
 /* Eco / War: whether gear worn in battle counts */

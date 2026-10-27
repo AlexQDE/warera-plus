@@ -398,7 +398,7 @@ export async function startLens(runtime = chrome.runtime) {
       const open = state.settings.panel;
       void read("book", true);
       if (context.equipment || open === "craft") void read("avg", true);
-      if (open === "craft") void read("cases", true);
+      if (open === "craft" || open === "ledger") void read("cases", true);
       if (salesWanted) void read("sales", true, salesWanted);
       if (state.craftsUserId) void syncHistory(true);
       sched.schedule();
@@ -596,6 +596,8 @@ export async function startLens(runtime = chrome.runtime) {
           busy: state.busy.has("cases"),
           collapsed: state.settings.casesCollapsed,
           sellFrom: state.settings.sellFrom,
+          woodenMode: state.settings.woodenMode,
+          minMarginPct: state.settings.minMarginPct,
         }),
       );
       nextRoots.push(context.cases.parentElement);
@@ -789,6 +791,7 @@ export async function startLens(runtime = chrome.runtime) {
       context.cases ||
       context.travel ||
       craftOpen ||
+      (context.craft && open === "ledger") ||
       context.recruit?.isConnected
     )
       jobs.push(read("cases"));

@@ -16,7 +16,7 @@ import { freshness, TTL } from "./quality.mjs";
 import { tierBoard, bestTier } from "./craftboard.mjs";
 import { itemLabel, slotName, rarityFromItemCode } from "./dom.mjs";
 import { comparableFills } from "./resale.mjs";
-import { localDayOf } from "./observed.mjs";
+import { localDayOf, woodenAtBids } from "./observed.mjs";
 import { spanWords, WINDOW_HOURS } from "./similar.mjs";
 import { modeSwitch, valueHtml, chosenMark } from "./dialogs.mjs";
 
@@ -54,6 +54,7 @@ export function createCraftDesk({ settings, now = Date.now }) {
   let page = 0; // the page of the Ledger's list asked for, newest first
   let source = "all"; // the Ledger's list: every piece, or one source's
   let pages = 1; // how many pages the last view had
+  let woodenOpen = false;
 
   function reset() {
     tier = null;
@@ -61,6 +62,7 @@ export function createCraftDesk({ settings, now = Date.now }) {
     page = 0;
     source = "all";
     pages = 1;
+    woodenOpen = false;
   }
   function clear() {
     reset();
@@ -70,6 +72,10 @@ export function createCraftDesk({ settings, now = Date.now }) {
     const t = e.target.closest("[data-action]");
     if (!t) return false;
     const a = t.dataset.action;
+    if (a === "desk-wooden") {
+      woodenOpen = !woodenOpen;
+      return true;
+    }
     if (a === "desk-tier") {
       const n = Number(t.dataset.tier);
       tier = tier === n ? null : n;
@@ -227,6 +233,37 @@ export function createCraftDesk({ settings, now = Date.now }) {
     all: "all time",
   };
   const TIERS = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
+
+  function woodenLedgerHtml(summary, books, span) {
+    if (!summary) return `<p class="lens-muted">Reading wooden openings…</p>`;
+    const current = woodenAtBids(summary, (code) => books?.[code]?.bid);
+    const cell = (value) => `<td class="lens-num">${value}</td>`;
+    const rows = current.rows
+      .map(
+        (r) =>
+          `<tr data-resource="${esc(r.code)}"><th scope="row">${esc(r.code)}</th>${cell(count(r.n))}${cell(count(r.q))}${cell(gold(r.value))}${cell(gold(r.current))}</tr>`,
+      )
+      .join("");
+    const costs = summary.cost == null ? null : -summary.cost;
+    const missing = [
+      summary.unpriced ? `${count(summary.unpriced)} drops unpriced` : "",
+      summary.costUnknown
+        ? `${count(summary.costUnknown)} case costs unknown`
+        : "",
+      summary.approx
+        ? `${count(summary.approx)} openings at approximate day prices`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    const sales = summary.sales
+      .map(
+        (r) =>
+          `<tr><th scope="row">${esc(r.code)}</th>${cell(count(r.sold))}${cell(gold(r.earned))}</tr>`,
+      )
+      .join("");
+    return `<section class="lens-wooden-ledger" id="lens-wooden-ledger"><h3>Wooden · ${span}</h3><div class="lens-scroll"><table class="lens-crafts"><thead><tr><th>Resource</th><th class="lens-num">Openings</th><th class="lens-num">Quantity</th><th class="lens-num">Day's prices · g</th><th class="lens-num">Today's bids · g</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><th scope="row">Total drops</th>${cell(count(summary.n))}${cell(count(summary.q))}${cell(gold(summary.value))}${cell(gold(current.value))}</tr><tr><th scope="row" colspan="3">Cases' cost at the day's price</th>${cell(money(costs))}${cell("–")}</tr><tr><th scope="row" colspan="3">Net at the day's prices</th>${cell(money(summary.net))}${cell("–")}</tr></tfoot></table></div>${summary.n ? "" : `<p class="lens-muted">No wooden openings in this window.</p>`}${missing ? `<p class="lens-muted">${missing}</p>` : ""}</section><section class="lens-wooden-sales"><h4>Your sales of these resources (all sources, all time)</h4><p class="lens-muted">Context: includes resources from every source; these sales are not profit from the cases.</p>${sales ? `<table class="lens-crafts"><thead><tr><th>Resource</th><th class="lens-num">Quantity sold</th><th class="lens-num">Gold earned</th></tr></thead><tbody>${sales}</tbody></table>` : `<p class="lens-muted">No sales of these resources on record.</p>`}</section>`;
+  }
   /** What a craft's cost charges for the steel, by the craft mode the view was made with. */
   const STEEL_WORDS = {
     auto: "the base steel for a random craft, twice it for a sniper craft (the slot chosen; ◎: picked in the game's craft window when the extension saw the press, faint when told by a streak of the same slot too long for a random craft)",
@@ -292,9 +329,9 @@ export function createCraftDesk({ settings, now = Date.now }) {
           ([t, o]) =>
             `<span class="lens-chip" data-rarity="${esc(t)}">${esc(cap(t))} <small>${count(o.n)}</small>${o.chosen ? ` <small class="lens-pick" title="${esc(`${count(o.chosen)} of ${count(o.n)} sniper crafts (slot chosen): twice the steel`)}">◎${count(o.chosen)}</small>` : ""} ${money(o.estimatedKnown ? o.estimated : null)}</span>`,
         ),
-      ...(w.wooden.n || w.woodenUnpriced
+      ...(w.woodenLedger || w.wooden.n || w.woodenUnpriced
         ? [
-            `<span class="lens-chip"${w.woodenUnpriced ? ` title="${esc(unpricedWooden(w.woodenUnpriced, w.woodenToolboxes ?? 0))}"` : ""}>Wooden <small>${count(w.wooden.n + (w.woodenUnpriced ?? 0))}</small> ${w.wooden.n ? money(w.wooden.value - w.wooden.cost) : "–"}${w.woodenUnpriced ? ` <small>${count(w.woodenUnpriced)} unpriced</small>` : ""}</span>`,
+            `<button type="button" class="lens-chip" data-action="desk-wooden" aria-expanded="${woodenOpen}" aria-controls="lens-wooden-ledger"${w.woodenUnpriced ? ` title="${esc(unpricedWooden(w.woodenUnpriced, w.woodenToolboxes ?? 0))}"` : ""}>Wooden <small>${count(w.woodenLedger?.n ?? w.wooden.n + (w.woodenUnpriced ?? 0))}</small> ${w.woodenLedger ? money(w.woodenLedger.net) : w.wooden.n ? money(w.wooden.value - w.wooden.cost) : "–"}${w.woodenUnpriced ? ` <small>${count(w.woodenUnpriced)} unpriced</small>` : ""}</button>`,
           ]
         : []),
       // v0.27: tools from toolboxes, for the employees; not tradable, so outside every result
@@ -356,7 +393,7 @@ export function createCraftDesk({ settings, now = Date.now }) {
       ? `<div class="lens-scroll" data-scroll="${esc(`ledger:${craftWindow}:${listed}:${shown}`)}"><table class="lens-crafts"><thead><tr><th>When</th><th>Piece</th><th class="lens-num">Cost</th><th class="lens-num">Now</th><th class="lens-num">±</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>${pager}`
       : `<p class="lens-muted">${listed === "all" ? "Nothing in this window." : "None of these in this window."}</p>`;
     return own(
-      `${head}${tiles}${chips ? `<div class="lens-chips">${chips}</div>` : ""}${filters}${list}`,
+      `${head}${tiles}${chips ? `<div class="lens-chips">${chips}</div>` : ""}${woodenOpen ? woodenLedgerHtml(w.woodenLedger, state.cases?.books, span) : ""}${filters}${list}`,
     );
   }
 

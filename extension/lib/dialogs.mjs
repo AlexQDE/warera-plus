@@ -14,6 +14,8 @@ import {
 } from "./dom.mjs";
 import { WEAPONS, RARITIES, isToolCode } from "./items.mjs";
 import { snapshotSummary, CASE_LABELS } from "./cases.mjs";
+import { woodenAtBids } from "./observed.mjs";
+import { freshness, TTL } from "./quality.mjs";
 import { tierBoard } from "./craftboard.mjs";
 import { spanWords, windowWords } from "./similar.mjs";
 
@@ -55,7 +57,9 @@ const CASE_IMAGES = ["case1", "case2", "woodenCase", "toolbox"];
 /**
  * The case a dialog opens, by the images it shows (cases have no skins: the
  * image is named by the code), one of case1, case2, woodenCase, toolbox; null
- * when the dialog shows none of them. v0.27's windows show what a case drops,
+ * when unsure. v0.27's wooden window says "A random resource stack" and
+ * shows resource images, including darkEra ammo skins. Older windows show
+ * what a case drops,
  * not the case: a wooden case lists a case1, a toolbox and a case2 (no other
  * window shows a toolbox next to a case), a toolbox's reel draws tools.
  * @param {Element} dialog
@@ -64,6 +68,8 @@ export function caseFromImage(dialog) {
   const alts = [...dialog.querySelectorAll("img")]
     .filter((img) => !img.closest("[data-lens]"))
     .map((img) => img.getAttribute("alt") ?? "");
+  if (/random resource stack/i.test(nativeLines(dialog).join(" ")))
+    return "woodenCase";
   if (
     alts.includes("toolbox") &&
     (alts.includes("case1") || alts.includes("case2"))
@@ -97,12 +103,9 @@ export function findDialog(root = document) {
     if (open) {
       const text = lines.join(" ");
       const shown = caseFromImage(dialog);
-      // v0.27's toolbox opens into a tool for an employee ("A random employee tool", OPEN buttons and odds too),
-      // and the wooden case ("A random resource stack, or a case") is not one of the two cases priced here:
-      // neither gets the case panel
+      // Toolboxes open into employee tools, with OPEN buttons and odds too; they have no market value.
       const other =
-        (shown != null && shown !== "case1" && shown !== "case2") ||
-        /random (employee )?tool|random resource stack/i.test(text);
+        shown === "toolbox" || /random (employee )?tool/i.test(text);
       if (
         !other &&
         (shown || /total cases opened/i.test(text) || caseFromOdds(lines))
@@ -262,6 +265,8 @@ const TAG = {
   open: ["flip", "OPEN"],
   sell: ["hit", "SELL"],
   even: ["miss", "EVEN"],
+  flip: ["flip", "FLIP"],
+  pass: ["miss", "PASS"],
 };
 
 /** Where the player's own results stand before the history view arrives: on the way, or never without a key. */
@@ -270,6 +275,53 @@ const waitingHtml = (needsKey) =>
     ? `<p class="lens-muted">Your results: your history needs your API key</p>`
     : `<p class="lens-muted">Reading your history…</p>`;
 
+/** Resources have no worn-gear policy. Historical returns and current bid values stay separate. */
+function woodenHtml({
+  row,
+  complete,
+  ledger,
+  books,
+  woodenMode,
+  totalOpened,
+  needsKey,
+  fresh,
+}) {
+  const verdict = fresh
+    ? woodenMode === "flip"
+      ? row?.flipVerdict
+      : row?.verdict
+    : null;
+  const [kind, word] = TAG[verdict] ?? ["miss", "NO SIGNAL"];
+  const now = row
+    ? `<span class="lens-section lens-wooden-prices"><span><small>Open</small> ≈${complete ? gold(row.openValue) : "–"}</span> · <span><small>Sell</small> ${gold(row.bid)}</span> · <span><small>Buy</small> ${gold(row.ask)}</span></span> <span class="lens-tag" data-kind="${kind}">${word}</span>`
+    : `<span class="lens-muted">Reading prices…</span>`;
+  const title = `Wooden case. Open: model EV at resource bids. Sell: sealed bid. Buy: order-book ask as listed. A buyer in a taxed country pays that country's market tax on top. ${woodenMode === "flip" ? "FLIP uses the SNIPE minimum ROI." : "Hold compares the opening value with the sealed bid."}${fresh ? "" : " Prices are stale; recommendation paused."}`;
+  const today = ledger?.windows?.today.woodenLedger;
+  const all = ledger?.windows?.all.woodenLedger;
+  if (!today || !all) return `${head(now, title)}${waitingHtml(needsKey)}`;
+  const current = woodenAtBids(all, (code) => books?.[code]?.bid);
+  const mine = `${line("Today", `${count(today.n)} opened · drops ${signedGold(today.value)} g at the day's prices · cases ${signedGold(today.cost == null ? null : -today.cost)} g · net ${result(today.net)} g`)}${line("All", `${count(all.n)} opened · drops ${gold(all.value)} g at the day's prices · ${gold(current.value)} g at today's bids (${gold(current.perCase)} g a case; model EV ${complete ? gold(row?.openValue) : "–"} g) · net ${result(all.net)} g at the day's prices`)}`;
+  const last = all.last
+    ? line(
+        "Last",
+        `${esc(all.last.code)} ×${count(all.last.q)} · ${gold(all.last.value)} g${all.last.approx ? " ≈" : ""}`,
+      )
+    : "";
+  const coverage =
+    totalOpened != null && totalOpened !== all.n
+      ? `<p class="lens-muted">history holds ${count(all.n)} of the game's ${count(totalOpened)} openings</p>`
+      : "";
+  const notes = [
+    all.unpriced ? `${count(all.unpriced)} drops unpriced` : "",
+    all.costUnknown ? `${count(all.costUnknown)} case costs unknown` : "",
+    all.approx ? `${count(all.approx)} openings at approximate day prices` : "",
+  ].filter(Boolean);
+  const missing = notes.length
+    ? `<p class="lens-muted">${notes.join(" · ")}</p>`
+    : "";
+  return `${head(now, title)}${mine}${last}${coverage}${missing}`;
+}
+
 export function caseHtml({
   code,
   cases,
@@ -277,6 +329,10 @@ export function caseHtml({
   sellFrom,
   ledger,
   needsKey = false,
+  woodenMode = "hold",
+  minMarginPct = 3,
+  totalOpened = null,
+  fresh = true,
 }) {
   const mode = ledger?.mode ?? "eco";
   const summary = cases?.books
@@ -284,9 +340,21 @@ export function caseHtml({
         books: cases.books,
         avg: avg?.values ?? null,
         sellFrom,
+        minMarginPct,
       })
     : null;
   const row = summary?.rows.find((r) => r.code === code);
+  if (code === "woodenCase")
+    return woodenHtml({
+      row,
+      complete: summary?.wooden.complete,
+      books: cases?.books,
+      ledger,
+      woodenMode,
+      totalOpened,
+      needsKey,
+      fresh,
+    });
   const [kind, word] = TAG[row?.verdict] ?? TAG.even;
   const now = row
     ? `<span class="lens-section">Open ~${row.complete ? gold(row.openValue) : "–"} · Sell ${gold(row.bid)}</span> <span class="lens-tag" data-kind="${kind}">${word}</span>`
@@ -363,12 +431,12 @@ export function craftHtml({
 
 export function createDialogs({ onAction = () => {}, onMode = () => {} } = {}) {
   let current = null;
-  /** The panel's own Eco / War switch: handled here, kept from the game's dialog. */
+  /** Keep all panel clicks from the game; handle the panel's own Eco / War switch here. */
   const onPanelClick = (e) => {
+    e.stopPropagation();
     const button = e.target?.closest?.('[data-action="ledger-mode"]');
     if (!button) return;
     e.preventDefault();
-    e.stopPropagation();
     onMode(button.dataset.mode === "war" ? "war" : "eco");
   };
   /**
@@ -450,6 +518,23 @@ export function createDialogs({ onAction = () => {}, onMode = () => {} } = {}) {
         );
         if (box && box !== found.dialog && found.dialog.contains(box))
           anchor = box;
+        // A wooden window has one OPEN beside CLOSE: keep the panel above that shared row too.
+        if (opens.length === 1) {
+          for (
+            let n = found.button.parentElement;
+            n && n !== found.dialog;
+            n = n.parentElement
+          ) {
+            if (
+              [...n.querySelectorAll("button")].filter(
+                (b) => !b.closest("[data-lens]"),
+              ).length < 2
+            )
+              continue;
+            anchor = n;
+            break;
+          }
+        }
       }
       anchor.insertAdjacentElement("beforebegin", panel);
     }
@@ -459,6 +544,18 @@ export function createDialogs({ onAction = () => {}, onMode = () => {} } = {}) {
       sellFrom: state.settings?.sellFrom ?? "epic",
       ledger: state.ledger,
       needsKey: state.hasKey === false,
+      woodenMode: state.settings?.woodenMode ?? "hold",
+      minMarginPct: state.settings?.minMarginPct ?? 3,
+      totalOpened: (() => {
+        const match = /([\d,]+)\s+total cases opened/i.exec(
+          nativeLines(found.dialog).join(" "),
+        );
+        return match ? Number(match[1].replaceAll(",", "")) : null;
+      })(),
+      fresh:
+        !state.errors?.cases &&
+        freshness(state.cases?.at, TTL.cases, state.now ?? Date.now()) ===
+          "fresh",
     };
     setHtml(
       panel,

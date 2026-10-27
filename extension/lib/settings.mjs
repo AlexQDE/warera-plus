@@ -42,6 +42,8 @@ export const DEFAULTS = Object.freeze({
   craftSteelMode: /** @type {"auto" | "random" | "chosen"} */ ("auto"),
   /** "eco" leaves gear worn in battle out of the ledger's results; "war" counts it (contracts, bounties). */
   ledgerMode: /** @type {"eco" | "war"} */ ("eco"),
+  /** Hold compares with the sealed bid; flip buys at the ask and sells the resource drops. */
+  woodenMode: /** @type {"hold" | "flip"} */ ("hold"),
   schemaVersion: 6,
 });
 /** Settings saved before this schema wrote the old SNIPE default (0) with every save: it was not a choice. */
@@ -97,5 +99,6 @@ export function preferences(input = {}) {
         ? /** @type {"random" | "chosen"} */ (steel)
         : "auto",
     ledgerMode: input.ledgerMode === "war" ? "war" : "eco",
+    woodenMode: input.woodenMode === "flip" ? "flip" : "hold",
   };
 }

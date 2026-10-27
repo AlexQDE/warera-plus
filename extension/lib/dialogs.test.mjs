@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, it, expect, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { WOODEN_CODES } from "./cases.mjs";
+import { woodenSummary } from "./observed.mjs";
 import {
   caseFromOdds,
   craftTier,
@@ -256,7 +259,7 @@ describe("reading the game's dialogs", () => {
     withImage("toolbox");
     expect(findDialog()).toBeNull();
     withImage("woodenCase");
-    expect(findDialog()).toBeNull();
+    expect(findDialog()).toMatchObject({ kind: "case", code: "woodenCase" });
     caseDialog();
     document
       .querySelector('[role="dialog"] > div')
@@ -274,7 +277,7 @@ describe("reading the game's dialogs", () => {
   const v027Window = ({ line, drops = [], odds, reel }) => {
     document.body.innerHTML = `<main></main><div role="dialog"><div><div>Open</div><div>${line} ${imgs(drops)}</div>${div(odds)}<div>${imgs(reel)}</div><div>Quick animation</div><div>4 Total cases opened</div></div><div class="row"><button>Open all 3</button><button>Open 3</button></div></div>`;
   };
-  it("never prices v0.27's wooden case or toolbox window, which show what they drop and odds like a case's", () => {
+  it("recognizes v0.27's wooden window and leaves the toolbox without a panel", () => {
     const woodenOdds = [
       "1% Mythic",
       "2% Legendary",
@@ -289,14 +292,14 @@ describe("reading the game's dialogs", () => {
       odds: woodenOdds,
       reel: ["bread", "case1", "iron"],
     });
-    expect(findDialog()).toBeNull();
+    expect(findDialog()).toMatchObject({ kind: "case", code: "woodenCase" });
     // its line alone tells it, whatever the reel happens to draw
     v027Window({
       line: "A random resource stack, or a case",
       odds: woodenOdds,
       reel: ["bread", "case1", "iron"],
     });
-    expect(findDialog()).toBeNull();
+    expect(findDialog()).toMatchObject({ kind: "case", code: "woodenCase" });
     const toolOdds = [
       "0.2% Mythic",
       "1.3% Legendary",
@@ -334,6 +337,105 @@ describe("reading the game's dialogs", () => {
 });
 
 describe("annotating them", () => {
+  it("puts the wooden panel before the game's controls, prices history, shows coverage and blocks every panel click", () => {
+    document.documentElement.innerHTML = readFileSync(
+      "fixtures/v027-wooden-window-synthetic.html",
+      "utf8",
+    );
+    const openings = [
+      {
+        at: "2026-10-26T10:00:00Z",
+        code: "oil",
+        q: 52,
+        value: 10.6,
+        cost: 7,
+        approx: false,
+      },
+      {
+        at: "2026-10-25T10:00:00Z",
+        code: "iron",
+        q: 20,
+        value: 2,
+        cost: 7,
+        approx: false,
+      },
+    ];
+    const book = (bid, ask = bid) => ({
+      bid,
+      ask,
+      bids: [{ price: bid, quantity: 20000 }],
+      asks: [{ price: ask, quantity: 20000 }],
+    });
+    const state = {
+      cases: {
+        at: new Date().toISOString(),
+        books: {
+          ...Object.fromEntries(
+            WOODEN_CODES.map((c) => [
+              c,
+              book(c === "oil" ? 0.25 : c === "iron" ? 0.1 : 1),
+            ]),
+          ),
+          woodenCase: book(100, 1),
+        },
+      },
+      settings: { woodenMode: "flip", minMarginPct: 3 },
+      ledger: {
+        mode: "war",
+        windows: {
+          today: { woodenLedger: woodenSummary(openings.slice(0, 1)) },
+          all: { woodenLedger: woodenSummary(openings) },
+        },
+      },
+    };
+    const onAction = vi.fn();
+    const d = createDialogs({ onAction });
+    expect(d.render(state)).toMatchObject({ kind: "case" });
+    const panel = document.querySelector(`.${PANEL_CLASS}`);
+    expect(panel.nextElementSibling.className).toBe("actions");
+    const text = () => panel.textContent.replace(/\s+/g, " ");
+    expect(text()).toContain("Open ≈");
+    expect(text()).toContain("Sell 100 · Buy 1.00");
+    expect(text()).toContain("FLIP");
+    expect(text()).toContain(
+      "Today 1 opened · drops +10.6 g at the day's prices · cases −7.00 g · net +3.60 g",
+    );
+    expect(text()).toContain(
+      "All 2 opened · drops 12.6 g at the day's prices · 15.0 g at today's bids (7.50 g a case",
+    );
+    expect(text()).toContain("net −1.40 g at the day's prices");
+    expect(text()).toContain("Last oil ×52 · 10.6 g");
+    expect(text()).toContain("history holds 2 of the game's 320 openings");
+    expect(panel.querySelector('[data-action="ledger-mode"]')).toBeNull();
+    const gameClick = vi.fn();
+    document
+      .querySelector('[role="dialog"]')
+      .addEventListener("click", gameClick);
+    panel.querySelector(".lens-line").click();
+    panel.click();
+    expect(gameClick).not.toHaveBeenCalled();
+    expect(onAction).not.toHaveBeenCalled();
+    panel.nextElementSibling.querySelector("button").click();
+    expect(gameClick).toHaveBeenCalledOnce();
+    expect(onAction).toHaveBeenCalledWith("case", null);
+    state.settings.woodenMode = "hold";
+    // Native text is read afresh and extension text never enters the game count.
+    [...document.querySelectorAll('[role="dialog"] > div')].find(
+      (el) => el.textContent === "320 Total cases opened",
+    ).textContent = "2 Total cases opened";
+    d.render(state);
+    expect(text()).toContain("SELL");
+    expect(text()).not.toContain("history holds");
+    state.cases.at = new Date(Date.now() - 61000).toISOString();
+    d.render(state);
+    expect(text()).toContain("NO SIGNAL");
+    expect(text()).not.toContain("SELL");
+    state.ledger = null;
+    state.hasKey = false;
+    d.render(state);
+    expect(text()).toContain("needs your API key");
+    d.dispose();
+  });
   it("puts the case's worth, the player's openings and the last opening above the open buttons, in few words", () => {
     caseDialog();
     const d = createDialogs();
