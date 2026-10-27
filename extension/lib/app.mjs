@@ -608,15 +608,16 @@ export async function startLens(runtime = chrome.runtime) {
         line.className = "ss-trip";
         line.dataset.lens = "";
         context.travel.item.appendChild(line);
+        // The line sits inside the game's item, whose click moves the player to the case when the game's
+        // "Quick move & collect on case click" is on: no click on the line reaches it, text included.
         line.addEventListener("click", (e) => {
-          if (e.target.closest("[data-action]")) {
-            e.preventDefault();
-            e.stopPropagation();
-            const name = e.target.closest("[data-action]").dataset.action;
-            if (name === "trip-mode")
-              save({ roundTrip: !state.settings.roundTrip });
-            else action(name);
-          }
+          e.stopPropagation();
+          const target = e.target.closest("[data-action]");
+          if (!target) return;
+          e.preventDefault();
+          if (target.dataset.action === "trip-mode")
+            save({ roundTrip: !state.settings.roundTrip });
+          else action(target.dataset.action);
         });
       }
       for (const el of document.querySelectorAll(".ss-trip"))

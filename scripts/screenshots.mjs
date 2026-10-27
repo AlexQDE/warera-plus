@@ -25,6 +25,9 @@ const opt = (name, fallback) => {
 };
 const outDir = resolve(root, opt("--out", "docs/screenshots"));
 const beforeDir = opt("--before", null);
+const { version } = JSON.parse(
+  await readFile(resolve(root, "extension/manifest.json"), "utf8"),
+);
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE ?? "playwright"
 );
@@ -136,7 +139,7 @@ async function shot(page, name, selector = null) {
 async function openPopup(prefix, width, { advanced = false } = {}) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
   await page.addInitScript(
-    `window.chrome = { runtime: { getManifest: () => ({ version: '${prefix === "/old" ? "1.4.1" : "1.6.0"}' }), sendMessage: async (m) => m.type === 'getSettings' ? { settings: { craftRecipes: { jet: { scraps: 1, steel: 1 }, boots5: { scraps: 1, steel: 1 } } }, hasKey: true, revision: 1, authRevision: 1 } : { settings: {} } } };`,
+    `window.chrome = { runtime: { getManifest: () => ({ version: '${prefix === "/old" ? "1.4.1" : version}' }), sendMessage: async (m) => m.type === 'getSettings' ? { settings: { craftRecipes: { jet: { scraps: 1, steel: 1 }, boots5: { scraps: 1, steel: 1 } } }, hasKey: true, revision: 1, authRevision: 1 } : { settings: {} } } };`,
   );
   await page.goto(`${base}${prefix}/popup.html`, { waitUntil: "networkidle" });
   if (advanced)
@@ -151,7 +154,6 @@ console.log("after:");
 {
   const page = await openMarket({ width: 1280 });
   await shot(page, "market-compact-wide");
-  await page.locator("#scrap-sniper-bar [data-action='collapse']").click();
   await page.locator(".ss-verdict [data-action='details']").first().click();
   await page.waitForTimeout(400);
   await shot(page, "market-details-wide");
@@ -229,7 +231,7 @@ async function bench(prefix) {
   await page.close();
   const delta = (a, b, k) => b[k] - a[k];
   return {
-    build: prefix === "/old" ? "before (1.4.1)" : "after (1.6.0)",
+    build: prefix === "/old" ? "before (1.4.1)" : `after (${version})`,
     rows: 60,
     quiet3s: {
       scans: delta(start, quiet, "scans"),
