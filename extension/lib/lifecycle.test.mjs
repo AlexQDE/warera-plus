@@ -66,6 +66,50 @@ function mockRuntime(overrides = {}) {
 }
 
 describe("SPA lifecycle and DOM work", () => {
+  it("reads employees only for open Recruit or Train windows, with no game clicks", async () => {
+    window.history.replaceState({}, "", "/companies");
+    document.body.innerHTML = "<main></main>";
+    const runtime = mockRuntime();
+    const send = runtime.sendMessage.getMockImplementation();
+    runtime.sendMessage.mockImplementation(async (msg) =>
+      msg.type === "employees"
+        ? { employees: { rows: [], at: new Date().toISOString() } }
+        : send(msg),
+    );
+    const clicks = vi.spyOn(window.HTMLElement.prototype, "click");
+    const reads = () =>
+      runtime.sendMessage.mock.calls.filter(([m]) => m.type === "employees")
+        .length;
+    app = await startLens(runtime);
+    await settle();
+    expect(reads()).toBe(0);
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      readFileSync("fixtures/v027-live-recruit.html", "utf8"),
+    );
+    await settle();
+    expect(reads()).toBe(1);
+    await settle(299_000);
+    expect(reads()).toBe(1);
+    await settle(6000);
+    expect(reads()).toBe(2);
+    document.querySelector('[role="dialog"]').remove();
+    app.scan();
+    await settle(310_000);
+    expect(reads()).toBe(2);
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      readFileSync("fixtures/v027-live-train-mohannad.html", "utf8"),
+    );
+    app.scan();
+    await settle();
+    expect(reads()).toBe(3);
+    document.querySelector('[role="dialog"]').remove();
+    app.scan();
+    await settle(310_000);
+    expect(reads()).toBe(3);
+    expect(clicks).not.toHaveBeenCalled();
+  });
   it("applies wooden mode and ROI changes to the strip and wooden window without clicking game controls", async () => {
     document.body.insertAdjacentHTML(
       "beforeend",
@@ -135,6 +179,9 @@ describe("SPA lifecycle and DOM work", () => {
     expect(reads()).toBe(1);
     // wages rest on the point value: read when the window opens
     expect(pointReads()).toBeGreaterThan(0);
+    expect(
+      runtime.sendMessage.mock.calls.some(([m]) => m.type === "employees"),
+    ).toBe(false);
     expect(document.querySelectorAll(".ss-recruit-value")).toHaveLength(4);
     expect(document.querySelectorAll("[data-lens]")).toHaveLength(5);
     const pointsWhenShown = pointReads();

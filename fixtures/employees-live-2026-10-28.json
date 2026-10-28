@@ -1,0 +1,2682 @@
+[
+ {
+  "_id": "e00000000000000000000001",
+  "company": "c00000000000000000000002",
+  "name": "Rene Hermann",
+  "gender": "male",
+  "age": 27,
+  "base": {
+   "production": 3,
+   "luck": 4,
+   "responsibility": 1
+  },
+  "trained": {
+   "production": 0,
+   "luck": 0,
+   "responsibility": 0
+  },
+  "revealed": {
+   "production": true,
+   "luck": true,
+   "responsibility": true
+  },
+  "traits": [
+   {
+    "code": "quickStudy",
+    "revealed": true
+   }
+  ],
+  "potential": 3,
+  "potentialMax": 9,
+  "wage": 0.064232,
+  "wageExpectation": 0.882,
+  "nationality": "nat-1",
+  "retireAskAt": "2026-12-04T15:04:20.747Z",
+  "createdAt": "2026-10-26T15:04:20.748Z",
+  "updatedAt": "2026-10-28T10:05:13.875Z",
+  "lastTrainedAt": "2026-10-28T10:05:09.845Z",
+  "trainingsToday": 1,
+  "trainingHistory": [
+   {
+    "card": "negotiation",
+    "rarity": "uncommon",
+    "delta": 0.1,
+    "outcome": {
+     "wageExpectation": 1.082
+    },
+    "pickedAt": "2026-10-26T15:04:45.074Z"
+   },
+   {
+    "card": "negotiation",
+    "rarity": "rare",
+    "delta": 0.2,
+    "outcome": {
+     "wageExpectation": 0.882
+    },
+    "pickedAt": "2026-10-27T08:03:26.612Z"
+   },
+   {
+    "card": "secondWind",
+    "rarity": "epic",
+    "delta": 3,
+    "outcome": {
+     "potentialMax": 9
+    },
+    "pickedAt": "2026-10-28T10:05:13.875Z"
+   }
+  ],
+  "wageNegotiated": 0.3,
+  "lastSpecializedDay": "2026-10-28",
+  "specializations": {
+   "lead": 6
+  },
+  "coworkerFiredAts": 1,
+  "careBoosts": [
+   "2026-10-27T04:13:42.316Z"
+  ],
+  "estimate": {
+   "production": 0.85,
+   "wage": 0.064232
+  },
+  "breakdown": {
+   "production": {
+    "base": 3,
+    "trained": 0,
+    "contributions": [
+     {
+      "code": "specialization",
+      "delta": 6,
+      "revealed": true,
+      "percent": true
+     }
+    ],
+    "total": 3
+   },
+   "luck": {
+    "base": 4,
+    "trained": 0,
+    "contributions": [],
+    "total": 4
+   },
+   "responsibility": {
+    "base": 1,
+    "trained": 0,
+    "contributions": [],
+    "total": 1
+   }
+  },
+  "happinessBreakdown": {
+   "base": 50,
+   "contributions": [
+    {
+     "reason": "incomeTax",
+     "delta": -4,
+     "revealed": true
+    },
+    {
+     "reason": "managerCare",
+     "delta": 5,
+     "revealed": true,
+     "until": "2026-10-29T04:13:42.316Z"
+    }
+   ],
+   "shield": 0.1,
+   "mitigated": 0.3999999999999999,
+   "value": 51.4,
+   "quitChance": 0
+  },
+  "productionBonus": {
+   "total": 13.399999999999999,
+   "contributions": [
+    {
+     "source": "management",
+     "percent": 6
+    },
+    {
+     "source": "happiness",
+     "percent": 1.3999999999999986
+    },
+    {
+     "source": "specialization",
+     "percent": 6
+    }
+   ]
+  },
+  "trainingsPerDay": 1
+ },
+ {
+  "_id": "e00000000000000000000002",
+  "company": "c00000000000000000000002",
+  "name": "Douglas Haag",
+  "gender": "male",
+  "age": 19,
+  "base": {
+   "production": 2,
+   "luck": 3,
+   "responsibility": 2
+  },
+  "trained": {
+   "production": 0,
+   "luck": 2,
+   "responsibility": 1
+  },
+  "revealed": {
+   "production": true,
+   "luck": true,
+   "responsibility": true
+  },
+  "traits": [
+   {
+    "code": "climber",
+    "revealed": true
+   }
+  ],
+  "potential": 3,
+  "potentialMax": 5,
+  "wage": 0.039277,
+  "wageExpectation": 0.809,
+  "nationality": "nat-2",
+  "retireAskAt": "2026-12-12T17:31:23.221Z",
+  "createdAt": "2026-10-26T17:31:23.223Z",
+  "updatedAt": "2026-10-28T10:06:33.969Z",
+  "lastTrainedAt": "2026-10-28T10:05:16.995Z",
+  "trainingsToday": 1,
+  "trainingHistory": [
+   {
+    "card": "drill",
+    "rarity": "common",
+    "stat": "luck",
+    "delta": 1,
+    "outcome": {
+     "stat": "luck",
+     "statGain": 1
+    },
+    "pickedAt": "2026-10-26T17:31:32.006Z"
+   },
+   {
+    "card": "drill",
+    "rarity": "common",
+    "stat": "luck",
+    "delta": 1,
+    "outcome": {
+     "stat": "luck",
+     "statGain": 1
+    },
+    "pickedAt": "2026-10-27T08:03:58.847Z"
+   },
+   {
+    "card": "wildCard",
+    "rarity": "uncommon",
+    "outcome": {
+     "stat": "responsibility",
+     "statGain": 1,
+     "gained": [
+      {
+       "code": "climber",
+       "revealed": true
+      }
+     ]
+    },
+    "pickedAt": "2026-10-28T10:06:33.968Z"
+   }
+  ],
+  "lastSpecializedDay": "2026-10-28",
+  "specializations": {
+   "lead": 3
+  },
+  "coworkerFiredAts": 1,
+  "estimate": {
+   "production": 0.53,
+   "wage": 0.039277
+  },
+  "breakdown": {
+   "production": {
+    "base": 2,
+    "trained": 0,
+    "contributions": [
+     {
+      "code": "specialization",
+      "delta": 3,
+      "revealed": true,
+      "percent": true
+     }
+    ],
+    "total": 2
+   },
+   "luck": {
+    "base": 1,
+    "trained": 2,
+    "contributions": [],
+    "total": 3
+   },
+   "responsibility": {
+    "base": 1,
+    "trained": 1,
+    "contributions": [],
+    "total": 2
+   }
+  },
+  "happinessBreakdown": {
+   "base": 50,
+   "contributions": [
+    {
+     "reason": "incomeTax",
+     "delta": -4,
+     "revealed": true
+    }
+   ],
+   "shield": 0.2,
+   "mitigated": 0.7999999999999998,
+   "value": 46.8,
+   "quitChance": 0
+  },
+  "productionBonus": {
+   "total": 5.799999999999997,
+   "contributions": [
+    {
+     "source": "management",
+     "percent": 6
+    },
+    {
+     "source": "happiness",
+     "percent": -3.200000000000003
+    },
+    {
+     "source": "specialization",
+     "percent": 3
+    }
+   ]
+  },
+  "trainingsPerDay": 1
+ },
+ {
+  "_id": "e00000000000000000000003",
+  "company": "c00000000000000000000002",
+  "name": "Laith Al-Shamsi",
+  "gender": "male",
+  "age": 20,
+  "base": {
+   "production": 4,
+   "luck": 1,
+   "responsibility": 4
+  },
+  "trained": {
+   "production": 3,
+   "luck": 0,
+   "responsibility": 0
+  },
+  "revealed": {
+   "production": true,
+   "luck": true,
+   "responsibility": true
+  },
+  "traits": [
+   {
+    "code": "specialist",
+    "revealed": true,
+    "arg": "lead"
+   }
+  ],
+  "potential": 3,
+  "potentialMax": 4,
+  "wage": 0.103412,
+  "wageExpectation": 1.065,
+  "nationality": "nat-3",
+  "retireAskAt": "2026-12-11T22:54:03.062Z",
+  "createdAt": "2026-10-26T22:54:03.063Z",
+  "updatedAt": "2026-10-28T11:02:29.279Z",
+  "lastMovedAt": "2026-10-26T22:56:00.662Z",
+  "lastTrainedAt": "2026-10-28T10:06:47.663Z",
+  "trainingsToday": 1,
+  "trainingHistory": [
+   {
+    "card": "drill",
+    "rarity": "common",
+    "stat": "production",
+    "delta": 1,
+    "outcome": {
+     "stat": "production",
+     "statGain": 1
+    },
+    "pickedAt": "2026-10-26T22:58:08.143Z"
+   },
+   {
+    "card": "drill",
+    "rarity": "common",
+    "stat": "production",
+    "delta": 1,
+    "outcome": {
+     "stat": "production",
+     "statGain": 1
+    },
+    "pickedAt": "2026-10-27T08:04:19.611Z"
+   },
+   {
+    "card": "drill",
+    "rarity": "common",
+    "stat": "production",
+    "delta": 1,
+    "outcome": {
+     "stat": "production",
+     "statGain": 1
+    },
+    "pickedAt": "2026-10-28T10:06:51.960Z"
+   }
+  ],
+  "lastSpecializedDay": "2026-10-28",
+  "specializations": {
+   "lead": 3
+  },
+  "tool": "tool-1",
+  "estimate": {
+   "production": 2.06,
+   "wage": 0.103412
+  },
+  "breakdown": {
+   "production": {
+    "base": 1,
+    "trained": 3,
+    "contributions": [
+     {
+      "code": "specialist",
+      "delta": 3,
+      "revealed": true
+     },
+     {
+      "code": "tool",
+      "delta": 9,
+      "revealed": true,
+      "percent": true
+     },
+     {
+      "code": "specialization",
+      "delta": 3,
+      "revealed": true,
+      "percent": true
+     }
+    ],
+    "total": 7
+   },
+   "luck": {
+    "base": 1,
+    "trained": 0,
+    "contributions": [],
+    "total": 1
+   },
+   "responsibility": {
+    "base": 4,
+    "trained": 0,
+    "contributions": [],
+    "total": 4
+   }
+  },
+  "happinessBreakdown": {
+   "base": 50,
+   "contributions": [
+    {
+     "reason": "incomeTax",
+     "delta": -4,
+     "revealed": true
+    },
+    {
+     "reason": "recentlyMoved",
+     "delta": -5,
+     "revealed": true,
+     "until": "2026-11-02T22:56:00.662Z"
+    },
+    {
+     "reason": "trait",
+     "delta": 5,
+     "code": "specialist",
+     "revealed": true
+    }
+   ],
+   "shield": 0.4,
+   "mitigated": 3.6000000000000005,
+   "value": 49.6,
+   "quitChance": 0
+  },
+  "toolStatus": {
+   "rolledPercent": 9,
+   "isUsable": true,
+   "isBroken": false,
+   "bonusPercent": 9
+  },
+  "toolItem": {
+   "_id": "tool-1",
+   "code": "pickaxe2",
+   "skills": {
+    "production": 9
+   },
+   "state": 94.8,
+   "maxState": 100,
+   "createdAt": "2026-10-27T09:18:22.440Z",
+   "updatedAt": "2026-10-28T11:02:29.084Z",
+   "__v": 0,
+   "employee": "e00000000000000000000003"
+  },
+  "productionBonus": {
+   "total": 17.6,
+   "contributions": [
+    {
+     "source": "management",
+     "percent": 6
+    },
+    {
+     "source": "happiness",
+     "percent": -0.3999999999999986
+    },
+    {
+     "source": "tool",
+     "percent": 9
+    },
+    {
+     "source": "specialization",
+     "percent": 3
+    }
+   ]
+  },
+  "trainingsPerDay": 1
+ },
+ {
+  "_id": "e00000000000000000000004",
+  "company": "c00000000000000000000003",
+  "name": "Hubert Muller",
+  "gender": "male",
+  "age": 22,
+  "base": {
+   "production": 4,
+   "luck": 2,
+   "responsibility": 4
+  },
+  "trained": {
+   "production": 0,
+   "luck": 1,
+   "responsibility": 0
+  },
+  "revealed": {
+   "production": true,
+   "luck": true,
+   "responsibility": true
+  },
+  "traits": [
+   {
+    "code": "craftsman",
+    "revealed": true
+   }
+  ],
+  "potential": 4,
+  "potentialMax": 9,
+  "wage": 0.096712,
+  "wageExpectation": 0.996,
+  "nationality": "nat-1",
+  "retireAskAt": "2026-12-09T14:58:33.700Z",
+  "createdAt": "2026-10-26T14:58:33.700Z",
+  "updatedAt": "2026-10-28T10:06:57.604Z",
+  "lastTrainedAt": "2026-10-28T10:06:54.740Z",
+  "trainingsToday": 1,
+  "lastMovedAt": "2026-10-26T14:59:17.096Z",
+  "trainingHistory": [
+   {
+    "card": "habit",
+    "rarity": "rare",
+    "traitTo": "craftsman",
+    "outcome": {
+     "gained": [
+      {
+       "code": "craftsman",
+       "revealed": true
+      }
+     ]
+    },
+    "pickedAt": "2026-10-26T14:59:22.066Z"
+   },
+   {
+    "card": "negotiation",
+    "rarity": "uncommon",
+    "delta": 0.1,
+    "outcome": {
+     "wageExpectation": 0.996
+    },
+    "pickedAt": "2026-10-27T08:04:33.723Z"
+   },
+   {
+    "card": "secondWind",
+    "rarity": "rare",
+    "delta": 2,
+    "outcome": {
+     "potentialMax": 9
+    },
+    "pickedAt": "2026-10-28T10:06:57.603Z"
+   }
+  ],
+  "lastSpecializedDay": "2026-10-28",
+  "specializations": {
+   "lightAmmo": 3
+  },
+  "coworkerFiredAts": 1,
+  "wageNegotiated": 0.1,
+  "lastEventAt": "2026-10-27T20:08:51.070Z",
+  "estimate": {
+   "production": 1.81,
+   "wage": 0.096712
+  },
+  "breakdown": {
+   "production": {
+    "base": 4,
+    "trained": 0,
+    "contributions": [
+     {
+      "code": "craftsman",
+      "delta": 3,
+      "revealed": true
+     },
+     {
+      "code": "specialization",
+      "delta": 3,
+      "revealed": true,
+      "percent": true
+     }
+    ],
+    "total": 7
+   },
+   "luck": {
+    "base": 1,
+    "trained": 1,
+    "contributions": [],
+    "total": 2
+   },
+   "responsibility": {
+    "base": 4,
+    "trained": 0,
+    "contributions": [],
+    "total": 4
+   }
+  },
+  "happinessBreakdown": {
+   "base": 50,
+   "contributions": [
+    {
+     "reason": "incomeTax",
+     "delta": -4,
+     "revealed": true
+    },
+    {
+     "reason": "recentlyMoved",
+     "delta": -5,
+     "revealed": true,
+     "until": "2026-11-02T14:59:17.096Z"
+    }
+   ],
+   "shield": 0.4,
+   "mitigated": 3.6000000000000005,
+   "value": 44.6,
+   "quitChance": 0
+  },
+  "productionBonus": {
+   "total": 3.6000000000000014,
+   "contributions": [
+    {
+     "source": "management",
+     "percent": 6
+    },
+    {
+     "source": "happiness",
+     "percent": -5.399999999999999
+    },
+    {
+     "source": "specialization",
+     "percent": 3
+    }
+   ]
+  },
+  "trainingsPerDay": 1
+ },
+ {
+  "_id": "e00000000000000000000005",
+  "company": "c00000000000000000000003",
+  "name": "Alyssa Brown",
+  "gender": "female",
+  "age": 24,
+  "base": {
+   "production": 3,
+   "luck": 3,
+   "responsibility": 1
+  },
+  "trained": {
+   "production": 0,
+   "luck": 0,
+   "responsibility": 0
+  },
+  "revealed": {
+   "production": true,
+   "luck": true,
+   "responsibility": true
+  },
+  "traits": [
+   {
+    "code": "rival",
+    "revealed": true
+   }
+  ],
+  "potential": 3,
+  "potentialMax": 7,
+  "wage": 0.073116,
+  "wageExpectation": 1.004,
+  "nationality": "nat-2",
+  "retireAskAt": "2026-12-07T15:05:54.775Z",
+  "createdAt": "2026-10-26T15:05:54.776Z",
+  "updatedAt": "2026-10-28T11:02:29.279Z",
+  "lastTrainedAt": "2026-10-28T10:07:00.261Z",
+  "trainingsToday": 1,
+  "trainingHistory": [
+   {
+    "card": "habit",
+    "rarity": "rare",
+    "traitTo": "rival",
+    "outcome": {
+     "gained": [
+      {
+       "code": "rival",
+       "revealed": true
+      }
+     ]
+    },
+    "pickedAt": "2026-10-26T15:06:40.436Z"
+   },
+   {
+    "card": "negotiation",
+    "rarity": "uncommon",
+    "delta": 0.1,
+    "outcome": {
+     "wageExpectation": 1.104
+    },
+    "pickedAt": "2026-10-27T08:05:50.654Z"
+   },
+   {
+    "card": "negotiation",
+    "rarity": "uncommon",
+    "delta": 0.1,
+    "outcome": {
+     "wageExpectation": 1.004
+    },
+    "pickedAt": "2026-10-28T10:07:59.756Z"
+   }
+  ],
+  "lastSpecializedDay": "2026-10-28",
+  "specializations": {
+   "lightAmmo": 3
+  },
+  "coworkerFiredAts": 1,
+  "wageNegotiated": 0.2,
+  "estimate": {
+   "production": 1.58,
+   "wage": 0.073116
+  },
+  "breakdown": {
+   "production": {
+    "base": 3,
+    "trained": 0,
+    "contributions": [
+     {
+      "code": "rival",
+      "delta": 3,
+      "revealed": true
+     },
+     {
+      "code": "specialization",
+      "delta": 3,
+      "revealed": true,
+      "percent": true
+     }
+    ],
+    "total": 6
+   },
+   "luck": {
+    "base": 3,
+    "trained": 0,
+    "contributions": [],
+    "total": 3
+   },
+   "responsibility": {
+    "base": 1,
+    "trained": 0,
+    "contributions": [],
+    "total": 1
+   }
+  },
+  "happinessBreakdown": {
+   "base": 50,
+   "contributions": [
+    {
+     "reason": "incomeTax",
+     "delta": -4,
+     "revealed": true
+    }
+   ],
+   "shield": 0.1,
+   "mitigated": 0.3999999999999999,
+   "value": 46.4,
+   "quitChance": 0
+  },
+  "productionBonus": {
+   "total": 5.399999999999999,
+   "contributions": [
+    {
+     "source": "management",
+     "percent": 6
+    },
+    {
+     "source": "happiness",
+     "percent": -3.6000000000000014
+    },
+    {
+     "source": "specialization",
+     "percent": 3
+    }
+   ]
+  },
+  "trainingsPerDay": 1
+ },
+ {
+  "_id": "e00000000000000000000006",
+  "company": "c00000000000000000000003",
+  "name": "Tom Murazik",
+  "gender": "male",
+  "age": 46,
+  "base": {
+   "production": 1,
+   "luck": 8,
+   "responsibility": 1
+  },
+  "trained": {
+   "production": 0,
+   "luck": 5,
+   "responsibility": 0
+  },
+  "revealed": {
+   "production": true,
+   "luck": true,
+   "responsibility": true
+  },
+  "traits": [],
+  "potential": 3,
+  "potentialMax": 7,
+  "wage": 0.024858,
+  "wageExpectation": 1.024,
+  "nationality": "nat-2",
+  "retireAskAt": "2026-11-15T19:01:32.692Z",
+  "createdAt": "2026-10-26T19:01:32.693Z",
+  "updatedAt": "2026-10-28T10:08:35.599Z",
+  "lastTrainedAt": "2026-10-28T10:08:03.960Z",
+  "trainingsToday": 1,
+  "trainingHistory": [
+   {
+    "card": "drill",
+    "rarity": "epic",
+    "stat": "luck",
+    "delta": 3,
+    "outcome": {
+     "stat": "luck",
+     "statGain": 3
+    },
+    "pickedAt": "2026-10-26T19:01:51.125Z"
+   },
+   {
+    "card": "drill",
+    "rarity": "uncommon",
+    "stat": "luck",
+    "delta": 2,
+    "outcome": {
+     "stat": "luck",
+     "statGain": 2
+    },
+    "pickedAt": "2026-10-27T08:06:10.244Z"
+   },
+   {
+    "card": "secondWind",
+    "rarity": "rare",
+    "delta": 2,
+    "outcome": {
+     "potentialMax": 7
+    },
+    "pickedAt": "2026-10-28T10:08:35.599Z"
+   }
+  ],
+  "lastSpecializedDay": "2026-10-28",
+  "specializations": {
+   "lightAmmo": 3
+  },
+  "estimate": {
+   "production": 0.26,
+   "wage": 0.024858
+  },
+  "breakdown": {
+   "production": {
+    "base": 1,
+    "trained": 0,
+    "contributions": [
+     {
+      "code": "specialization",
+      "delta": 3,
+      "revealed": true,
+      "percent": true
+     }
+    ],
+    "total": 1
+   },
+   "luck": {
+    "base": 3,
+    "trained": 5,
+    "contributions": [],
+    "total": 8
+   },
+   "responsibility": {
+    "base": 1,
+    "trained": 0,
+    "contributions": [],
+    "total": 1
+   }
+  },
+  "happinessBreakdown": {
+   "base": 50,
+   "contributions": [
+    {
+     "reason": "incomeTax",
+     "delta": -4,
+     "revealed": true
+    }
+   ],
+   "shield": 0.1,
+   "mitigated": 0.3999999999999999,
+   "value": 46.4,
+   "quitChance": 0
+  },
+  "productionBonus": {
+   "total": 5.399999999999999,
+   "contributions": [
+    {
+     "source": "management",
+     "percent": 6
+    },
+    {
+     "source": "happiness",
+     "percent": -3.6000000000000014
+    },
+    {
+     "source": "specialization",
+     "percent": 3
+    }
+   ]
+  },
+  "trainingsPerDay": 1
+ },
+ {
+  "_id": "e00000000000000000000007",
+  "company": "c00000000000000000000004",
+  "name": "Sorayut Chaichana",
+  "gender": "male",
+  "age": 41,
+  "base": {
+   "production": 3,
+   "luck": 3,
+   "responsibility": 1
+  },
+  "trained": {
+   "production": 1,
+   "luck": 2,
+   "responsibility": 0
+  },
+  "revealed": {
+   "production": true,
+   "luck": true,
+   "responsibility": true
+  },
+  "traits": [
+   {
+    "code": "specialist",
+    "revealed": true,
+    "arg": "concrete"
+   }
+  ],
+  "potential": 3,
+  "potentialMax": 3,
+  "wage": 0.079234,
+  "wageExpectation": 1.088,
+  "nationality": "nat-4",
+  "retireAskAt": "2026-11-20T23:04:36.107Z",
+  "createdAt": "2026-10-26T23:04:36.108Z",
+  "updatedAt": "2026-10-28T11:02:29.279Z",
+  "lastMovedAt": "2026-10-26T23:04:46.380Z",
+  "lastTrainedAt": "2026-10-28T10:08:38.295Z",
+  "trainingsToday": 1,
+  "lastSpecializedDay": "2026-10-28",
+  "specializations": {
+   "concrete": 2
+  },
+  "trainingHistory": [
+   {
+    "card": "drill",
+    "rarity": "uncommon",
+    "stat": "luck",
+    "delta": 2,
+    "outcome": {
+     "stat": "luck",
+     "statGain": 2
+    },
+    "pickedAt": "2026-10-27T08:06:27.116Z"
+   },
+   {
+    "card": "negotiation",
+    "rarity": "common",
+    "delta": 0.05,
+    "outcome": {
+     "wageExpectation": 1.088
+    },
+    "pickedAt": "2026-10-27T08:07:06.735Z"
+   },
+   {
+    "card": "drill",
+    "rarity": "common",
+    "stat": "production",
+    "delta": 1,
+    "outcome": {
+     "stat": "production",
+     "statGain": 1
+    },
+    "pickedAt": "2026-10-28T10:08:43.146Z"
+   }
+  ],
+  "wageNegotiated": 0.05,
+  "tool": "tool-2",
+  "estimate": {
+   "production": 1.78,
+   "wage": 0.079234
+  },
+  "breakdown": {
+   "production": {
+    "base": 2,
+    "trained": 1,
+    "contributions": [
+     {
+      "code": "specialist",
+      "delta": 3,
+      "revealed": true
+     },
+     {
+      "code": "tool",
+      "delta": 14,
+      "revealed": true,
+      "percent": true
+     },
+     {
+      "code": "specialization",
+      "delta": 2,
+      "revealed": true,
+      "percent": true
+     }
+    ],
+    "total": 6
+   },
+   "luck": {
+    "base": 1,
+    "trained": 2,
+    "contributions": [],
+    "total": 3
+   },
+   "responsibility": {
+    "base": 1,
+    "trained": 0,
+    "contributions": [],
+    "total": 1
+   }
+  },
+  "happinessBreakdown": {
+   "base": 50,
+   "contributions": [
+    {
+     "reason": "incomeTax",
+     "delta": -4,
+     "revealed": true
+    },
+    {
+     "reason": "recentlyMoved",
+     "delta": -5,
+     "revealed": true,
+     "until": "2026-11-02T23:04:46.380Z"
+    },
+    {
+     "reason": "trait",
+     "delta": 5,
+     "code": "specialist",
+     "revealed": true
+    }
+   ],
+   "shield": 0.1,
+   "mitigated": 0.9000000000000004,
+   "value": 46.9,
+   "quitChance": 0
+  },
+  "toolStatus": {
+   "rolledPercent": 14,
+   "isUsable": true,
+   "isBroken": false,
+   "bonusPercent": 14
+  },
+  "toolItem": {
+   "_id": "tool-2",
+   "code": "hammer3",
+   "skills": {
+    "production": 14
+   },
+   "state": 95.6,
+   "maxState": 100,
+   "createdAt": "2026-10-27T13:35:34.854Z",
+   "updatedAt": "2026-10-28T11:02:29.084Z",
+   "__v": 0,
+   "employee": "e00000000000000000000007"
+  },
+  "productionBonus": {
+   "total": 18.9,
+   "contributions": [
+    {
+     "source": "management",
+     "percent": 6
+    },
+    {
+     "source": "happiness",
+     "percent": -3.1000000000000014
+    },
+    {
+     "source": "tool",
+     "percent": 14
+    },
+    {
+     "source": "specialization",
+     "percent": 2
+    }
+   ]
+  },
+  "trainingsPerDay": 1
+ },
+ {
+  "_id": "e00000000000000000000008",
+  "company": "c00000000000000000000005",
+  "name": "Mohannad Al-Tawil",
+  "gender": "male",
+  "age": 33,
+  "base": {
+   "production": 6,
+   "luck": 1,
+   "responsibility": 3
+  },
+  "trained": {
+   "production": 2,
+   "luck": 0,
+   "responsibility": 0
+  },
+  "revealed": {
+   "production": true,
+   "luck": true,
+   "responsibility": true
+  },
+  "traits": [],
+  "potential": 2,
+  "potentialMax": 7,
+  "wage": 0.133415,
+  "wageExpectation": 0.916,
+  "nationality": "nat-5",
+  "retireAskAt": "2026-11-28T14:01:23.089Z",
+  "createdAt": "2026-10-27T14:01:23.090Z",
+  "updatedAt": "2026-10-28T11:02:29.279Z",
+  "lastSpecializedDay": "2026-10-28",
+  "specializations": {
+   "petroleum": 2
+  },
+  "lastTrainedAt": "2026-10-28T10:08:48.763Z",
+  "trainingsToday": 1,
+  "trainingHistory": [
+   {
+    "card": "drill",
+    "rarity": "uncommon",
+    "stat": "production",
+    "delta": 2,
+    "outcome": {
+     "stat": "production",
+     "statGain": 2
+    },
+    "pickedAt": "2026-10-27T16:53:01.321Z"
+   },
+   {
+    "card": "negotiation",
+    "rarity": "common",
+    "delta": 0.05,
+    "outcome": {
+     "wageExpectation": 0.916
+    },
+    "pickedAt": "2026-10-28T10:08:54.265Z"
+   }
+  ],
+  "wageNegotiated": 0.05,
+  "estimate": {
+   "production": 1.58,
+   "wage": 0.133415
+  },
+  "breakdown": {
+   "production": {
+    "base": 4,
+    "trained": 2,
+    "contributions": [
+     {
+      "code": "specialization",
+      "delta": 2,
+      "revealed": true,
+      "percent": true
+     }
+    ],
+    "total": 6
+   },
+   "luck": {
+    "base": 1,
+    "trained": 0,
+    "contributions": [],
+    "total": 1
+   },
+   "responsibility": {
+    "base": 3,
+    "trained": 0,
+    "contributions": [],
+    "total": 3
+   }
+  },
+  "happinessBreakdown": {
+   "base": 50,
+   "contributions": [
+    {
+     "reason": "incomeTax",
+     "delta": -4,
+     "revealed": true
+    }
+   ],
+   "shield": 0.3,
+   "mitigated": 1.2000000000000002,
+   "value": 47.2,
+   "quitChance": 0
+  },
+  "productionBonus": {
+   "total": 5.200000000000003,
+   "contributions": [
+    {
+     "source": "management",
+     "percent": 6
+    },
+    {
+     "source": "happiness",
+     "percent": -2.799999999999997
+    },
+    {
+     "source": "specialization",
+     "percent": 2
+    }
+   ]
+  },
+  "trainingsPerDay": 1
+ },
+ {
+  "_id": "e00000000000000000000009",
+  "company": "c00000000000000000000006",
+  "name": "Sonia Spinka",
+  "gender": "female",
+  "age": 25,
+  "base": {
+   "production": 6,
+   "luck": 4,
+   "responsibility": 2
+  },
+  "trained": {
+   "production": 3,
+   "luck": 0,
+   "responsibility": 1
+  },
+  "revealed": {
+   "production": true,
+   "luck": true,
+   "responsibility": true
+  },
+  "traits": [],
+  "potential": 3,
+  "potentialMax": 6,
+  "wage": 0.105305,
+  "wageExpectation": 0.723,
+  "nationality": "nat-6",
+  "retireAskAt": "2026-12-07T11:25:10.017Z",
+  "createdAt": "2026-10-27T11:25:10.018Z",
+  "updatedAt": "2026-10-28T11:02:29.279Z",
+  "lastTrainedAt": "2026-10-28T10:08:56.300Z",
+  "trainingsToday": 1,
+  "trainingHistory": [
+   {
+    "card": "drill",
+    "rarity": "uncommon",
+    "stat": "production",
+    "delta": 2,
+    "outcome": {
+     "stat": "production",
+     "statGain": 2
+    },
+    "pickedAt": "2026-10-27T11:26:09.362Z"
+   },
+   {
+    "card": "drill",
+    "rarity": "common",
+    "stat": "production",
+    "delta": 1,
+    "outcome": {
+     "stat": "production",
+     "statGain": 1
+    },
+    "pickedAt": "2026-10-28T10:09:00.802Z"
+   }
+  ],
+  "lastSpecializedDay": "2026-10-28",
+  "specializations": {
+   "oil": 2
+  },
+  "tool": "tool-3",
+  "lastEventAt": "2026-10-28T06:31:15.070Z",
+  "estimate": {
+   "production": 1.66,
+   "wage": 0.105305
+  },
+  "breakdown": {
+   "production": {
+    "base": 3,
+    "trained": 3,
+    "contributions": [
+     {
+      "code": "tool",
+      "delta": 6,
+      "revealed": true,
+      "percent": true
+     },
+     {
+      "code": "specialization",
+      "delta": 2,
+      "revealed": true,
+      "percent": true
+     }
+    ],
+    "total": 6
+   },
+   "luck": {
+    "base": 4,
+    "trained": 0,
+    "contributions": [],
+    "total": 4
+   },
+   "responsibility": {
+    "base": 1,
+    "trained": 1,
+    "contributions": [],
+    "total": 2
+   }
+  },
+  "happinessBreakdown": {
+   "base": 50,
+   "contributions": [
+    {
+     "reason": "incomeTax",
+     "delta": -4,
+     "revealed": true
+    }
+   ],
+   "shield": 0.2,
+   "mitigated": 0.7999999999999998,
+   "value": 46.8,
+   "quitChance": 0
+  },
+  "toolStatus": {
+   "rolledPercent": 6,
+   "isUsable": true,
+   "isBroken": false,
+   "bonusPercent": 6
+  },
+  "toolItem": {
+   "_id": "tool-3",
+   "code": "flask1",
+   "skills": {
+    "production": 6
+   },
+   "state": 97.6,
+   "maxState": 100,
+   "createdAt": "2026-10-27T23:13:50.004Z",
+   "updatedAt": "2026-10-28T11:02:29.084Z",
+   "__v": 0,
+   "employee": "e00000000000000000000009"
+  },
+  "productionBonus": {
+   "total": 10.799999999999997,
+   "contributions": [
+    {
+     "source": "management",
+     "percent": 6
+    },
+    {
+     "source": "happiness",
+     "percent": -3.200000000000003
+    },
+    {
+     "source": "tool",
+     "percent": 6
+    },
+    {
+     "source": "specialization",
+     "percent": 2
+    }
+   ]
+  },
+  "trainingsPerDay": 1
+ },
+ {
+  "_id": "e00000000000000000000010",
+  "company": "c00000000000000000000007",
+  "name": "Walter Fritsch",
+  "gender": "male",
+  "age": 41,
+  "base": {
+   "production": 4,
+   "luck": 2,
+   "responsibility": 4
+  },
+  "trained": {
+   "production": 1,
+   "luck": 0,
+   "responsibility": 1
+  },
+  "revealed": {
+   "production": true,
+   "luck": true,
+   "responsibility": true
+  },
+  "traits": [
+   {
+    "code": "bully",
+    "revealed": true
+   },
+   {
+    "code": "quickStudy",
+    "revealed": true
+   }
+  ],
+  "potential": 3,
+  "potentialMax": 10,
+  "wage": 0.093313,
+  "wageExpectation": 0.961,
+  "nationality": "nat-2",
+  "retireAskAt": "2026-11-20T17:31:40.373Z",
+  "createdAt": "2026-10-26T17:31:40.374Z",
+  "updatedAt": "2026-10-28T11:02:29.279Z",
+  "lastTrainedAt": "2026-10-28T10:09:02.874Z",
+  "trainingsToday": 1,
+  "trainingHistory": [
+   {
+    "card": "negotiation",
+    "rarity": "common",
+    "delta": 0.05,
+    "outcome": {
+     "wageExpectation": 0.961
+    },
+    "pickedAt": "2026-10-26T17:31:56.661Z"
+   },
+   {
+    "card": "wildCard",
+    "rarity": "uncommon",
+    "outcome": {
+     "stat": "responsibility",
+     "statGain": 1,
+     "gained": [
+      {
+       "code": "quickStudy",
+       "revealed": true
+      }
+     ]
+    },
+    "pickedAt": "2026-10-27T08:06:52.447Z"
+   },
+   {
+    "card": "drill",
+    "rarity": "common",
+    "stat": "production",
+    "delta": 1,
+    "outcome": {
+     "stat": "production",
+     "statGain": 1
+    },
+    "pickedAt": "2026-10-28T10:09:04.872Z"
+   }
+  ],
+  "wageNegotiated": 0.05,
+  "lastMovedAt": "2026-10-26T17:34:47.671Z",
+  "lastSpecializedDay": "2026-10-28",
+  "specializations": {
+   "cookedFish": 4
+  },
+  "estimate": {
+   "production": 1.05,
+   "wage": 0.093313
+  },
+  "breakdown": {
+   "production": {
+    "base": 3,
+    "trained": 1,
+    "contributions": [
+     {
+      "code": "specialization",
+      "delta": 4,
+      "revealed": true,
+      "percent": true
+     }
+    ],
+    "total": 4
+   },
+   "luck": {
+    "base": 2,
+    "trained": 0,
+    "contributions": [],
+    "total": 2
+   },
+   "responsibility": {
+    "base": 3,
+    "trained": 1,
+    "contributions": [],
+    "total": 4
+   }
+  },
+  "happinessBreakdown": {
+   "base": 50,
+   "contributions": [
+    {
+     "reason": "incomeTax",
+     "delta": -4,
+     "revealed": true
+    },
+    {
+     "reason": "recentlyMoved",
+     "delta": -5,
+     "revealed": true,
+     "until": "2026-11-02T17:34:47.671Z"
+    }
+   ],
+   "shield": 0.4,
+   "mitigated": 3.6000000000000005,
+   "value": 44.6,
+   "quitChance": 0
+  },
+  "productionBonus": {
+   "total": 4.600000000000001,
+   "contributions": [
+    {
+     "source": "management",
+     "percent": 6
+    },
+    {
+     "source": "happiness",
+     "percent": -5.399999999999999
+    },
+    {
+     "source": "specialization",
+     "percent": 4
+    }
+   ]
+  },
+  "trainingsPerDay": 1
+ },
+ {
+  "_id": "e00000000000000000000011",
+  "company": "c00000000000000000000008",
+  "name": "Maria Hambardzumyan",
+  "gender": "female",
+  "age": 32,
+  "base": {
+   "production": 6,
+   "luck": 4,
+   "responsibility": 3
+  },
+  "trained": {
+   "production": 2,
+   "luck": 0,
+   "responsibility": 0
+  },
+  "revealed": {
+   "production": true,
+   "luck": true,
+   "responsibility": true
+  },
+  "traits": [
+   {
+    "code": "wornOut",
+    "revealed": true
+   }
+  ],
+  "potential": 2,
+  "potentialMax": 5,
+  "wage": 0.114918,
+  "wageExpectation": 0.789,
+  "nationality": "nat-7",
+  "retireAskAt": "2026-11-30T08:41:07.713Z",
+  "createdAt": "2026-10-27T08:41:07.714Z",
+  "updatedAt": "2026-10-28T11:02:29.279Z",
+  "lastTrainedAt": "2026-10-28T10:09:06.626Z",
+  "trainingsToday": 1,
+  "trainingHistory": [
+   {
+    "card": "drill",
+    "rarity": "common",
+    "stat": "production",
+    "delta": 1,
+    "outcome": {
+     "stat": "production",
+     "statGain": 1
+    },
+    "pickedAt": "2026-10-27T08:41:18.219Z"
+   },
+   {
+    "card": "drill",
+    "rarity": "common",
+    "stat": "production",
+    "delta": 1,
+    "outcome": {
+     "stat": "production",
+     "statGain": 1
+    },
+    "pickedAt": "2026-10-28T10:09:10.416Z"
+   }
+  ],
+  "lastSpecializedDay": "2026-10-28",
+  "specializations": {
+   "steel": 2
+  },
+  "estimate": {
+   "production": 1.58,
+   "wage": 0.114918
+  },
+  "breakdown": {
+   "production": {
+    "base": 4,
+    "trained": 2,
+    "contributions": [
+     {
+      "code": "specialization",
+      "delta": 2,
+      "revealed": true,
+      "percent": true
+     }
+    ],
+    "total": 6
+   },
+   "luck": {
+    "base": 4,
+    "trained": 0,
+    "contributions": [],
+    "total": 4
+   },
+   "responsibility": {
+    "base": 3,
+    "trained": 0,
+    "contributions": [],
+    "total": 3
+   }
+  },
+  "happinessBreakdown": {
+   "base": 50,
+   "contributions": [
+    {
+     "reason": "incomeTax",
+     "delta": -4,
+     "revealed": true
+    }
+   ],
+   "shield": 0.3,
+   "mitigated": 1.2000000000000002,
+   "value": 47.2,
+   "quitChance": 0
+  },
+  "productionBonus": {
+   "total": 5.200000000000003,
+   "contributions": [
+    {
+     "source": "management",
+     "percent": 6
+    },
+    {
+     "source": "happiness",
+     "percent": -2.799999999999997
+    },
+    {
+     "source": "specialization",
+     "percent": 2
+    }
+   ]
+  },
+  "trainingsPerDay": 1
+ },
+ {
+  "_id": "e00000000000000000000012",
+  "company": "c00000000000000000000008",
+  "name": "Marģers Graudiņš",
+  "gender": "male",
+  "age": 21,
+  "base": {
+   "production": 4,
+   "luck": 3,
+   "responsibility": 1
+  },
+  "trained": {
+   "production": 0,
+   "luck": 0,
+   "responsibility": 0
+  },
+  "revealed": {
+   "production": true,
+   "luck": true,
+   "responsibility": true
+  },
+  "traits": [],
+  "potential": 1,
+  "potentialMax": 9,
+  "wage": 0.07535,
+  "wageExpectation": 0.776,
+  "nationality": "nat-8",
+  "retireAskAt": "2026-12-11T10:04:08.284Z",
+  "createdAt": "2026-10-28T10:04:08.285Z",
+  "updatedAt": "2026-10-28T11:02:29.386Z",
+  "lastTrainedAt": "2026-10-28T10:04:14.872Z",
+  "trainingsToday": 1,
+  "trainingHistory": [
+   {
+    "card": "negotiation",
+    "rarity": "uncommon",
+    "delta": 0.1,
+    "outcome": {
+     "wageExpectation": 0.776
+    },
+    "pickedAt": "2026-10-28T10:05:01.441Z"
+   }
+  ],
+  "wageNegotiated": 0.1,
+  "lastSpecializedDay": "2026-10-28",
+  "specializations": {
+   "steel": 1
+  },
+  "estimate": {
+   "production": 1.03,
+   "wage": 0.07535
+  },
+  "breakdown": {
+   "production": {
+    "base": 4,
+    "trained": 0,
+    "contributions": [
+     {
+      "code": "specialization",
+      "delta": 1,
+      "revealed": true,
+      "percent": true
+     }
+    ],
+    "total": 4
+   },
+   "luck": {
+    "base": 3,
+    "trained": 0,
+    "contributions": [],
+    "total": 3
+   },
+   "responsibility": {
+    "base": 1,
+    "trained": 0,
+    "contributions": [],
+    "total": 1
+   }
+  },
+  "happinessBreakdown": {
+   "base": 50,
+   "contributions": [
+    {
+     "reason": "incomeTax",
+     "delta": -4,
+     "revealed": true
+    }
+   ],
+   "shield": 0.1,
+   "mitigated": 0.3999999999999999,
+   "value": 46.4,
+   "quitChance": 0
+  },
+  "productionBonus": {
+   "total": 3.3999999999999986,
+   "contributions": [
+    {
+     "source": "management",
+     "percent": 6
+    },
+    {
+     "source": "happiness",
+     "percent": -3.6000000000000014
+    },
+    {
+     "source": "specialization",
+     "percent": 1
+    }
+   ]
+  },
+  "trainingsPerDay": 1
+ },
+ {
+  "_id": "e00000000000000000000013",
+  "company": "c00000000000000000000009",
+  "name": "Christina Volkman",
+  "gender": "female",
+  "age": 33,
+  "base": {
+   "production": 3,
+   "luck": 3,
+   "responsibility": 4
+  },
+  "trained": {
+   "production": 1,
+   "luck": 2,
+   "responsibility": 0
+  },
+  "revealed": {
+   "production": true,
+   "luck": true,
+   "responsibility": true
+  },
+  "traits": [
+   {
+    "code": "recruiter",
+    "revealed": true
+   }
+  ],
+  "potential": 3,
+  "potentialMax": 9,
+  "wage": 0.068892,
+  "wageExpectation": 0.946,
+  "nationality": "nat-2",
+  "retireAskAt": "2026-11-28T21:44:02.432Z",
+  "createdAt": "2026-10-26T21:44:02.432Z",
+  "updatedAt": "2026-10-28T11:02:29.279Z",
+  "lastTrainedAt": "2026-10-28T10:09:12.265Z",
+  "trainingsToday": 1,
+  "trainingHistory": [
+   {
+    "card": "wildCard",
+    "rarity": "uncommon",
+    "outcome": {
+     "stat": "production",
+     "statGain": 1,
+     "gained": [
+      {
+       "code": "recruiter",
+       "revealed": true
+      }
+     ]
+    },
+    "pickedAt": "2026-10-26T21:44:19.868Z"
+   },
+   {
+    "card": "drill",
+    "rarity": "uncommon",
+    "stat": "luck",
+    "delta": 2,
+    "outcome": {
+     "stat": "luck",
+     "statGain": 2
+    },
+    "pickedAt": "2026-10-27T08:07:29.464Z"
+   },
+   {
+    "card": "negotiation",
+    "rarity": "common",
+    "delta": 0.05,
+    "outcome": {
+     "wageExpectation": 0.946
+    },
+    "pickedAt": "2026-10-28T10:09:15.494Z"
+   }
+  ],
+  "lastSpecializedDay": "2026-10-28",
+  "specializations": {
+   "fish": 3
+  },
+  "wageNegotiated": 0.05,
+  "estimate": {
+   "production": 0.8,
+   "wage": 0.068892
+  },
+  "breakdown": {
+   "production": {
+    "base": 2,
+    "trained": 1,
+    "contributions": [
+     {
+      "code": "specialization",
+      "delta": 3,
+      "revealed": true,
+      "percent": true
+     }
+    ],
+    "total": 3
+   },
+   "luck": {
+    "base": 1,
+    "trained": 2,
+    "contributions": [],
+    "total": 3
+   },
+   "responsibility": {
+    "base": 4,
+    "trained": 0,
+    "contributions": [],
+    "total": 4
+   }
+  },
+  "happinessBreakdown": {
+   "base": 50,
+   "contributions": [
+    {
+     "reason": "incomeTax",
+     "delta": -4,
+     "revealed": true
+    }
+   ],
+   "shield": 0.4,
+   "mitigated": 1.6,
+   "value": 47.6,
+   "quitChance": 0
+  },
+  "productionBonus": {
+   "total": 6.600000000000001,
+   "contributions": [
+    {
+     "source": "management",
+     "percent": 6
+    },
+    {
+     "source": "happiness",
+     "percent": -2.3999999999999986
+    },
+    {
+     "source": "specialization",
+     "percent": 3
+    }
+   ]
+  },
+  "trainingsPerDay": 1
+ },
+ {
+  "_id": "e00000000000000000000014",
+  "company": "c00000000000000000000001",
+  "name": "Lionel Leannon",
+  "gender": "male",
+  "age": 45,
+  "base": {
+   "production": 3,
+   "luck": 4,
+   "responsibility": 1
+  },
+  "trained": {
+   "production": 0,
+   "luck": 0,
+   "responsibility": 0
+  },
+  "revealed": {
+   "production": true,
+   "luck": true,
+   "responsibility": true
+  },
+  "traits": [],
+  "potential": 2,
+  "potentialMax": 11,
+  "wage": 0.077049,
+  "wageExpectation": 1.058,
+  "nationality": "nat-2",
+  "retireAskAt": "2026-11-17T11:26:28.879Z",
+  "createdAt": "2026-10-27T11:26:28.879Z",
+  "updatedAt": "2026-10-28T10:09:21.285Z",
+  "lastMovedAt": "2026-10-27T11:27:36.442Z",
+  "lastSpecializedDay": "2026-10-28",
+  "specializations": {
+   "iron": 2
+  },
+  "lastTrainedAt": "2026-10-28T06:32:53.874Z",
+  "trainingsToday": 1,
+  "trainingHistory": [
+   {
+    "card": "negotiation",
+    "rarity": "uncommon",
+    "delta": 0.1,
+    "outcome": {
+     "wageExpectation": 1.058
+    },
+    "pickedAt": "2026-10-27T16:53:12.390Z"
+   },
+   {
+    "card": "secondWind",
+    "rarity": "epic",
+    "delta": 3,
+    "outcome": {
+     "potentialMax": 11
+    },
+    "pickedAt": "2026-10-28T10:09:21.285Z"
+   }
+  ],
+  "wageNegotiated": 0.1,
+  "estimate": {
+   "production": 0.75,
+   "wage": 0.077049
+  },
+  "breakdown": {
+   "production": {
+    "base": 3,
+    "trained": 0,
+    "contributions": [
+     {
+      "code": "specialization",
+      "delta": 2,
+      "revealed": true,
+      "percent": true
+     }
+    ],
+    "total": 3
+   },
+   "luck": {
+    "base": 4,
+    "trained": 0,
+    "contributions": [],
+    "total": 4
+   },
+   "responsibility": {
+    "base": 1,
+    "trained": 0,
+    "contributions": [],
+    "total": 1
+   }
+  },
+  "happinessBreakdown": {
+   "base": 50,
+   "contributions": [
+    {
+     "reason": "incomeTax",
+     "delta": -4,
+     "revealed": true
+    },
+    {
+     "reason": "recentlyMoved",
+     "delta": -5,
+     "revealed": true,
+     "until": "2026-11-03T11:27:36.442Z"
+    }
+   ],
+   "shield": 0.1,
+   "mitigated": 0.9000000000000004,
+   "value": 41.9,
+   "quitChance": 0
+  },
+  "productionBonus": {
+   "total": -0.10000000000000142,
+   "contributions": [
+    {
+     "source": "management",
+     "percent": 6
+    },
+    {
+     "source": "happiness",
+     "percent": -8.100000000000001
+    },
+    {
+     "source": "specialization",
+     "percent": 2
+    }
+   ]
+  },
+  "trainingsPerDay": 1
+ },
+ {
+  "_id": "e00000000000000000000015",
+  "company": "c00000000000000000000010",
+  "name": "Johnny McClure",
+  "gender": "male",
+  "age": 36,
+  "base": {
+   "production": 3,
+   "luck": 5,
+   "responsibility": 2
+  },
+  "trained": {
+   "production": 0,
+   "luck": 1,
+   "responsibility": 0
+  },
+  "revealed": {
+   "production": true,
+   "luck": true,
+   "responsibility": true
+  },
+  "traits": [
+   {
+    "code": "statist",
+    "revealed": true
+   },
+   {
+    "code": "laborer",
+    "revealed": true
+   }
+  ],
+  "potential": 2,
+  "potentialMax": 9,
+  "wage": 0.060882,
+  "wageExpectation": 0.836,
+  "nationality": "nat-2",
+  "retireAskAt": "2026-11-25T13:37:08.077Z",
+  "createdAt": "2026-10-27T13:37:08.078Z",
+  "updatedAt": "2026-10-28T10:10:12.709Z",
+  "lastTrainedAt": "2026-10-28T10:09:24.209Z",
+  "trainingsToday": 1,
+  "trainingHistory": [
+   {
+    "card": "drill",
+    "rarity": "common",
+    "stat": "luck",
+    "delta": 1,
+    "outcome": {
+     "stat": "luck",
+     "statGain": 1
+    },
+    "pickedAt": "2026-10-27T13:37:29.323Z"
+   },
+   {
+    "card": "habit",
+    "rarity": "rare",
+    "traitTo": "laborer",
+    "outcome": {
+     "gained": [
+      {
+       "code": "laborer",
+       "revealed": true
+      }
+     ]
+    },
+    "pickedAt": "2026-10-28T10:10:12.709Z"
+   }
+  ],
+  "lastSpecializedDay": "2026-10-28",
+  "specializations": {
+   "iron": 2
+  },
+  "estimate": {
+   "production": 1.57,
+   "wage": 0.060882
+  },
+  "breakdown": {
+   "production": {
+    "base": 3,
+    "trained": 0,
+    "contributions": [
+     {
+      "code": "laborer",
+      "delta": 3,
+      "revealed": true
+     },
+     {
+      "code": "specialization",
+      "delta": 2,
+      "revealed": true,
+      "percent": true
+     }
+    ],
+    "total": 6
+   },
+   "luck": {
+    "base": 4,
+    "trained": 1,
+    "contributions": [],
+    "total": 5
+   },
+   "responsibility": {
+    "base": 2,
+    "trained": 0,
+    "contributions": [],
+    "total": 2
+   }
+  },
+  "happinessBreakdown": {
+   "base": 50,
+   "contributions": [
+    {
+     "reason": "incomeTax",
+     "delta": -4,
+     "revealed": true
+    }
+   ],
+   "shield": 0.2,
+   "mitigated": 0.7999999999999998,
+   "value": 46.8,
+   "quitChance": 0
+  },
+  "productionBonus": {
+   "total": 4.799999999999997,
+   "contributions": [
+    {
+     "source": "management",
+     "percent": 6
+    },
+    {
+     "source": "happiness",
+     "percent": -3.200000000000003
+    },
+    {
+     "source": "specialization",
+     "percent": 2
+    }
+   ]
+  },
+  "trainingsPerDay": 1
+ },
+ {
+  "_id": "e00000000000000000000016",
+  "company": "c00000000000000000000011",
+  "name": "Dwight Harris",
+  "gender": "male",
+  "age": 20,
+  "base": {
+   "production": 6,
+   "luck": 3,
+   "responsibility": 2
+  },
+  "trained": {
+   "production": 3,
+   "luck": 0,
+   "responsibility": 0
+  },
+  "revealed": {
+   "production": true,
+   "luck": true,
+   "responsibility": true
+  },
+  "traits": [
+   {
+    "code": "craftsman",
+    "revealed": true
+   }
+  ],
+  "potential": 2,
+  "potentialMax": 7,
+  "wage": 0.102101,
+  "wageExpectation": 0.701,
+  "nationality": "nat-2",
+  "retireAskAt": "2026-12-12T09:19:30.141Z",
+  "createdAt": "2026-10-27T09:19:30.141Z",
+  "updatedAt": "2026-10-28T11:02:29.279Z",
+  "lastTrainedAt": "2026-10-28T10:10:17.818Z",
+  "trainingsToday": 1,
+  "trainingHistory": [
+   {
+    "card": "drill",
+    "rarity": "common",
+    "stat": "production",
+    "delta": 1,
+    "outcome": {
+     "stat": "production",
+     "statGain": 1
+    },
+    "pickedAt": "2026-10-27T09:20:46.799Z"
+   },
+   {
+    "card": "drill",
+    "rarity": "uncommon",
+    "stat": "production",
+    "delta": 2,
+    "outcome": {
+     "stat": "production",
+     "statGain": 2
+    },
+    "pickedAt": "2026-10-28T10:10:21.484Z"
+   }
+  ],
+  "lastSpecializedDay": "2026-10-28",
+  "specializations": {
+   "steel": 2
+  },
+  "estimate": {
+   "production": 2.36,
+   "wage": 0.102101
+  },
+  "breakdown": {
+   "production": {
+    "base": 3,
+    "trained": 3,
+    "contributions": [
+     {
+      "code": "craftsman",
+      "delta": 3,
+      "revealed": true
+     },
+     {
+      "code": "specialization",
+      "delta": 2,
+      "revealed": true,
+      "percent": true
+     }
+    ],
+    "total": 9
+   },
+   "luck": {
+    "base": 3,
+    "trained": 0,
+    "contributions": [],
+    "total": 3
+   },
+   "responsibility": {
+    "base": 2,
+    "trained": 0,
+    "contributions": [],
+    "total": 2
+   }
+  },
+  "happinessBreakdown": {
+   "base": 50,
+   "contributions": [
+    {
+     "reason": "incomeTax",
+     "delta": -4,
+     "revealed": true
+    }
+   ],
+   "shield": 0.2,
+   "mitigated": 0.7999999999999998,
+   "value": 46.8,
+   "quitChance": 0
+  },
+  "productionBonus": {
+   "total": 4.799999999999997,
+   "contributions": [
+    {
+     "source": "management",
+     "percent": 6
+    },
+    {
+     "source": "happiness",
+     "percent": -3.200000000000003
+    },
+    {
+     "source": "specialization",
+     "percent": 2
+    }
+   ]
+  },
+  "trainingsPerDay": 1
+ },
+ {
+  "_id": "e00000000000000000000017",
+  "company": "c00000000000000000000012",
+  "name": "Sung-ho Hwang",
+  "gender": "male",
+  "age": 22,
+  "base": {
+   "production": 3,
+   "luck": 5,
+   "responsibility": 1
+  },
+  "trained": {
+   "production": 0,
+   "luck": 4,
+   "responsibility": 0
+  },
+  "revealed": {
+   "production": true,
+   "luck": true,
+   "responsibility": true
+  },
+  "traits": [
+   {
+    "code": "patriot",
+    "revealed": true
+   },
+   {
+    "code": "specialist",
+    "revealed": true,
+    "arg": "coca"
+   }
+  ],
+  "potential": 3,
+  "potentialMax": 8,
+  "wage": 0.069257,
+  "wageExpectation": 0.951,
+  "nationality": "nat-9",
+  "retireAskAt": "2026-12-09T14:56:19.260Z",
+  "createdAt": "2026-10-26T14:56:19.261Z",
+  "updatedAt": "2026-10-28T10:10:33.628Z",
+  "lastTrainedAt": "2026-10-28T10:10:24.577Z",
+  "trainingsToday": 1,
+  "trainingHistory": [
+   {
+    "card": "drill",
+    "rarity": "epic",
+    "stat": "luck",
+    "delta": 3,
+    "outcome": {
+     "stat": "luck",
+     "statGain": 3
+    },
+    "pickedAt": "2026-10-26T14:58:15.868Z"
+   },
+   {
+    "card": "drill",
+    "rarity": "common",
+    "stat": "luck",
+    "delta": 1,
+    "outcome": {
+     "stat": "luck",
+     "statGain": 1
+    },
+    "pickedAt": "2026-10-27T08:11:46.478Z"
+   },
+   {
+    "card": "habit",
+    "rarity": "epic",
+    "traitTo": "specialist",
+    "outcome": {
+     "gained": [
+      {
+       "code": "specialist",
+       "revealed": true,
+       "arg": "coca"
+      }
+     ]
+    },
+    "pickedAt": "2026-10-28T10:10:33.627Z"
+   }
+  ],
+  "lastSpecializedDay": "2026-10-28",
+  "specializations": {
+   "iron": 3
+  },
+  "lastMovedAt": "2026-10-26T15:03:15.502Z",
+  "movedWithCompany": true,
+  "lastEventAt": "2026-10-28T06:31:51.775Z",
+  "eventModifiers": [
+   {
+    "code": "burningOut",
+    "kind": "production",
+    "delta": 15,
+    "until": "2026-10-30T06:31:51.775Z"
+   },
+   {
+    "code": "strayCat",
+    "kind": "happiness",
+    "delta": 5,
+    "until": "2026-11-04T06:32:06.719Z"
+   }
+  ],
+  "estimate": {
+   "production": 0.87,
+   "wage": 0.069257
+  },
+  "breakdown": {
+   "production": {
+    "base": 3,
+    "trained": 0,
+    "contributions": [
+     {
+      "code": "specialization",
+      "delta": 3,
+      "revealed": true,
+      "percent": true
+     }
+    ],
+    "total": 3
+   },
+   "luck": {
+    "base": 1,
+    "trained": 4,
+    "contributions": [],
+    "total": 5
+   },
+   "responsibility": {
+    "base": 1,
+    "trained": 0,
+    "contributions": [],
+    "total": 1
+   }
+  },
+  "happinessBreakdown": {
+   "base": 50,
+   "contributions": [
+    {
+     "reason": "incomeTax",
+     "delta": -4,
+     "revealed": true
+    },
+    {
+     "reason": "recentlyMoved",
+     "delta": -10,
+     "revealed": true,
+     "until": "2026-11-02T15:03:15.502Z"
+    },
+    {
+     "reason": "event",
+     "delta": 5,
+     "revealed": true,
+     "until": "2026-11-04T06:32:06.719Z",
+     "eventCode": "strayCat"
+    }
+   ],
+   "shield": 0.1,
+   "mitigated": 1.4000000000000004,
+   "value": 42.4,
+   "quitChance": 0
+  },
+  "productionBonus": {
+   "total": 16.4,
+   "contributions": [
+    {
+     "source": "management",
+     "percent": 6
+    },
+    {
+     "source": "happiness",
+     "percent": -7.600000000000001
+    },
+    {
+     "source": "specialization",
+     "percent": 3
+    },
+    {
+     "source": "event",
+     "percent": 15,
+     "eventCode": "burningOut",
+     "until": "2026-10-30T06:31:51.775Z"
+    }
+   ]
+  },
+  "trainingsPerDay": 1
+ },
+ {
+  "_id": "e00000000000000000000018",
+  "company": "c00000000000000000000012",
+  "name": "Claudia Heathcote",
+  "gender": "female",
+  "age": 42,
+  "base": {
+   "production": 4,
+   "luck": 3,
+   "responsibility": 2
+  },
+  "trained": {
+   "production": 0,
+   "luck": 1,
+   "responsibility": 0
+  },
+  "revealed": {
+   "production": true,
+   "luck": true,
+   "responsibility": true
+  },
+  "traits": [
+   {
+    "code": "laborer",
+    "revealed": true
+   },
+   {
+    "code": "quickStudy",
+    "revealed": true
+   },
+   {
+    "code": "sprinter",
+    "revealed": true
+   }
+  ],
+  "potential": 2,
+  "potentialMax": 10,
+  "wage": 0.114869,
+  "wageExpectation": 1.183,
+  "nationality": "nat-2",
+  "retireAskAt": "2026-11-19T13:36:06.838Z",
+  "createdAt": "2026-10-27T13:36:06.842Z",
+  "updatedAt": "2026-10-28T10:38:00.232Z",
+  "lastTrainedAt": "2026-10-28T10:10:37.795Z",
+  "trainingsToday": 1,
+  "lastSpecializedDay": "2026-10-28",
+  "specializations": {
+   "iron": 2
+  },
+  "trainingHistory": [
+   {
+    "card": "drill",
+    "rarity": "common",
+    "stat": "luck",
+    "delta": 1,
+    "outcome": {
+     "stat": "luck",
+     "statGain": 1
+    },
+    "pickedAt": "2026-10-27T16:53:31.925Z"
+   },
+   {
+    "card": "habit",
+    "rarity": "legendary",
+    "traitTo": "quickStudy",
+    "traitTo2": "sprinter",
+    "outcome": {
+     "gained": [
+      {
+       "code": "quickStudy",
+       "revealed": true
+      },
+      {
+       "code": "sprinter",
+       "revealed": true
+      }
+     ]
+    },
+    "pickedAt": "2026-10-28T10:38:00.232Z"
+   }
+  ],
+  "lastEventAt": "2026-10-28T06:32:06.719Z",
+  "eventModifiers": [
+   {
+    "code": "strayCat",
+    "kind": "happiness",
+    "delta": 5,
+    "until": "2026-11-04T06:32:06.719Z"
+   }
+  ],
+  "estimate": {
+   "production": 2.8,
+   "wage": 0.114869
+  },
+  "breakdown": {
+   "production": {
+    "base": 4,
+    "trained": 0,
+    "contributions": [
+     {
+      "code": "laborer",
+      "delta": 3,
+      "revealed": true
+     },
+     {
+      "code": "sprinter",
+      "delta": 50,
+      "revealed": true,
+      "percent": true
+     },
+     {
+      "code": "specialization",
+      "delta": 2,
+      "revealed": true,
+      "percent": true
+     }
+    ],
+    "total": 7
+   },
+   "luck": {
+    "base": 2,
+    "trained": 1,
+    "contributions": [],
+    "total": 3
+   },
+   "responsibility": {
+    "base": 2,
+    "trained": 0,
+    "contributions": [],
+    "total": 2
+   }
+  },
+  "happinessBreakdown": {
+   "base": 50,
+   "contributions": [
+    {
+     "reason": "incomeTax",
+     "delta": -4,
+     "revealed": true
+    },
+    {
+     "reason": "event",
+     "delta": 5,
+     "revealed": true,
+     "until": "2026-11-04T06:32:06.719Z",
+     "eventCode": "strayCat"
+    }
+   ],
+   "shield": 0.2,
+   "mitigated": 0.7999999999999998,
+   "value": 51.8,
+   "quitChance": 0
+  },
+  "productionBonus": {
+   "total": 59.8,
+   "contributions": [
+    {
+     "source": "management",
+     "percent": 6
+    },
+    {
+     "source": "happiness",
+     "percent": 1.7999999999999972
+    },
+    {
+     "source": "specialization",
+     "percent": 2
+    },
+    {
+     "source": "sprinter",
+     "percent": 50
+    }
+   ]
+  },
+  "trainingsPerDay": 1
+ }
+]

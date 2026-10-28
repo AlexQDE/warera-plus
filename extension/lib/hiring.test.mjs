@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { rosterOf, teamEffect } from "./team.mjs";
 import * as hiring from "./hiring.mjs";
 import {
   TRAITS,
@@ -14,6 +16,374 @@ import {
   trainingValues,
   ENERGY_GOLD,
 } from "./hiring.mjs";
+
+const TEAM_NOW = Date.parse("2026-10-28T12:00:00Z");
+const EMPLOYEES = JSON.parse(
+  readFileSync("fixtures/employees-live-2026-10-28.json", "utf8"),
+);
+const TEAM_CTX = { pointValue: 0.1012, now: TEAM_NOW };
+const LIONEL = rosterOf(EMPLOYEES, "c00000000000000000000001", TEAM_NOW);
+
+describe("roster-aware hiring and training", () => {
+  const bully = {
+    production: 2,
+    wageDay: 1.2,
+    responsibility: 1,
+    age: 30,
+    traits: ["bully"],
+    gender: "male",
+  };
+  it("separates the Bully's unpaid self points from Lionel's loss", () => {
+    const plain = candidateValue({ ...bully, traits: [] }, TEAM_CTX);
+    const value = candidateValue(bully, { ...TEAM_CTX, roster: LIONEL });
+    let self = 0;
+    for (let d = 0; d < 35; d++)
+      self += 6 * 0.1012 * 2 * (1 + Math.min(d / 100, 0.2));
+    expect(value.total).toBeCloseTo(plain.total + self, 9);
+    expect(value.team).toBeCloseTo(-3.27888, 9);
+    expect(value.others[0].name).toBe("Lionel Leannon");
+    expect(value.others[0].after.happiness).toBeCloseTo(32.9, 9);
+    expect(candidateValue(bully, TEAM_CTX).team).toBeUndefined();
+  });
+
+  it("applies incoming team happiness to a hire's unpaid Production too", () => {
+    const roster = [{ ...LIONEL[0], traits: ["bully"] }];
+    const value = candidateValue(bully, { ...TEAM_CTX, roster });
+    expect(value.self.prod).toBe(2);
+    expect(value.self.pct).toBeCloseTo(-0.09, 10);
+    expect(value.perDayNow).toBeCloseTo(6 * 0.1012 * 4 * 0.91 - 1.2, 10);
+    let expected = 0;
+    for (let d = 0; d < 35; d++)
+      expected += 6 * 0.1012 * 4 * (0.91 + Math.min(d / 100, 0.2)) - 1.2;
+    expect(value.total).toBeCloseTo(expected, 10);
+    // The legacy trait percentage keeps its existing formula without a roster.
+    const legacy = candidateValue(
+      { ...bully, traits: ["bully", "handy"] },
+      TEAM_CTX,
+    );
+    expect(legacy.perDayNow).toBeCloseTo(
+      6 * 0.1012 * (4 + 2 * 0.12 - 0.6) - 1.2,
+      10,
+    );
+    const mixed = candidateValue(
+      { ...bully, traits: ["bully", "handy"] },
+      { ...TEAM_CTX, roster },
+    );
+    expect(mixed.perDayNow).toBeCloseTo(
+      6 * 0.1012 * (4 * 0.91 + 2 * 0.12) - 1.2,
+      10,
+    );
+  });
+
+  it("takes Production and hidden traits in expectation, including real team conditions", () => {
+    const candidate = {
+      wageDay: 1.58,
+      hiddenTraits: 1,
+      age: 30,
+      responsibility: 1,
+    };
+    const ctx = { ...TEAM_CTX, roster: LIONEL };
+    const expected = productionOdds(candidate, TEAM_CTX.pointValue).reduce(
+      (sum, k) =>
+        sum +
+        k.prob *
+          candidateValue(
+            {
+              ...candidate,
+              production: k.production,
+              traits: k.codes,
+              hiddenTraits: 0,
+            },
+            ctx,
+          ).team,
+      0,
+    );
+    expect(candidateValue(candidate, ctx).team).toBeCloseTo(expected, 10);
+    // Unknown nationality never substitutes the card's country name for an API country id.
+    const unknown = candidateValue(
+      { ...bully, traits: ["xenophobe"], nationality: null },
+      ctx,
+    );
+    expect(unknown.assumed.join("\n")).toContain(
+      "Xenophobe: unknown nationality; rule skipped",
+    );
+    expect(unknown.total).toBeCloseTo(
+      candidateValue({ ...bully, traits: [] }, TEAM_CTX).total,
+      9,
+    );
+  });
+
+  it("lets a coworker's loss change the pick and whether any hire pays", () => {
+    const roster = [{ ...LIONEL[0], P: 100 }];
+    const candidates = [bully, { ...bully, traits: [], wageDay: 1.18 }];
+    const values = candidates.map((c) =>
+      candidateValue(c, { ...TEAM_CTX, roster }),
+    );
+    const ranked = rankCandidates(candidates, { ...TEAM_CTX, roster });
+    expect(values[0].total).toBeGreaterThan(values[1].total);
+    expect(values[0].total + values[0].team).toBeLessThan(0);
+    expect(ranked.best).toBe(1);
+    expect(ranked.bestPays).toBe(true);
+    const loner = [{ ...roster[0], traits: ["loner"] }];
+    expect(
+      rankCandidates(candidates, { ...TEAM_CTX, roster: loner }).bestPays,
+    ).toBe(false);
+  });
+
+  const trainee = {
+    production: 3,
+    responsibility: 1,
+    luck: 1,
+    wageChip: 0,
+    bonus: -0.001,
+    age: 45,
+    traits: [],
+    potential: 1,
+    potentialMax: 3,
+  };
+
+  it("applies a taught team bonus to the unpaid Production gained with it", () => {
+    const subject = { ...LIONEL[0], spec: 0, id: "trainee" };
+    const peer = { ...LIONEL[0], id: "peer", wageHour: 0.01 };
+    const r = trainingValues(
+      [{ kind: "habit", traitTo: ["bully", "primaDonna"] }],
+      trainee,
+      { ...TEAM_CTX, roster: [subject, peer], traineeId: subject.id },
+    );
+    let expected = 0;
+    for (let d = 0; d < 20; d++)
+      expected += 6 * 0.1012 * (2 * (0.999 + d / 100) + 5 * 0.11);
+    expect(r.values[0].self.prod).toBe(2);
+    expect(r.values[0].self.pct).toBeCloseTo(0.11, 10);
+    expect(r.values[0].gold).toBeCloseTo(expected, 10);
+  });
+
+  it("prices Nationalist's own shield only while each happiness loss lasts", () => {
+    const subject = {
+      ...LIONEL[0],
+      id: "trainee",
+      items: [
+        { delta: -4, until: null },
+        { delta: -5, until: TEAM_NOW + 86400e3 },
+      ],
+    };
+    const r = trainingValues(
+      [{ kind: "habit", traitTo: ["nationalist"] }],
+      trainee,
+      {
+        ...TEAM_CTX,
+        roster: [subject, { ...LIONEL[0], id: "peer" }],
+        traineeId: subject.id,
+      },
+    );
+    expect(r.values[0].gold).toBeCloseTo(
+      6 * 0.1012 * 3 * (0.068 + 19 * 0.058),
+      10,
+    );
+  });
+
+  it("lets Rehab's Greedy wage cut end a coworker's Envious penalty", () => {
+    const subject = {
+      ...LIONEL[0],
+      id: "trainee",
+      traits: ["greedy"],
+      wageHour: 0.12,
+    };
+    const peer = {
+      ...LIONEL[0],
+      id: "peer",
+      traits: ["envious"],
+      wageHour: 0.11,
+      happiness: 45.5,
+      bonus: -4.5,
+      items: [{ delta: -5, until: null }],
+    };
+    const r = trainingValues(
+      [{ kind: "rehab", trait: "greedy" }],
+      { ...trainee, traits: ["greedy"], wageChip: 0.2 },
+      { ...TEAM_CTX, roster: [subject, peer], traineeId: subject.id },
+    );
+    expect(r.values[0].others[0]?.after.happiness).toBe(50);
+    expect(r.values[0].team).toBeCloseTo(20 * 6 * 0.1012 * 3 * 0.045, 10);
+  });
+  it("prices a taught Bully and Rehab through self and team deltas, and ranks their sum", () => {
+    const cards = [
+      { kind: "habit", traitTo: ["bully"] },
+      { kind: "habit", traitTo: ["comic"] },
+    ];
+    const roster = [
+      { ...LIONEL[0], id: "trainee", name: "Trainee" },
+      { ...LIONEL[0], P: 100 },
+    ];
+    const ctx = { ...TEAM_CTX, roster, traineeId: "trainee" };
+    const r = trainingValues(cards, trainee, ctx);
+    const effect = teamEffect(
+      roster,
+      { kind: "card", id: "trainee", card: cards[0] },
+      { ...TEAM_CTX, subjectHorizon: 20 },
+    );
+    expect(r.values[0].team).toBeCloseTo(effect.team, 10);
+    expect(r.values[0].gold).toBeGreaterThan(20 * 6 * 0.1012 * 2);
+    expect(r.values[0].others[0].name).toBe("Lionel Leannon");
+    expect(r.values[0].gold).toBeGreaterThan(r.values[1].gold);
+    expect(r.best).toBe(1);
+    expect(
+      trainingValues(cards, trainee, TEAM_CTX).values[0].team,
+    ).toBeUndefined();
+  });
+
+  it("prices the self change when a Rival catches up and a Mentor's lift is lost", () => {
+    const roster = [
+      {
+        ...LIONEL[0],
+        id: "trainee",
+        baseP: 2,
+        P: 7,
+        spec: 0,
+        traits: ["rival"],
+      },
+      { ...LIONEL[0], id: "mentor", baseP: 3, traits: ["mentor"] },
+    ];
+    const t = { ...trainee, production: 7, traits: ["rival"] };
+    const card = [{ kind: "drill", stat: "production", delta: 1 }];
+    const without = trainingValues(card, t, TEAM_CTX);
+    const withTeam = trainingValues(card, t, {
+      ...TEAM_CTX,
+      roster,
+      traineeId: "trainee",
+    });
+    let correction = 0;
+    for (let d = 0; d < 20; d++)
+      correction += 6 * 0.1012 * -6 * (1 - 0.001 + d / 100);
+    expect(withTeam.values[0].gold - without.values[0].gold).toBeCloseTo(
+      correction,
+      9,
+    );
+    expect(withTeam.values[0].self.why.join("\n")).toContain(
+      "Rival: Production −4",
+    );
+  });
+
+  it("values a Responsibility drill using actual, expiring negative happiness items", () => {
+    const r = trainingValues(
+      [{ kind: "drill", stat: "responsibility", delta: 1 }],
+      trainee,
+      { ...TEAM_CTX, roster: LIONEL, traineeId: LIONEL[0].id },
+    );
+    let expected = 0;
+    for (let day = 0; day < 20; day++) {
+      const negative = LIONEL[0].items.reduce(
+        (s, item) =>
+          s +
+          (item.delta < 0 &&
+          (item.until == null || item.until > TEAM_NOW + day * 86400e3)
+            ? -item.delta
+            : 0),
+        0,
+      );
+      expected += (6 * 0.1012 * 3 * negative * 0.1) / 100;
+    }
+    expect(r.values[0].gold).toBeCloseTo(expected, 10);
+    expect(r.values[0].note).toContain("actual happiness losses");
+    expect(r.values[0].team).toBe(0);
+  });
+
+  it("averages Wild card's trait and random stat together through the team model", () => {
+    const roster = [{ ...LIONEL[0], id: "trainee", traits: [] }, LIONEL[0]];
+    const r = trainingValues([{ kind: "wild" }], trainee, {
+      ...TEAM_CTX,
+      roster,
+      traineeId: "trainee",
+    });
+    const expected = hiddenTraitPool().reduce(
+      (sum, p) =>
+        sum +
+        p.share *
+          hiring.TRAIN_STATS.reduce(
+            (s, stat) =>
+              s +
+              teamEffect(
+                roster,
+                {
+                  kind: "card",
+                  id: "trainee",
+                  card: { kind: "wild", trait: p.code, stat, delta: 1 },
+                },
+                { ...TEAM_CTX, subjectHorizon: 20 },
+              ).team /
+                3,
+            0,
+          ),
+      0,
+    );
+    expect(r.values[0].team).toBeCloseTo(expected, 9);
+  });
+
+  it("prices Wild card's combined Production and bonus before averaging", () => {
+    const subject = {
+      ...LIONEL[0],
+      id: "trainee",
+      items: [],
+      happiness: 50,
+      bonus: 0,
+      spec: 0,
+    };
+    const peer = { ...subject, id: "peer", nationality: "foreign" };
+    const price = (nationality) =>
+      trainingValues(
+        [{ kind: "wild" }],
+        { ...trainee, age: 64, bonus: 0 },
+        {
+          ...TEAM_CTX,
+          roster: [{ ...subject, nationality }, peer],
+          traineeId: subject.id,
+        },
+      ).values[0].gold;
+    // Known foreign peers enable Cosmopolitan +2 and Xenophobe -2: their
+    // flat gains cancel. Xenophobe's loss applies to his remaining P1,
+    // shielded by R1 (R2 in Wild card's Responsibility case).
+    expect(price(subject.nationality) - price(null)).toBeCloseTo(
+      ((6 * 0.1012 * (3 - 2) * -(0.045 + 0.04 + 0.045)) / 3) * (10 / 354),
+      10,
+    );
+  });
+
+  it("uses the actual negotiated wage to switch a coworker's Envious penalty", () => {
+    const subject = {
+      ...LIONEL[0],
+      id: "trainee",
+      traits: ["greedy"],
+      wageExpectation: 1,
+      wageHour: 0.1,
+    };
+    const envious = {
+      ...LIONEL[0],
+      id: "peer",
+      name: "Envious coworker",
+      traits: ["envious"],
+      wageHour: 0.089,
+      items: [{ delta: -5, until: null }],
+      happiness: 45.5,
+    };
+    // 10 points off expectation: 0.1 → 0.09, still above 0.089.
+    const r = trainingValues(
+      [{ kind: "negotiation", delta: 10 }],
+      { ...trainee, traits: ["greedy"], wageChip: 0.2 },
+      { ...TEAM_CTX, roster: [subject, envious], traineeId: "trainee" },
+    );
+    expect(r.values[0].team).toBe(0);
+  });
+
+  it("leaves unread training cards unpriced with a roster", () => {
+    const r = trainingValues(
+      [{ kind: "habit" }, { kind: "unknown" }],
+      trainee,
+      { ...TEAM_CTX, roster: LIONEL, traineeId: LIONEL[0].id },
+    );
+    expect(r.values.every((v) => v.gold === null && v.team === 0)).toBe(true);
+    expect(r.best).toBeNull();
+  });
+});
 
 describe("the training cards", () => {
   // the live Train window of 2026-10-27: Sorayut Chaichana, 40, hired today,

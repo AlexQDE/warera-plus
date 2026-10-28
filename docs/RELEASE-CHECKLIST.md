@@ -2,6 +2,15 @@
 
 Go through the newest release's section and the manual gate on the live game, with your own account, before publishing. Then [CHROME-WEB-STORE.md](CHROME-WEB-STORE.md).
 
+## 3.11.0 on the live page (v0.27)
+
+The user opens the windows. Never press **Hire**, **Train**, **Reroll all** or a training card to perform these checks; use an already pending hand opened by the user. Do not draw or pick a hand. Disabled Iron's Recruit window was checked on 2026-10-28; the rest is for the next release run.
+
+- **Disabled Iron, Recruit.** With a key set, the user opens Recruit from Disabled Iron's card on the Companies list, and again from its own page. A Bully candidate shows `team −…` alongside his own gold; the "?" names Lionel Leannon and his happiness, shield, output change and gold loss. At the 2026-10-28 fixture's 0.1012 point value, that is `team −3.3 g`, happiness 41.9 → 32.9, output −9.0%, −3.3 g in 20 d. The ★ and outline follow own plus team.
+- **A Train window with coworkers.** The user opens an employee's pending hand (Claudia's fixture has Sung-ho Hwang as a coworker). When a card moves a coworker, its second line includes ` · team −1.2 g` or its own amount, and the "?" names the coworker and mechanism. Every card stays in its original box and the ★ follows own plus team. A company without coworkers (Mohannad's fixture) shows no team suffix.
+- **Read status.** Both tooltips show `team read N min ago, K coworkers` after a successful read, and name each assumed or skipped condition used. The worker reads `employee.getMyEmployees` only while a Recruit or Train window is open, at most every five minutes, with the key. Close both: no further employee reads.
+- **Without the key.** With no key set, open the same windows: their original gold figures still show, no team suffix, and one muted tooltip note says `team not counted: no API key`. During a first read it says `reading your employees…`; an unmatched company or trainee has its own note.
+
 ## 3.10.1 on the live page (v0.27)
 
 Reload the extension itself (its card must read 3.10.1), then the game. Open an employee's **already pending** hand; drawing a new one costs 10 energy and is not needed for these checks.

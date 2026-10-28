@@ -27,6 +27,55 @@ const live = (name) => {
   );
 };
 
+it("reads the trainee name and shows a real coworker's change on a taught team trait", () => {
+  live("claudia");
+  const read = train.readTrainDialog();
+  expect(read.name).toBe("Claudia Heathcote");
+  const now = Date.parse("2026-10-28T12:00:00Z");
+  const rows = JSON.parse(
+    readFileSync("fixtures/employees-live-2026-10-28.json", "utf8"),
+  );
+  const subject = rows.find((e) => e.name === read.name);
+  // Dealt-card variant of the live window; no game action is dispatched.
+  read.cards[0].button.innerHTML =
+    '<span>Rare</span><span>New habit</span><span>Bully</span><span role="img" aria-label="Bully"></span>';
+  const advisor = train.createTrain();
+  const state = {
+    ...fresh(),
+    now,
+    pointValue: { value: 0.1012, at: new Date(now).toISOString() },
+    employees: { rows, at: new Date(now - 120_000).toISOString() },
+  };
+  advisor.render(state);
+  expect(document.querySelector(".ss-train-cell small").textContent).toContain(
+    "team −",
+  );
+  const tip = document.querySelector(".ss-train-value .lens-help").title;
+  const coworker = rows.find(
+    (e) => e.company === subject.company && e._id !== subject._id,
+  );
+  expect(tip).toContain(coworker.name);
+  expect(tip).toContain("team read 2 min ago");
+  advisor.clear();
+  live("mohannad");
+  expect(train.readTrainDialog().name).toBe("Mohannad Al-Tawil");
+  advisor.render(state);
+  expect(document.querySelector(".ss-train-value").textContent).not.toContain(
+    "team",
+  );
+  expect(document.querySelector(".ss-train-value .lens-help").title).toContain(
+    "team read 2 min ago, 0 coworkers",
+  );
+  advisor.render({ ...state, hasKey: false, employees: null });
+  expect(document.querySelector(".ss-train-value .lens-help").title).toContain(
+    "team not counted: no API key",
+  );
+  advisor.render({ ...state, employees: { ...state.employees, rows: [] } });
+  expect(document.querySelector(".ss-train-value .lens-help").title).toContain(
+    "trainee not among your employees",
+  );
+});
+
 // The Employee window stays open before Train; the decimals are split by the game.
 const employee = (name, wage = "2.87") => {
   const [whole, fraction] = wage.split(".");

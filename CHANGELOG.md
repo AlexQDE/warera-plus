@@ -2,6 +2,17 @@
 
 What changed in each release of WarEra Plus, newest first. Every number here was measured as it says; a synthetic page or market says so.
 
+## 3.11.0
+
+In Disabled Iron the Recruit advisor made a Bully the pick at +36.8 g. It counted his own +2 Production and missed what his −10 happiness would do to Lionel Leannon, the company's one employee. The comparison now counts both sides. Checked against the sanitized employee answer of 2026-10-28 and window fixtures, and live in Disabled Iron's Recruit window the same day.
+
+- **Recruit from a company's own page.** Opened from Disabled Iron's own page, the Recruit window found no company: that page's card links nowhere, unlike the cards of the Companies list. On a `/company/…` page the company is now the page's own.
+- **Two new habits.** The legendary card that teaches two traits is titled "Two new habits", and the advisor knew only "New habit": a legendary hand (Claudia Heathcote, 2026-10-28) read as two cards, its Second wind priced against one other card and the unread card's trait badges counted as hers. The title is known now; a card of a title the advisor does not know keeps its place as "?", is never the pick, and its badges are not the employee's.
+
+- **The team has its own number.** Recruit adds `team −3.3 g` beside the candidate's own gold; Train adds the card's team gold to its second line. The ★ and outline follow own plus team in both windows. The "?" names each coworker who moves and why, how old the employee read is, how many coworkers it found, and every assumption used. A Bully's own +2 stays in his own value; Lionel's loss has its own line.
+- **Real coworkers, real conditions.** With your key the extension reads your employees every five minutes while a Recruit or Train window is open. Rival and Mentor compare base Production; wage, gender, company size and the other readable conditions replace the old reference guesses. A Production drill can catch a Rival up or cost a Mentor's lift; a Responsibility drill shields the trainee's actual negative happiness items, including their expiry. Hidden candidate traits and Production, and Wild card's outcomes, include the team in their averages. Without a key, while reading or when the company or trainee cannot be found, the original estimates stay and the tooltip says why the team is not counted. A candidate's flag is a country name, the API nationality an id: those rules are skipped and named, with no guessed mapping. Luck, extra trainings from Trainer and unreadable named partners are explained without a gold price.
+- **Lionel's loss, checked.** Base Production 3, Responsibility 1 (shield 0.1), happiness 41.9: a Bully takes him to 32.9 and his output bonus down 9.0 points. Over his 20 days left that is −32.4 production points, **−3.15 g at 0.0971 a point or −3.28 g at 0.1012**, printed `team −3.3 g` at the latter. The tooltip reads `Lionel Leannon: happiness −9.0 (Bully −10, shield 0.1), output −9.0%, −3.3 g in 20 d`. His recently-moved expiry improves both sides equally. Nothing hires, trains or rerolls for you.
+
 ## 3.10.1
 
 What three open Train windows on the live game showed on 2026-10-27, at a point value of 0.1012. These changes are checked against their sanitized markup and the tests; the new display still needs the live checks below.

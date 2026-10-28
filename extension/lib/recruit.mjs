@@ -13,6 +13,8 @@ import { parsePrice } from "./dom.mjs";
 import { escapeHtml as esc, signed } from "./format.mjs";
 import { freshness, TTL } from "./quality.mjs";
 import { setHtml, helpMark } from "./ui.mjs";
+import { rosterOf } from "./team.mjs";
+import { unreadTeam, teamNotes } from "./teamview.mjs";
 
 /** How long a pressed Recruit button stands for the dialog it opened. */
 export const COMPANY_MEMORY_MS = 15 * 60_000;
@@ -110,6 +112,31 @@ export function readRecruitDialog(root = document) {
       )
         ? Number(stats.children[0].textContent.trim())
         : null;
+      const responsibilityText = stats.children[1].textContent?.trim() ?? "";
+      const gender =
+        [
+          ...(header?.querySelectorAll(
+            "[aria-label], [title], [data-gender], svg",
+          ) ?? []),
+        ]
+          .map((e) =>
+            [
+              e.getAttribute("aria-label"),
+              e.getAttribute("title"),
+              e.getAttribute("data-gender"),
+              e.getAttribute("class"),
+            ]
+              .filter(Boolean)
+              .join(" "),
+          )
+          .map((label) =>
+            /\b(?:female|venus)\b/i.test(label)
+              ? "female"
+              : /\b(?:male|mars)\b/i.test(label)
+                ? "male"
+                : null,
+          )
+          .find(Boolean) ?? null;
       candidates.push({
         card,
         button,
@@ -119,6 +146,10 @@ export function readRecruitDialog(root = document) {
           wage.textContent.replace(/\s*\/\s*day\s*$/i, "").trim(),
         ),
         production,
+        responsibility: /^\d+$/.test(responsibilityText)
+          ? Number(responsibilityText)
+          : null,
+        gender,
         traits,
         hiddenTraits,
         unknownTraits,
@@ -186,7 +217,21 @@ export function companyFromButton(button) {
     const flag = /^(.+) flag$/.exec(
       card.querySelector('img[alt$=" flag"]')?.getAttribute("alt") ?? "",
     );
-    return { product, bonus, country: flag ? flag[1] : null };
+    const companyId =
+      [...card.querySelectorAll("a[href]")]
+        .map(
+          (a) =>
+            /\/company\/([0-9a-f]{24})(?:[/?#]|$)/i.exec(
+              a.getAttribute("href") ?? "",
+            )?.[1] ?? null,
+        )
+        .find(Boolean) ??
+      // on a company's own page its card links nowhere: the page is the company (live 2026-10-28)
+      /^\/company\/([0-9a-f]{24})(?:\/|$)/i.exec(
+        button.ownerDocument.defaultView?.location.pathname ?? "",
+      )?.[1] ??
+      null;
+    return { product, bonus, country: flag ? flag[1] : null, companyId };
   }
   return null;
 }
@@ -203,7 +248,7 @@ const gold = (n, digits = 2) =>
  * One candidate's advice on one line ("★ P2 · −2% · +6.3 g"), the rest in
  * the "?" tooltip: no controls or handlers.
  */
-export function candidateHtml(candidate, value, best) {
+export function candidateHtml(candidate, value, best, teamLines = []) {
   if (!value) return '<span class="lens-muted">reading…</span>';
   if (!value.fits)
     return `<span class="lens-neg">wage doesn't fit</span>${helpMark("No Production from 1 to 4 explains this wage at today's point value (the point value moved a lot since the day's candidates were drawn, or the card was misread).")}`;
@@ -243,9 +288,12 @@ export function candidateHtml(candidate, value, best) {
       : "",
     flighty ? "Flight Risk: may quit from 50 happiness" : "",
     value.total < 0 ? "Loses gold over his working life" : "",
+    ...teamLines,
   ].filter(Boolean);
   const warn = value.drifted || flighty ? ' <b class="lens-neg">!</b>' : "";
-  return `<span class="ss-recruit-line">${best ? '<b class="lens-pos">★</b> ' : ""}<b>${esc(short)}</b> · ${esc(lo === hi ? lo : `${lo}…${hi}`)} · ${gold(value.total, 1)} g${warn}</span>${helpMark(details.join("\n"))}`;
+  const team =
+    Math.abs(value.team ?? 0) >= 0.05 ? ` · team ${gold(value.team, 1)} g` : "";
+  return `<span class="ss-recruit-line">${best ? '<b class="lens-pos">★</b> ' : ""}<b>${esc(short)}</b> · ${esc(lo === hi ? lo : `${lo}…${hi}`)} · ${gold(value.total, 1)} g${team}${warn}</span>${helpMark(details.join("\n"))}`;
 }
 
 /**
@@ -302,6 +350,9 @@ export function createRecruit({ clock = () => Date.now() } = {}) {
     error = null,
     books = null,
     booksAt = null,
+    employees = null,
+    employeesError = null,
+    hasKey = true,
     now = Date.now(),
   } = {}) {
     const read = readRecruitDialog();
@@ -318,10 +369,20 @@ export function createRecruit({ clock = () => Date.now() } = {}) {
       books,
       freshness(booksAt, TTL.cases, now) === "fresh",
     );
+    const teamMissing =
+      unreadTeam({ employees, error: employeesError, hasKey, now }) ??
+      (!here?.companyId
+        ? "team not counted: company not found; open Recruit from its card"
+        : null);
+    const roster = !teamMissing
+      ? rosterOf(employees.rows, here.companyId, Date.parse(employees.at))
+      : null;
     const ranked = usable
       ? rankCandidates(
           read.candidates.map((c) => ({
             ...c,
+            // A flag is a country name; the API uses an id. No mapping exists.
+            nationality: null,
             home:
               here?.country && c.nationality
                 ? c.nationality === here.country
@@ -333,6 +394,8 @@ export function createRecruit({ clock = () => Date.now() } = {}) {
             bonus: ctx.bonus,
             kind: ctx.kind,
             valuePerPoint: ctx.valuePerPoint,
+            roster,
+            now,
           },
         )
       : null;
@@ -348,7 +411,7 @@ export function createRecruit({ clock = () => Date.now() } = {}) {
       owned.add(head);
     }
     current.add(head);
-    const roster = read.roster
+    const rosterLabel = read.roster
       ? `Roster ${read.roster.count}/${read.roster.capacity}`
       : "Roster unavailable";
     const pv = pointValue?.value;
@@ -364,7 +427,7 @@ export function createRecruit({ clock = () => Date.now() } = {}) {
       here?.bonus != null
         ? `Company bonus ${here.bonus >= 0 ? "+" : ""}${Math.round(here.bonus * 100)}%`
         : "",
-      `${read.alone ? "Works alone" : "Team estimate"} (${roster})`,
+      `${read.alone ? "Works alone" : "Team estimate"} (${rosterLabel})`,
       "Specialization: +1% a day on the same product, up to +20%",
       "A hire costs 10 energy, which your own work turns into 3-6 g",
       "Gold figures are estimates at today's prices",
@@ -414,6 +477,13 @@ export function createRecruit({ clock = () => Date.now() } = {}) {
           candidate,
           ranked?.values[i],
           ranked?.bestPays && ranked.best === i,
+          teamMissing
+            ? [teamMissing]
+            : teamNotes(ranked?.values[i], {
+                at: employees.at,
+                count: roster.length,
+                now,
+              }),
         ),
       );
     }

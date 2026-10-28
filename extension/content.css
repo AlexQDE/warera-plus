@@ -58,6 +58,7 @@
 .ss-train-value[data-lens] small {
   font-size: 9px;
   font-weight: 400;
+  white-space: normal;
 }
 .ss-train-value[data-lens] .lens-help {
   position: absolute;

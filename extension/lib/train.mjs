@@ -8,6 +8,8 @@ import { escapeHtml as esc, signed } from "./format.mjs";
 import { freshness, TTL } from "./quality.mjs";
 import { setHtml, helpMark } from "./ui.mjs";
 import { BEST_ATTR } from "./recruit.mjs";
+import { findTrainee, rosterOf } from "./team.mjs";
+import { unreadTeam, teamNotes } from "./teamview.mjs";
 
 const RARITY = /^(common|uncommon|rare|epic|legendary|mythic)$/i;
 /**
@@ -251,6 +253,7 @@ export function readTrainDialog(root = document) {
     }
     return {
       root: dialog,
+      name,
       row,
       boxes: /** @type {Element[]} */ (boxes),
       cards,
@@ -280,7 +283,13 @@ const dailyText = (/** @type {number} */ g) =>
   Math.abs(g) < 0.005 ? "≈ 0 g/day" : `${signed(g, 2)} g/day`;
 
 /** The advice line's two-line cells, one above each card, and its tooltip. */
-export function trainHtml(read, result, pointValue) {
+export function trainHtml(
+  read,
+  result,
+  pointValue,
+  teamContext = null,
+  teamMissing = null,
+) {
   const cells = read.cards.map((card, i) => {
     const v = result?.values[i];
     if (!v || v.gold == null)
@@ -288,19 +297,27 @@ export function trainHtml(read, result, pointValue) {
     const cls =
       v.gold > 0.05 ? "lens-pos" : v.gold < -0.05 ? "lens-neg" : "lens-muted";
     const main = v.perDay == null ? goldText(v.gold) : dailyText(v.perDay);
-    const sub =
+    let sub =
       card.kind === "secondWind"
         ? `+${v.hands ?? "?"} trainings`
         : card.kind === "drill" && card.stat === "luck"
           ? `${v.hands ?? "?"} trainings`
           : `${signed(v.gold, 1).replace(/^\+/, "")} g in ${result.horizon} d`;
+    if (Math.abs(v.team ?? 0) >= 0.05) sub += ` · team ${signed(v.team, 1)} g`;
     return `<span class="ss-train-cell ${cls}"><strong>${result?.best === i ? "★ " : ""}${esc(main)}</strong><small class="lens-muted">${esc(sub)}</small></span>`;
   });
   const t = read.trainee;
   const details = [
-    ...read.cards.map((card, i) => {
+    ...read.cards.flatMap((card, i) => {
       const v = result?.values[i];
-      return `${result?.best === i ? "★ " : ""}${card.title}${card.delta != null ? ` (${card.kind === "negotiation" ? "-" : "+"}${card.delta}${card.kind === "negotiation" ? "%" : ""})` : ""}: ${v?.gold == null ? "not priced" : `${goldText(v.gold)}${v.perDay == null ? "" : `, ${dailyText(v.perDay)}`}`} - ${v?.note ?? "not read"}`;
+      return [
+        `${result?.best === i ? "★ " : ""}${card.title}${card.delta != null ? ` (${card.kind === "negotiation" ? "-" : "+"}${card.delta}${card.kind === "negotiation" ? "%" : ""})` : ""}: ${v?.gold == null ? "not priced" : `${goldText(v.gold)}${v.perDay == null ? "" : `, ${dailyText(v.perDay)}`}`} - ${v?.note ?? "not read"}`,
+        ...(teamContext
+          ? teamNotes({ self: v?.self, others: v?.others }, teamContext).filter(
+              (line) => !line.startsWith("team read "),
+            )
+          : []),
+      ];
     }),
     `Production ${t.production}, wage chip ${t.wageChip == null ? "?" : `${t.wageChip >= 0 ? "+" : ""}${Math.round(t.wageChip * 1000) / 10}%`}, bonus ${t.bonus >= 0 ? "+" : ""}${Math.round(t.bonus * 1000) / 10}% + specialization still to come`,
     `${result?.horizon ?? "?"} days counted (until 65, 60 at most), output at the game's point value ${pointValue?.toFixed(4)}`,
@@ -311,6 +328,20 @@ export function trainHtml(read, result, pointValue) {
       ? [
           `paid on Production ${result.paidProduction}, ${t.production} with traits`,
         ]
+      : []),
+    ...(teamMissing ? [teamMissing] : []),
+    ...(teamContext
+      ? teamNotes(
+          {
+            assumed: [
+              ...new Set(result?.values.flatMap((v) => v.assumed ?? []) ?? []),
+            ],
+            checks: [
+              ...new Set(result?.values.flatMap((v) => v.checks ?? []) ?? []),
+            ],
+          },
+          teamContext,
+        )
       : []),
   ];
   return `${cells.join("")}${helpMark(details.join("\n"))}`;
@@ -326,7 +357,14 @@ export function createTrain() {
     for (const box of marked) box.removeAttribute(BEST_ATTR);
     marked.clear();
   };
-  function render({ pointValue = null, error = null, now = Date.now() } = {}) {
+  function render({
+    pointValue = null,
+    error = null,
+    employees = null,
+    employeesError = null,
+    hasKey = true,
+    now = Date.now(),
+  } = {}) {
     const read = readTrainDialog();
     if (!read) {
       clear();
@@ -334,10 +372,29 @@ export function createTrain() {
     }
     const usable =
       !error && freshness(pointValue?.at, TTL.pointValue, now) === "fresh";
+    let teamMissing = unreadTeam({
+      employees,
+      error: employeesError,
+      hasKey,
+      now,
+    });
+    const subject = !teamMissing
+      ? findTrainee(employees.rows, read.name, read.trainee.age)
+      : null;
+    if (!teamMissing && !subject)
+      teamMissing = "team not counted: trainee not among your employees";
+    if (!teamMissing && !subject?.company)
+      teamMissing = "team not counted: trainee's company not found";
+    const roster = !teamMissing
+      ? rosterOf(employees.rows, subject.company, Date.parse(employees.at))
+      : null;
     const result =
       usable && read.trainee.production != null && read.trainee.wageChip != null
         ? trainingValues(read.cards, /** @type {any} */ (read.trainee), {
             pointValue: pointValue.value,
+            roster,
+            traineeId: subject?._id,
+            now,
           })
         : null;
     let line = read.root.querySelector(".ss-train-value[data-lens]");
@@ -357,7 +414,13 @@ export function createTrain() {
     setHtml(
       line,
       result
-        ? trainHtml(read, result, pointValue.value)
+        ? trainHtml(
+            read,
+            result,
+            pointValue.value,
+            roster ? { at: employees.at, count: roster.length - 1, now } : null,
+            teamMissing,
+          )
         : `<span class="lens-muted">WarEra Plus · ${
             error
               ? esc(error)

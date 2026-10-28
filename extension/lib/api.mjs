@@ -24,6 +24,7 @@ export const BOOK_URL = withInput("tradingOrder.getTopOrders", {
 });
 // This procedure takes no input; even an empty object is rejected.
 export const POINT_VALUE_URL = `${TRPC}gameStat.getPpMoneyValue`;
+export const EMPLOYEES_URL = `${TRPC}employee.getMyEmployees`;
 export const KEYLESS_LIMIT = 100;
 export const TIMEOUT_MS = 10_000; // a call that has not answered by then is given up, not left hanging
 
@@ -214,6 +215,14 @@ export async function fetchBook(
   });
   const depth = parseBook(data, 100);
   return { book: { ...summarizeBook(data), ...depth }, limit, remaining };
+}
+
+/** The player's employees, with their server totals and company ids; key required. */
+export async function fetchMyEmployees(fetchImpl, key) {
+  const { data } = await call(fetchImpl, requireKey(key), EMPLOYEES_URL);
+  if (!Array.isArray(data))
+    throw new ApiError("Invalid employees schema", "schema");
+  return data;
 }
 
 /** The game's gold value of one production point, with the player's key or keyless. */

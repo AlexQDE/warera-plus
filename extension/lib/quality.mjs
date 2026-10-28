@@ -3,6 +3,7 @@ export const TTL = Object.freeze({
   book: 30_000,
   cases: 60_000,
   sales: 300_000,
+  employees: 300_000,
   avg: 600_000,
   pointValue: 600_000,
   feed: 60_000,

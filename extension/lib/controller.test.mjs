@@ -68,6 +68,94 @@ function setup(fetchImpl = vi.fn(async () => response()), initial = {}) {
   };
 }
 
+describe("employees resource", () => {
+  it("requires a key even when an employee cache exists", async () => {
+    const { controller, fetchImpl } = setup(undefined, {
+      settings: {},
+      employees: {
+        rows: [],
+        at: new Date(NOW).toISOString(),
+        cacheVersion: CACHE_VERSION,
+      },
+    });
+    expect((await controller.handle({ type: "employees" })).error).toBe(
+      "needs-key",
+    );
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("shares in-flight reads and caches employees for five minutes", async () => {
+    const pending = deferred();
+    const f = vi.fn(() => pending.promise);
+    const { controller, storage, advance } = setup(f);
+    const first = controller.handle({ type: "employees" });
+    const second = controller.handle({ type: "employees", force: true });
+    await vi.waitFor(() => expect(f).toHaveBeenCalledOnce());
+    pending.resolve(response([{ name: "Lionel" }]));
+    const [a, b] = await Promise.all([first, second]);
+    expect(a).toEqual(b);
+    expect(a.employees.rows).toEqual([{ name: "Lionel" }]);
+    expect(storage.data.employees).toEqual(a.employees);
+    expect(TTL.employees).toBe(300_000);
+    advance(299_999);
+    expect(await controller.handle({ type: "employees" })).toEqual(a);
+    expect(f).toHaveBeenCalledOnce();
+    advance(1);
+    await controller.handle({ type: "employees" });
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it("backs off a failed employee refresh and retains the last snapshot", async () => {
+    const f = vi
+      .fn()
+      .mockResolvedValueOnce(response([]))
+      .mockResolvedValueOnce(response({}))
+      .mockResolvedValue(response([{ name: "Recovered" }]));
+    const { controller, advance } = setup(f);
+    const first = await controller.handle({ type: "employees" });
+    advance(300_000);
+    expect(await controller.handle({ type: "employees" })).toMatchObject({
+      error: "schema",
+      employees: first.employees,
+    });
+    expect(
+      (await controller.handle({ type: "employees", force: true })).message,
+    ).toContain("retry in");
+    expect(f).toHaveBeenCalledTimes(2);
+    advance(5000);
+    expect(
+      (await controller.handle({ type: "employees" })).employees.rows[0].name,
+    ).toBe("Recovered");
+  });
+
+  it("shares rate-limit holds and clears employee data when the key changes or is rejected", async () => {
+    const f = vi
+      .fn()
+      .mockResolvedValueOnce(response([]))
+      .mockResolvedValueOnce(response({}, { status: 429 }))
+      .mockResolvedValue(response({}, { status: 401 }));
+    const { controller, storage, advance } = setup(f);
+    await controller.handle({ type: "employees" });
+    expect(
+      (await controller.handle({ type: "employees", force: true })).error,
+    ).toBe("rate-limited");
+    expect((await controller.handle({ type: "book" })).error).toBe(
+      "rate-limited",
+    );
+    expect(f).toHaveBeenCalledTimes(2);
+    advance(120_000);
+    expect(
+      (await controller.handle({ type: "employees", force: true })).employees,
+    ).toBeNull();
+    expect(storage.data.employees).toBeUndefined();
+    await controller.handle(
+      { type: "saveSettings", settings: { apiKey: "another-test-key" } },
+      { trusted: true },
+    );
+    expect(storage.data.employees).toBeUndefined();
+  });
+});
+
 describe("pointValue resource", () => {
   it("shares in-flight reads, caches keyless values for ten minutes, then refreshes", async () => {
     const pending = deferred();

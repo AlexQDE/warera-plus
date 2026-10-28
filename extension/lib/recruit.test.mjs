@@ -13,6 +13,123 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+it("finds the company id at the live card's four-level button ancestry", () => {
+  document.body.insertAdjacentHTML(
+    "afterbegin",
+    '<div id="disabled"><a href="/company/c00000000000000000000001">Disabled Iron</a><img alt="iron"><span>6%</span><div><div><div><button>Recruit 1/2</button></div></div></div></div>',
+  );
+  expect(
+    recruit.companyFromButton(document.querySelector("#disabled button")),
+  ).toMatchObject({ companyId: "c00000000000000000000001", product: "iron" });
+});
+
+it("takes the company id from the page's address on a company's own page, whose card links nowhere", () => {
+  document.body.insertAdjacentHTML(
+    "afterbegin",
+    '<div id="own"><img alt="iron"><span>6%</span><div><div><div><button>Recruit 1/2</button></div></div></div></div>',
+  );
+  const button = document.querySelector("#own button");
+  expect(recruit.companyFromButton(button)?.companyId).toBeNull();
+  window.history.pushState({}, "", "/company/c00000000000000000000001");
+  try {
+    expect(recruit.companyFromButton(button)).toMatchObject({
+      companyId: "c00000000000000000000001",
+      product: "iron",
+    });
+  } finally {
+    window.history.pushState({}, "", "/");
+  }
+  // the Companies list is no company's page
+  window.history.pushState({}, "", "/companies");
+  try {
+    expect(recruit.companyFromButton(button)?.companyId).toBeNull();
+  } finally {
+    window.history.pushState({}, "", "/");
+  }
+});
+
+it("shows the Bully's real loss to Lionel and keeps the old line without employees", () => {
+  const now = Date.parse("2026-10-28T12:00:00Z");
+  const employees = {
+    rows: JSON.parse(
+      readFileSync("fixtures/employees-live-2026-10-28.json", "utf8"),
+    ),
+    at: new Date(now - 120_000).toISOString(),
+  };
+  document.body.insertAdjacentHTML(
+    "afterbegin",
+    '<div id="disabled"><a href="/company/c00000000000000000000001">Disabled Iron</a><img alt="iron"><span>0%</span><div><div><div><button>Recruit 1/2</button></div></div></div></div>',
+  );
+  const candidate = recruit.readRecruitDialog().candidates[0];
+  candidate.statsGroup.children[0].lastElementChild.textContent = "2";
+  candidate.statsGroup.parentElement.insertAdjacentHTML(
+    "beforeend",
+    '<span role="img" aria-label="Bully"></span>',
+  );
+  const advisor = recruit.createRecruit({ clock: () => now });
+  document
+    .querySelector("#disabled button")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  const state = {
+    pointValue: { value: 0.1012, at: new Date(now).toISOString() },
+    now,
+  };
+  advisor.render(state);
+  const line = () =>
+    candidate.card.querySelector(".ss-recruit-line").textContent;
+  const tip = () =>
+    candidate.card.querySelector(".ss-recruit-value .lens-help").title;
+  const original = line();
+  expect(original).not.toContain("team");
+  expect(tip()).toContain("reading your employees…");
+  advisor.render({ ...state, employees });
+  expect(line()).toContain("team −3.3 g");
+  expect(tip()).toContain(
+    "Lionel Leannon: happiness −9.0 (Bully −10, shield 0.1), output −9.0%, −3.3 g in 20 d",
+  );
+  expect(tip()).toContain("team read 2 min ago, 1 coworker");
+  advisor.render({ ...state, hasKey: false });
+  expect(line()).toBe(original);
+  expect(tip()).toContain("team not counted: no API key");
+  advisor.render({ ...state, employees: { ...employees, at: "2000-01-01" } });
+  expect(line()).toBe(original);
+  expect(tip()).toContain("team not counted: employees are stale");
+  advisor.dispose();
+});
+
+it("anchors an expiring happiness item at the employee snapshot's timestamp", () => {
+  const now = Date.parse("2026-10-28T12:00:00Z");
+  const rows = JSON.parse(
+    readFileSync("fixtures/employees-live-2026-10-28.json", "utf8"),
+  );
+  const lionel = rows.find((e) => e.name === "Lionel Leannon");
+  lionel.happinessBreakdown.contributions.find(
+    (item) => item.reason === "recentlyMoved",
+  ).until = new Date(now - 1000).toISOString();
+  document.body.insertAdjacentHTML(
+    "afterbegin",
+    '<div id="disabled"><a href="/company/c00000000000000000000001">Disabled Iron</a><img alt="iron"><button>Recruit 1/2</button></div>',
+  );
+  const candidate = recruit.readRecruitDialog().candidates[0];
+  candidate.statsGroup.parentElement.insertAdjacentHTML(
+    "beforeend",
+    '<span role="img" aria-label="Foreman"></span>',
+  );
+  const advisor = recruit.createRecruit({ clock: () => now });
+  document
+    .querySelector("#disabled button")
+    .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  advisor.render({
+    now,
+    pointValue: { value: 0.1012, at: new Date(now).toISOString() },
+    employees: { rows, at: new Date(now - 120_000).toISOString() },
+  });
+  expect(
+    candidate.card.querySelector(".ss-recruit-value .lens-help").title,
+  ).toContain("happiness +1.2");
+  advisor.dispose();
+});
+
 it("reads all four candidates, with no hidden trait invented when no badge exists", () => {
   expect(recruit.readRecruitDialog).toBeTypeOf("function");
   const read = recruit.readRecruitDialog();
@@ -58,6 +175,18 @@ it("separates hidden and untranslated trait badges, reads potential and team cap
     hiddenTraits: 1,
     unknownTraits: 1,
     potential: 4,
+  });
+});
+
+it("reads a labelled gender icon and shown Responsibility without treating a country name as a nationality id", () => {
+  const candidate = recruit.readRecruitDialog().candidates[0];
+  candidate.card
+    .querySelector('img[alt$=" flag"]')
+    .insertAdjacentHTML("afterend", '<svg aria-label="Female"></svg>');
+  expect(recruit.readRecruitDialog().candidates[0]).toMatchObject({
+    gender: "female",
+    responsibility: 1,
+    nationality: "Mali",
   });
 });
 
@@ -206,7 +335,12 @@ it("prices the pressed company's product at the bids, with its bonus and country
   );
   expect(
     recruit.companyFromButton(document.querySelector("#company button")),
-  ).toEqual({ product: "steel", bonus: 0.04, country: "Mali" });
+  ).toEqual({
+    product: "steel",
+    bonus: 0.04,
+    country: "Mali",
+    companyId: null,
+  });
   // the chip's digits in their own span, as the game prints a stat
   const chip = [...document.querySelectorAll("#company span")].find(
     (e) => e.textContent === "4%",

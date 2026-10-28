@@ -37,6 +37,7 @@ export async function startLens(runtime = chrome.runtime) {
     cases: null,
     avg: null,
     pointValue: null,
+    employees: null,
     sales: null,
     salesByCode: {},
     salesErrors: {},
@@ -67,7 +68,7 @@ export async function startLens(runtime = chrome.runtime) {
   let trainRoot = null;
   const trainer = createTrain();
   const signature = () =>
-    ["book", "cases", "avg", "pointValue"]
+    ["book", "cases", "avg", "pointValue", "employees"]
       .map((k) =>
         freshness(
           state[k]?.at,
@@ -113,6 +114,7 @@ export async function startLens(runtime = chrome.runtime) {
         state.cases = null;
         state.avg = null;
         state.pointValue = null;
+        state.employees = null;
         state.sales = null;
         state.salesByCode = {};
         state.salesErrors = {};
@@ -142,6 +144,13 @@ export async function startLens(runtime = chrome.runtime) {
   async function read(kind, force = false, code) {
     if (disposed || document.hidden || state.setup || state.invalidated) return;
     if (kind === "sales" && !state.hasKey) return; // the API serves sales only with a key
+    if (
+      kind === "employees" &&
+      (!state.hasKey ||
+        !state.settings.recruit ||
+        (!readRecruitDialog() && !readTrainDialog()))
+    )
+      return;
     if (state.busy.has(kind)) {
       // Sales reads are single-flight. One asked for while another item's read is in flight is kept, with
       // whether it was forced, and runs when that read finishes; a plain repeat of the item being read is not.
@@ -199,6 +208,7 @@ export async function startLens(runtime = chrome.runtime) {
         state.cases = null;
         state.avg = null;
         state.pointValue = null;
+        state.employees = null;
         state.sales = null;
         state.salesByCode = {};
         state.salesErrors = {};
@@ -668,6 +678,9 @@ export async function startLens(runtime = chrome.runtime) {
         ? recruit.render({
             pointValue: state.pointValue,
             error: state.errors.pointValue,
+            employees: state.employees,
+            employeesError: state.errors.employees,
+            hasKey: state.hasKey,
             books: state.cases?.books,
             // a failed refresh of the books leaves them unpriced, as on the Cases strip
             booksAt: state.errors.cases ? null : state.cases?.at,
@@ -679,6 +692,7 @@ export async function startLens(runtime = chrome.runtime) {
       if (recruitRoot !== context.recruit) {
         // wages rest on the point value; the company's product and inputs are priced from the case books (all 20 resources)
         void read("pointValue");
+        void read("employees");
         void read("cases");
       }
     }
@@ -688,13 +702,19 @@ export async function startLens(runtime = chrome.runtime) {
         ? trainer.render({
             pointValue: state.pointValue,
             error: state.errors.pointValue,
+            employees: state.employees,
+            employeesError: state.errors.employees,
+            hasKey: state.hasKey,
             now: Date.now(),
           })
         : (trainer.clear(), null);
     context.train = training?.root ?? null;
     if (context.train) {
       nextRoots.push(context.train);
-      if (trainRoot !== context.train) void read("pointValue");
+      if (trainRoot !== context.train) {
+        void read("pointValue");
+        void read("employees");
+      }
     }
     trainRoot = context.train;
     // The craft window's tier: its six items' sales are read now, today's crafts of it first and ahead of the
@@ -806,8 +826,10 @@ export async function startLens(runtime = chrome.runtime) {
     if (
       (context.recruit && readRecruitDialog()) ||
       (context.train && readTrainDialog())
-    )
+    ) {
       jobs.push(read("pointValue"));
+      jobs.push(read("employees"));
+    }
     // Every row is valued at the game's average until its item's fills are read; the craft board is built from them.
     if (context.equipment || craftOpen || (context.cases && wantsAverages()))
       jobs.push(read("avg"));

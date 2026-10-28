@@ -7,6 +7,7 @@ import {
   fetchPointValue,
   POINT_VALUE_URL,
   fetchSales,
+  fetchMyEmployees,
   fetchHistoryPage,
   fetchInputAverages,
   salesUrl,
@@ -58,6 +59,46 @@ const fake = ({
   };
   return { fetchImpl, calls };
 };
+
+describe("fetchMyEmployees", () => {
+  it("reads the array without input, with the player's key", async () => {
+    const employees = [{ _id: "employee", company: "company" }];
+    const { fetchImpl, calls } = fake({
+      body: { result: { data: employees } },
+    });
+    expect(await fetchMyEmployees(fetchImpl, " test-key ")).toEqual(employees);
+    expect(calls[0].url).toBe(
+      "https://api2.warera.io/trpc/employee.getMyEmployees",
+    );
+    expect(calls[0].opts.headers["x-api-key"]).toBe("test-key");
+    expect(calls[0].opts.credentials).toBe("omit");
+  });
+
+  it("requires a key before fetching and rejects a non-array schema", async () => {
+    const { fetchImpl, calls } = fake({ body: { result: { data: {} } } });
+    await expect(fetchMyEmployees(fetchImpl, "")).rejects.toMatchObject({
+      code: "needs-key",
+    });
+    expect(calls).toHaveLength(0);
+    await expect(fetchMyEmployees(fetchImpl, "test-key")).rejects.toMatchObject(
+      { code: "schema" },
+    );
+  });
+
+  it.each([
+    [401, 500, "key-rejected"],
+    [200, 100, "key-rejected"],
+    [429, 500, "rate-limited"],
+  ])(
+    "preserves the shared API error for status %i, bucket %i",
+    async (status, limit, code) => {
+      const { fetchImpl } = fake({ status, limit });
+      await expect(
+        fetchMyEmployees(fetchImpl, "test-key"),
+      ).rejects.toMatchObject({ code });
+    },
+  );
+});
 
 describe("fetchBook", () => {
   it("sends the key as x-api-key and returns the summarised book with its rate bucket", async () => {

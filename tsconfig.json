@@ -24,6 +24,8 @@
     "extension/lib/similar.mjs",
     "extension/lib/stats.mjs",
     "extension/lib/observed.mjs",
-    "extension/lib/hiring.mjs"
+    "extension/lib/hiring.mjs",
+    "extension/lib/team.mjs",
+    "extension/lib/teamview.mjs"
   ]
 }

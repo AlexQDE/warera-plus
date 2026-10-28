@@ -504,6 +504,66 @@ newest | mostExpensive, limit: 12, cursor?}` (the sort is kept in the
 - **The point value** is `gameStat.getPpMoneyValue` (GET, no input; the
   procedure takes void and refuses `input={}`): `{"result":{"data":0.1012}}`,
   public, keyless. It moved from 0.1019 to 0.1012 within the day.
+- **Employee and team facts verified 2026-10-28.**
+  `employee.getMyEmployees` is a tRPC GET with no input and the player's
+  `x-api-key`. It returns an array of the player's employees, with company
+  ids, names, gender, age, nationality ids, base and trained stats, traits,
+  hourly wages, wage expectation, stat breakdowns, happiness items and
+  shield, and the production bonus's parts. The sanitized answer is
+  `fixtures/employees-live-2026-10-28.json` (18 employees); the company link
+  `/company/<24 hex>` is inside the card, four levels above its Recruit
+  button. Train's header supplies the exact trainee name; age breaks a name
+  tie. Group employees by company; an empty company has no coworkers.
+  The server's `base` already includes `trained`; total Production is base
+  plus flat contributions, never trained twice. Points an hour are total
+  Production × 0.25 × (1 + total production bonus / 100). Lionel's
+  3 × 0.25 × 0.999 = 0.749 (shown 0.75), Mohannad's 6 × 0.25 × 1.052 =
+  1.578 (1.58), Claudia's 7 × 0.25 × 1.598 = 2.797 (2.8).
+  Specialization, tools, Sprinter, events and management add in the bonus.
+  Happiness contributes value − 50, above or below 50; happiness is
+  50 + positive items + negative items × (1 − shield), with shield = total
+  Responsibility × 0.1, capped at 1. Wages use base Production: trait and
+  team points are unpaid. A hire or move adds `recentlyMoved` −5 for seven
+  days; expiring items drop on their `until` date. Lionel's income tax −4
+  and recentlyMoved −5 with shield 0.1 give happiness 41.9. Adding a Bully's
+  −10 gives 32.9, output bonus −9.0 points; over his 20 days left the loss
+  is 32.4 points (−3.27888 g at 0.1012).
+- **Team trait rules (client table, read 2026-10-28).** Bully gives himself
+  +2 Production with coworkers and each coworker −10 happiness; Comic
+  himself −1 and coworkers +10 happiness. Foreman gives coworkers
+  +3 Responsibility. Lucky Charm / Jinx give coworkers +3 / −2 Luck;
+  Trainer adds one training a day. Rival is +3 Production with a stronger
+  coworker, −1 otherwise; Mentor loses 1 while any weaker coworker gains 2.
+  Loner alone gets +100% bonus and +5 happiness. Sociable gets +25% per
+  coworker, capped at 50%, and −10 happiness alone. Prima Donna has +20%
+  bonus and −10 happiness in the table's best-paid state. Envious loses
+  5 happiness per better-paid coworker, capped at −10. Nationalist gets
+  +2 Responsibility and +5 happiness with coworkers of his nationality;
+  Xenophobe loses 2 Production and 5 happiness with a foreign coworker;
+  Cosmopolitan gains 2 Production per other nationality, capped at 4.
+  Girl Power / Band of Brothers add 15% per female / male coworker, capped
+  at 30%; Misandrist / Misogynist subtract 15% per male / female coworker,
+  capped at −30%. Old Friends / Nemesis / Sweethearts need a named partner
+  (+15% / −15% / +20%); Recruiter adds a candidate slot.
+- **Team model assumptions (2026-10-28), not server-verified conditions.**
+  Rival and Mentor compare **base** Production with strict greater / less;
+  Prima Donna's +20% and −10 happiness apply together only while his hourly
+  wage is highest, ties included; Nationalist requires at least one
+  coworker and every coworker of his nationality. Unknown gender,
+  nationality, base Production or hourly wage skips the affected rule in
+  both before and after states, and names it in `assumed`; a Recruit flag
+  is a country **name**, the roster's nationality an **id**, with no mapping,
+  so nationality conditions involving a candidate stay unevaluated. A
+  hidden candidate Responsibility uses the 1–4 average, 2.5, for his shield.
+  A named partner is unreadable; partner traits, Luck changes and Trainer's
+  extra trainings are named without a gold price. Own plus team chooses
+  the pick. Team is only the change over each coworker's days left to 65,
+  capped at 60 and at the subject's own horizon, using the server's totals
+  and a day-by-day delta with specialization growth and item expiry.
+  Candidate Production and hidden-trait cases, and Wild card's combined
+  trait and stat cases, are averaged after evaluating the real conditions.
+  New hires' own tax, recentlyMoved and quitting are outside this model.
+  See [TEAM-MODEL.md](TEAM-MODEL.md) for the design and evidence.
 - **Training** (client module 3906, the card 81658; config `training`): one
   draw a day per employee (+1 with a Trainer coworker), 10 energy, a hand of
   3, keep one; a pending hand is `employee.pendingTraining.offers` and
