@@ -512,7 +512,10 @@ newest | mostExpensive, limit: 12, cursor?}` (the sort is kept in the
   legendary to one stat (no rare drill); Negotiation −5 / −10 / −20 points
   of wage expectation (common / uncommon / rare), never below 0.7; Wild card
   a random hidden trait and +1 to a random stat; New habit a mixed (rare) or
-  positive (epic) trait, two positives (legendary), shown on the card; Rehab
+  positive (epic) trait, two positives (legendary), shown on the card, the
+  legendary one titled "Two new habits" (`traitTo2 ? … : "New habit"`; a
+  drill's title is "Intensive drill" above +1, read 2026-10-28, build
+  `6pO9D_vom7joxH3ibKzmO`), its caption "A and B" in three text nodes; Rehab
   one negative (rare) or mixed (uncommon) trait; Clean slate every negative
   (legendary, dealt with 2+); Second wind +2 / +3 / +4 potential; Mentoring
   never dealt. The window's header prints his stats, a happiness chip, his

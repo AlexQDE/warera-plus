@@ -10,13 +10,17 @@ import { setHtml, helpMark } from "./ui.mjs";
 import { BEST_ATTR } from "./recruit.mjs";
 
 const RARITY = /^(common|uncommon|rare|epic|legendary|mythic)$/i;
-/** The cards' titles as the game prints them (English catalog), to their kind. */
+/**
+ * The cards' titles as the game prints them (English catalog), to their kind. Client module 3906 titles a drill
+ * above +1 "Intensive drill" and a habit teaching two traits (the legendary one) "Two new habits".
+ */
 const TITLES = new Map([
   ["drill", "drill"],
   ["intensive drill", "drill"],
   ["negotiation", "negotiation"],
   ["wild card", "wild"],
   ["new habit", "habit"],
+  ["two new habits", "habit"],
   ["rehab", "rehab"],
   ["clean slate", "cleanSlate"],
   ["second wind", "secondWind"],
@@ -76,13 +80,15 @@ function statChips(dialog, inCard) {
 /**
  * One dealt card off its button: the rarity tag, the title, then what it
  * does ("-10%" "Expected wage", "+2" with the stat's icon, trait badges).
- * null when the button is no training card.
+ * null when the button is no training card; kind null when its title is
+ * none the advisor knows (readTrainDialog keeps it only among the cards).
  */
 function readCard(button, icons) {
   const t = texts(button);
   if (!t.length || !RARITY.test(t[0])) return null;
-  const at = t.findIndex((x) => TITLES.has(x.toLowerCase()));
-  if (at < 0) return null;
+  const known = t.findIndex((x) => TITLES.has(x.toLowerCase()));
+  if (known < 0 && t.length < 2) return null;
+  const at = known < 0 ? 1 : known;
   const kind = TITLES.get(t[at].toLowerCase()) ?? null;
   const rest = t.slice(at + 1);
   const joined = rest.join(" ");
@@ -153,7 +159,9 @@ function readCard(button, icons) {
 
 /**
  * The open Train window: the employee as its header shows him and the dealt
- * cards. null when no window reads (every card must, or nothing is shown).
+ * cards. null when no window reads. A card whose title the advisor does not
+ * know keeps its place in the row (its cell "?", never the pick), so the
+ * cells stay above their cards and its trait badges are not his.
  */
 export function readTrainDialog(root = document) {
   for (const dialog of root.querySelectorAll('[role="dialog"]')) {
@@ -161,12 +169,15 @@ export function readTrainDialog(root = document) {
       ...dialog.querySelectorAll('button, [type="button"], [role="button"]'),
     ].filter(native);
     let cards = buttons.map((b) => readCard(b, [])).filter((c) => c != null);
-    if (cards.length < 2) continue;
-    // the row that holds the cards, and each card's own box in it
-    let row = cards[0].button.parentElement;
-    while (row && !cards.every((c) => row?.contains(c.button)))
+    const known = cards.filter((c) => c.kind != null);
+    if (known.length < 2) continue;
+    // the row that holds the known cards, and each card's own box in it
+    let row = known[0].button.parentElement;
+    while (row && !known.every((c) => row?.contains(c.button)))
       row = row.parentElement;
     if (!row || row === dialog) continue;
+    const inRow = row;
+    cards = cards.filter((c) => c.kind != null || inRow.contains(c.button));
     const boxes = cards.map(
       (c) =>
         [...(row?.children ?? [])].find((ch) => ch.contains(c.button)) ?? null,

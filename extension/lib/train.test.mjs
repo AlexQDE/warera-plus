@@ -95,6 +95,59 @@ it.each([
   },
 );
 
+// Claudia's window again on 2026-10-28 with a legendary hand: a habit card teaching two traits is titled "Two new
+// habits" (client module 3906: traitTo2 ? "Two new habits" : "New habit"), its caption in three text nodes.
+it("reads the live legendary hand: Intensive drill +4, Second wind +4 and Two new habits, one cell above each card", () => {
+  live("legendary");
+  const read = train.readTrainDialog();
+  expect(read.trainee).toEqual({
+    production: 7,
+    responsibility: 2,
+    luck: 3,
+    potential: 2,
+    potentialMax: 10,
+    wageChip: 0.183,
+    bonus: 0.098,
+    hiredDays: 0,
+    age: 42,
+    traits: ["laborer"],
+    leadership: 3,
+    wageDay: null,
+  });
+  expect(
+    read.cards.map((c) => [c.rarity, c.title, c.kind, c.delta, c.stat]),
+  ).toEqual([
+    ["legendary", "Intensive drill", "drill", 4, "responsibility"],
+    ["legendary", "Second wind", "secondWind", 4, null],
+    ["legendary", "Two new habits", "habit", null, null],
+  ]);
+  expect(read.cards[2]).toMatchObject({
+    traitTo: ["quickStudy", "sprinter"],
+    trait: null,
+  });
+  expect(read.boxes).toHaveLength(3);
+  const advisor = train.createTrain();
+  advisor.render(fresh());
+  // 23 days to 65 and 8 trainings already left: four more would each fetch about this hand's best other card
+  // weighted by the days left (2.7 g) for 10 energy (4.5 g), so Second wind is worth nothing to her
+  expect(
+    [...document.querySelectorAll(".ss-train-value .ss-train-cell")].map(
+      (c) => c.textContent,
+    ),
+  ).toEqual([
+    "+0.21 g/day4.7 g in 23 d",
+    "≈ 0 g+4 trainings",
+    "★ +0.21 g/day4.9 g in 23 d",
+  ]);
+  expect(read.boxes[2].hasAttribute("data-ss-best")).toBe(true);
+  // Second wind is priced against the best other card of the hand, now the habit: with output worth three times
+  // as much, the habit's hand makes its trainings worth more than the drill's alone would
+  const wind = (cards) =>
+    trainingValues(cards, read.trainee, { pointValue: 0.3 }).values[1].gold;
+  expect(wind(read.cards)).toBeGreaterThan(wind(read.cards.slice(0, 2)));
+  advisor.clear();
+});
+
 it("uses only the matching Employee dialog's daily wage for Claudia's paid Production", () => {
   live("claudia");
   const fallback = trainingValues(
@@ -346,9 +399,21 @@ it("reads a Production drill by its icon, a taught trait, and leaves an unknown 
   ].map((c) => c.textContent);
   expect(cells[0]).toBe("★ +0.30 g/day7.6 g in 25 d");
   expect(cells[1]).toBe("−0.02 g/day−0.4 g in 25 d");
-  // a card of a kind the advisor does not know: "?" and never the pick
+  // a card of a kind the advisor does not know keeps its place: "?" above it and never the pick
   read.cards[2].button.querySelector("p").textContent = "Brand new card";
-  expect(train.readTrainDialog().cards).toHaveLength(2);
+  const unknown = train.readTrainDialog();
+  expect(unknown.cards.map((c) => [c.title, c.kind])).toEqual([
+    ["Negotiation", "negotiation"],
+    ["Intensive drill", "drill"],
+    ["Brand new card", null],
+  ]);
+  expect(unknown.boxes).toHaveLength(3);
+  advisor.render(fresh());
+  const after = [
+    ...document.querySelectorAll(".ss-train-value .ss-train-cell"),
+  ];
+  expect(after.map((c) => c.textContent)[2]).toBe("?");
+  expect(unknown.boxes[2].hasAttribute("data-ss-best")).toBe(false);
 });
 
 it("reads two taught traits from an 'A and B' caption and a removed one from 'Remove A'", () => {
