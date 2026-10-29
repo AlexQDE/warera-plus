@@ -177,23 +177,25 @@ it("reads the live legendary hand: Intensive drill +4, Second wind +4 and Two ne
   expect(read.boxes).toHaveLength(3);
   const advisor = train.createTrain();
   advisor.render(fresh());
-  // 23 days to 65 and 8 trainings already left: four more would each fetch about this hand's best other card
-  // weighted by the days left (2.7 g) for 10 energy (4.5 g), so Second wind is worth nothing to her
+  // 23 days to 65 and 8 trainings already left: four more come on days 9 to 12, each a hand whose best card is what
+  // a hand at her odds averages, weighted by the days left, for 10 energy (4.5 g) each: about 1 g in all
   expect(
     [...document.querySelectorAll(".ss-train-value .ss-train-cell")].map(
       (c) => c.textContent,
     ),
   ).toEqual([
     "+0.21 g/day4.7 g in 23 d",
-    "≈ 0 g+4 trainings",
+    "+0.99 g+4 trainings",
     "★ +0.21 g/day4.9 g in 23 d",
   ]);
   expect(read.boxes[2].hasAttribute("data-ss-best")).toBe(true);
-  // Second wind is priced against the best other card of the hand, now the habit: with output worth three times
-  // as much, the habit's hand makes its trainings worth more than the drill's alone would
+  // the later hands do not hold this hand's cards: Second wind is worth the same whatever it is dealt with
   const wind = (cards) =>
-    trainingValues(cards, read.trainee, { pointValue: 0.3 }).values[1].gold;
-  expect(wind(read.cards)).toBeGreaterThan(wind(read.cards.slice(0, 2)));
+    trainingValues(cards, read.trainee, { pointValue: 0.3 }).values.find(
+      (v, i) => cards[i].kind === "secondWind",
+    ).gold;
+  expect(wind(read.cards)).toBe(wind(read.cards.slice(0, 2)));
+  expect(wind(read.cards)).toBe(wind([read.cards[1]]));
   advisor.clear();
 });
 

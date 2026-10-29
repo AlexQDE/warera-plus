@@ -407,6 +407,72 @@ describe("the training cards", () => {
     { kind: "drill", rarity: "uncommon", stat: "luck", delta: 2 },
     { kind: "wild", rarity: "uncommon" },
   ];
+  /** What the best card of a hand at his odds averages: every card he can be dealt but Second wind, Luck at zero. */
+  const expectedBest = (/** @type {any} */ trainee, pointValue = PV) => {
+    const others = hiring
+      .trainingPool(trainee)
+      .filter((c) => c.kind !== "secondWind");
+    const prices = trainingValues(
+      others,
+      { ...trainee, potential: trainee.potentialMax },
+      { pointValue },
+    ).values;
+    return hiring.bestOfHand(
+      others.map((c, i) => ({ ...c, gold: prices[i].gold })),
+      hiring.trainingOdds(trainee.luck ?? 0, trainee.leadership ?? 0),
+    );
+  };
+  it("prices a dealt Second wind at what later hands average, not at the strong card dealt beside it", () => {
+    // a friend's Train window of 2026-10-29: Brenda Collins, 24, hired 2 days ago, Production 5, Responsibility 1,
+    // Luck 3 under Leadership 11, wage chip -6.6%, bonus +10.1%, potential 3/10; a legendary hand: Second wind +4,
+    // Intensive drill +4 Production and Two new habits (Stockpiler and Recruiter); point value 0.0943
+    const brenda = {
+      production: 5,
+      responsibility: 1,
+      luck: 3,
+      leadership: 11,
+      potential: 3,
+      potentialMax: 10,
+      wageChip: -0.066,
+      bonus: 0.101,
+      hiredDays: 2,
+      age: 24,
+      traits: [],
+    };
+    const hand = [
+      { kind: "secondWind", rarity: "legendary", delta: 4 },
+      { kind: "drill", rarity: "legendary", stat: "production", delta: 4 },
+      {
+        kind: "habit",
+        rarity: "legendary",
+        traitTo: ["stockpiler", "recruiter"],
+      },
+    ];
+    const r = trainingValues(hand, brenda, { pointValue: 0.0943 });
+    const [wind, drill, habits] = /** @type {any} */ (r).values;
+    // 41 days to 65 and 7 trainings left after this hand: four more on days 8 to 11
+    const top = expectedBest(brenda, 0.0943);
+    expect(top).toBeCloseTo(15.7, 1);
+    expect(wind.hands).toBe(4);
+    expect(wind.gold).toBeCloseTo(
+      [8, 9, 10, 11].reduce(
+        (s, j) => s + Math.max(0, (top * (41 - j)) / 41 - ENERGY_GOLD),
+        0,
+      ),
+      9,
+    );
+    // about 30 g, where pricing each later hand at the +4 drill beside it (28.3 g) read 69 g
+    expect(wind.gold).toBeCloseTo(30.2, 1);
+    expect(drill.gold).toBeCloseTo(28.3, 1);
+    expect(habits.gold).toBe(0);
+    expect(r?.best).toBe(0);
+    // the same alone, or beside a weak card
+    for (const cards of [[hand[0]], [hand[0], hand[2]]])
+      expect(
+        trainingValues(cards, brenda, { pointValue: 0.0943 }).values[0].gold,
+      ).toBe(wind.gold);
+    expect(wind.note).toContain("a hand's best card averages 15.7 g");
+  });
   it("takes Negotiation for an expensive worker: 10 points off his wage for 25 days", () => {
     const r = trainingValues(HAND, SORAYUT, { pointValue: PV });
     expect(r?.horizon).toBe(25);
@@ -493,7 +559,12 @@ describe("the training cards", () => {
       age: 60,
     };
     const r = trainingValues(cards, trainee, { pointValue: PV });
-    const top = 5 * 6 * PV * 40 * 0.2;
+    // each extra hand is worth what a hand at his odds averages, not this hand's Negotiation
+    const top = expectedBest(trainee);
+    expect(top).not.toBeCloseTo(5 * 6 * PV * 40 * 0.2, 1);
+    expect(
+      trainingValues([cards[1]], trainee, { pointValue: PV }).values[0],
+    ).toMatchObject({ gold: r.values[1].gold, hands: 2 });
     expect(r.values[1].hands).toBe(2);
     expect(r.values[1].gold).toBeCloseTo(
       Math.max(0, (top * 2) / 5 - ENERGY_GOLD) +
@@ -523,14 +594,15 @@ describe("the training cards", () => {
     );
     expect(greedy?.values[0].gold).toBeCloseTo(25 * 6 * PV * 5 * 1.2 * 0.1, 9);
   });
-  it("values traits taught and removed, and Second wind by the hand's best card", () => {
+  it("values traits taught and removed, and Second wind by the best card a later hand averages", () => {
+    const greedy = { ...SORAYUT, wageChip: 1.0 * 1.2 - 1, traits: ["greedy"] };
     const r = trainingValues(
       [
         { kind: "habit", traitTo: ["specialist"] },
         { kind: "rehab", trait: "greedy" },
         { kind: "secondWind", delta: 2 },
       ],
-      { ...SORAYUT, wageChip: 1.0 * 1.2 - 1, traits: ["greedy"] },
+      greedy,
       { pointValue: PV },
     );
     const [habit, rehab, wind] = /** @type {any} */ (r).values;
@@ -540,11 +612,7 @@ describe("the training cards", () => {
     expect(wind.gold).toBeCloseTo(
       [3, 4].reduce(
         (s, j) =>
-          s +
-          Math.max(
-            0,
-            (Math.max(habit.gold, rehab.gold) * (25 - j)) / 25 - ENERGY_GOLD,
-          ),
+          s + Math.max(0, (expectedBest(greedy) * (25 - j)) / 25 - ENERGY_GOLD),
         0,
       ),
       9,

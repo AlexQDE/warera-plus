@@ -2,6 +2,10 @@
 
 What changed in each release of WarEra Plus, newest first. Every number here was measured as it says; a synthetic page or market says so.
 
+## 3.12.1
+
+- **Second wind is priced at the hands it adds, not at the card dealt beside it.** Each extra training was worth this hand's best other card, so a strong hand counted twice: a friend's Train window of 2026-10-29 (Brenda Collins, 24, Leadership 11, potential 3/10, point value 0.0943) priced Second wind +4 at 69 g beside an Intensive drill +4 Production of 28.3 g. A later hand's best card averages 15.7 g at her odds, so the four trainings, on days 8 to 11 of her 41 and at 10 energy (4.5 g) each, are worth 30.2 g: about even with the drill, and the same whatever Second wind is dealt with. The "?" names that average.
+
 ## 3.12.0
 
 FLIP on a falling market. Since v0.27 went live, many cards read FLIP while the market listed the same stats for less: a value rested on up to a week of sales of these stats, and those sold dearer than the market sells now. The numbers below come from invented markets (`scripts/backtest-prices.mjs`), as it says; `scripts/backtest-flip.mjs` checks the same on the game's own sales with your key.

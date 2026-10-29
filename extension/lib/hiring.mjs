@@ -1504,7 +1504,7 @@ export function trainingValues(cards, trainee, ctx) {
     return {
       gold: hands == null ? null : gold,
       hands,
-      note: `+${hands ?? "?"} trainings after ${futureHands ?? "?"} already left, weighted by days left; each costs ${TRAIN_ENERGY_COST} energy (≈ ${ENERGY_GOLD} g of your own work)`,
+      note: `+${hands ?? "?"} trainings after ${futureHands ?? "?"} already left: a hand's best card averages ${top.toFixed(1)} g at these odds, weighted by days left; each costs ${TRAIN_ENERGY_COST} energy (≈ ${ENERGY_GOLD} g of your own work)`,
     };
   };
   const luck = trainee.luck ?? 0;
@@ -1547,19 +1547,13 @@ export function trainingValues(cards, trainee, ctx) {
     };
   };
   const values = cards.map((card) => priceCard(card, true));
-  // Second wind: more trainings, each worth about this hand's best other
-  // card less the 10 energy it costs
+  // Second wind: more trainings later, each a new hand whose best card is
+  // worth what a hand at these odds averages, less the 10 energy it costs.
+  // This hand's other cards are what picking it gives up, not what later
+  // hands hold: pricing them as such counted a strong hand twice.
   for (const [i, card] of cards.entries())
-    if (card.kind === "secondWind") {
-      const others = values
-        .filter((v, j) => j !== i && cards[j].kind !== "secondWind")
-        .map((v) => v.gold)
-        .filter((g) => g != null);
-      const top = others.length
-        ? Math.max(.../** @type {number[]} */ (others))
-        : 0;
-      values[i] = { ...values[i], ...windValue(card, top) };
-    }
+    if (card.kind === "secondWind")
+      values[i] = { ...values[i], ...windValue(card, otherBest) };
   /** @type {number | null} */
   let best = null;
   for (const [i, v] of values.entries())
