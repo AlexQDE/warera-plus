@@ -353,6 +353,7 @@ export function createRecruit({ clock = () => Date.now() } = {}) {
     employees = null,
     employeesError = null,
     hasKey = true,
+    pageUserId = null,
     now = Date.now(),
   } = {}) {
     const read = readRecruitDialog();
@@ -370,7 +371,13 @@ export function createRecruit({ clock = () => Date.now() } = {}) {
       freshness(booksAt, TTL.cases, now) === "fresh",
     );
     const teamMissing =
-      unreadTeam({ employees, error: employeesError, hasKey, now }) ??
+      unreadTeam({
+        employees,
+        error: employeesError,
+        hasKey,
+        pageUserId,
+        now,
+      }) ??
       (!here?.companyId
         ? "team not counted: company not found; open Recruit from its card"
         : null);

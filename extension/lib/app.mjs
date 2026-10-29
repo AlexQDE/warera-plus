@@ -15,6 +15,7 @@ import { createCraftDesk } from "./craftdesk.mjs";
 import { createDialogs } from "./dialogs.mjs";
 import { createRecruit, readRecruitDialog } from "./recruit.mjs";
 import { createTrain, readTrainDialog } from "./train.mjs";
+import { createWorkforce, readWorkforceDialog } from "./workforceview.mjs";
 import { casesStripHtml, tripLineHtml } from "./casesview.mjs";
 import { mountBar, headHtml, BAR_ID } from "./panel.mjs";
 import { panel, setHtml, notice, clock } from "./ui.mjs";
@@ -38,6 +39,7 @@ export async function startLens(runtime = chrome.runtime) {
     avg: null,
     pointValue: null,
     employees: null,
+    leadership: null,
     sales: null,
     salesByCode: {},
     salesErrors: {},
@@ -67,6 +69,10 @@ export async function startLens(runtime = chrome.runtime) {
   const recruit = createRecruit();
   let trainRoot = null;
   const trainer = createTrain();
+  let workforceRoot = null;
+  const workforce = createWorkforce();
+  let leadershipRoot = null;
+  let leadershipLevel = null;
   const signature = () =>
     ["book", "cases", "avg", "pointValue", "employees"]
       .map((k) =>
@@ -115,6 +121,9 @@ export async function startLens(runtime = chrome.runtime) {
         state.avg = null;
         state.pointValue = null;
         state.employees = null;
+        state.leadership = null;
+        leadershipRoot = null;
+        leadershipLevel = null;
         state.sales = null;
         state.salesByCode = {};
         state.salesErrors = {};
@@ -127,6 +136,14 @@ export async function startLens(runtime = chrome.runtime) {
     }
     if (r.rejected) state.rejected = true;
     state.hasKey = !!r.hasKey;
+    if (Object.hasOwn(r, "leadership")) {
+      if (
+        state.leadership?.level !== r.leadership?.level ||
+        state.leadership?.at !== r.leadership?.at
+      )
+        sched.schedule();
+      state.leadership = r.leadership;
+    }
     state.setup = state.invalidated
       ? "WarEra Plus was updated. Reload this page."
       : state.rejected && state.hasKey
@@ -148,7 +165,7 @@ export async function startLens(runtime = chrome.runtime) {
       kind === "employees" &&
       (!state.hasKey ||
         !state.settings.recruit ||
-        (!readRecruitDialog() && !readTrainDialog()))
+        (!readRecruitDialog() && !readTrainDialog() && !readWorkforceDialog()))
     )
       return;
     if (state.busy.has(kind)) {
@@ -673,6 +690,7 @@ export async function startLens(runtime = chrome.runtime) {
         : (dialogs.clear(), null);
     context.dialog = shown?.kind ?? null;
     if (shown?.root) nextRoots.push(shown.root);
+    const pageUserId = dom.pageUserId();
     const recruits =
       state.settings.recruit && !state.setup
         ? recruit.render({
@@ -681,6 +699,7 @@ export async function startLens(runtime = chrome.runtime) {
             employees: state.employees,
             employeesError: state.errors.employees,
             hasKey: state.hasKey,
+            pageUserId,
             books: state.cases?.books,
             // a failed refresh of the books leaves them unpriced, as on the Cases strip
             booksAt: state.errors.cases ? null : state.cases?.at,
@@ -697,17 +716,19 @@ export async function startLens(runtime = chrome.runtime) {
       }
     }
     recruitRoot = context.recruit;
-    const training =
-      state.settings.recruit && !state.setup && readTrainDialog()
-        ? trainer.render({
-            pointValue: state.pointValue,
-            error: state.errors.pointValue,
-            employees: state.employees,
-            employeesError: state.errors.employees,
-            hasKey: state.hasKey,
-            now: Date.now(),
-          })
-        : (trainer.clear(), null);
+    const trainRead =
+      state.settings.recruit && !state.setup ? readTrainDialog() : null;
+    const training = trainRead
+      ? trainer.render({
+          pointValue: state.pointValue,
+          error: state.errors.pointValue,
+          employees: state.employees,
+          employeesError: state.errors.employees,
+          hasKey: state.hasKey,
+          pageUserId,
+          now: Date.now(),
+        })
+      : (trainer.clear(), null);
     context.train = training?.root ?? null;
     if (context.train) {
       nextRoots.push(context.train);
@@ -717,6 +738,44 @@ export async function startLens(runtime = chrome.runtime) {
       }
     }
     trainRoot = context.train;
+    const seenLeadership = trainRead?.trainee.leadership;
+    if (
+      seenLeadership != null &&
+      (leadershipRoot !== trainRead.root || leadershipLevel !== seenLeadership)
+    ) {
+      state.leadership = {
+        level: seenLeadership,
+        at: new Date().toISOString(),
+      };
+      void send({ type: "leadership", level: seenLeadership });
+    }
+    leadershipRoot = trainRead?.root ?? null;
+    leadershipLevel = seenLeadership ?? null;
+    const workers =
+      state.settings.recruit && !state.setup
+        ? workforce.render({
+            pointValue: state.pointValue,
+            error: state.errors.pointValue,
+            employees: state.employees,
+            employeesError: state.errors.employees,
+            hasKey: state.hasKey,
+            pageUserId,
+            leadership: state.leadership,
+            books: state.cases?.books,
+            booksAt: state.errors.cases ? null : state.cases?.at,
+            now: Date.now(),
+          })
+        : (workforce.clear(), null);
+    context.workforce = workers?.root ?? null;
+    if (context.workforce) {
+      nextRoots.push(context.workforce);
+      if (workforceRoot !== context.workforce) {
+        void read("pointValue");
+        void read("employees");
+        void read("cases");
+      }
+    }
+    workforceRoot = context.workforce;
     // The craft window's tier: its six items' sales are read now, today's crafts of it first and ahead of the
     // market's queue, so a fresh craft is priced by its stats at once.
     if (shown?.tier) {
@@ -820,12 +879,14 @@ export async function startLens(runtime = chrome.runtime) {
       context.travel ||
       craftOpen ||
       (context.craft && open === "ledger") ||
-      context.recruit?.isConnected
+      context.recruit?.isConnected ||
+      (context.workforce && readWorkforceDialog())
     )
       jobs.push(read("cases"));
     if (
       (context.recruit && readRecruitDialog()) ||
-      (context.train && readTrainDialog())
+      (context.train && readTrainDialog()) ||
+      (context.workforce && readWorkforceDialog())
     ) {
       jobs.push(read("pointValue"));
       jobs.push(read("employees"));
@@ -886,6 +947,7 @@ export async function startLens(runtime = chrome.runtime) {
     dialogs.dispose();
     recruit.dispose();
     trainer.clear();
+    workforce.clear();
     equipment.picker(null, false);
     document.getElementById("scrap-sniper-cases")?.remove();
     for (const el of document.querySelectorAll(".ss-trip")) el.remove();

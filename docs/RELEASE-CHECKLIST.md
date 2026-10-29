@@ -2,6 +2,16 @@
 
 Go through the newest release's section and the manual gate on the live game, with your own account, before publishing. Then [CHROME-WEB-STORE.md](CHROME-WEB-STORE.md).
 
+## 3.13.0 on the live page (v0.27)
+
+Reload the extension itself (its card must read 3.13.0), then the game. Opening My workforce is safe: it only shows the workforce. Never press Train, Hire, Fire or Move for these checks.
+
+- **The panel.** Companies → the Workforce section opens My workforce: one WarEra Plus panel above the Employees list, its "?" naming the reads' ages and the rules used. Checked on 2026-10-29 with the player's own key: "1 to look at", Losing gold for Marģers Graudiņš at −0.6 g a day.
+- **Train first** lists only employees with a training left today, highest value first; after everyone has trained it is gone.
+- **Leadership.** Open a Train window once: the panel's "?" then names that Leadership level instead of "never seen".
+- **Another account's key.** With a key of another account saved, My workforce shows only "the API key reads another account's employees…", and Recruit and Train say "team not counted: your API key belongs to another account…". Checked live on 2026-10-29.
+- **A training hand's rarity.** In a Train window with a Second wind and a strong card, Second wind's value is the same whatever it is dealt with, and its "?" names what a hand's best card averages.
+
 ## 3.12.0 on the live page (v0.27)
 
 Reload the extension itself (its card must read 3.12.0), then the game. Nothing here needs a purchase: read the cards and their Details.

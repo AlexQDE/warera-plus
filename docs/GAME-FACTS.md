@@ -617,7 +617,9 @@ newest | mostExpensive, limit: 12, cursor?}` (the sort is kept in the
   hand: Lionel's 0/8 became 1/8 immediately after drawing it). A future hand
   drawn j days from now only pays for H − j of today's H-day horizon;
   Second wind's extra hands come after the ones already left. The draw itself is
-  server-side; `lib/hiring.mjs` assumes each card draws a rarity by the odds,
-  then a card of it at random. Luck also gives a toolbox chance of 0.001 an
+  server-side, but a hand has one rarity: every card of each of the five hands
+  read on 2026-10-27 to 29 shared it (three uncommon, three common, three
+  legendary...), as the Intel planner also states. `lib/hiring.mjs` draws the
+  hand's rarity by the odds, then three different cards of it at random. Luck also gives a toolbox chance of 0.001 an
   hour a point, at most 0.02 (`zr`), times the traits'
   `toolboxChanceMultiplier`.

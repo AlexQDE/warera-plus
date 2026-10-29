@@ -66,6 +66,109 @@ function mockRuntime(overrides = {}) {
 }
 
 describe("SPA lifecycle and DOM work", () => {
+  it.each([
+    ["Recruit", "v027-live-recruit.html", ".ss-recruit-value .lens-help"],
+    ["Train", "v027-live-train-claudia.html", ".ss-train-value .lens-help"],
+    ["My workforce", "v027-workforce-synthetic.html", ".ss-workforce"],
+  ])(
+    "reads the current page identity when rendering %s",
+    async (_name, fixture, selector) => {
+      window.history.replaceState({}, "", "/companies");
+      document.body.innerHTML = `<a id="inventory-nav-button" href="/user/${ME}/inventory">Inventory</a>${readFileSync(`fixtures/${fixture}`, "utf8")}`;
+      const rows = JSON.parse(
+        readFileSync("fixtures/employees-live-2026-10-28.json", "utf8"),
+      ).map((row) => ({ ...row, owner: ME }));
+      const runtime = mockRuntime();
+      const send = runtime.sendMessage.getMockImplementation();
+      runtime.sendMessage.mockImplementation(async (msg) =>
+        msg.type === "employees"
+          ? { employees: { rows, at: new Date().toISOString() } }
+          : send(msg),
+      );
+      app = await startLens(runtime);
+      await settle();
+      const text = () => {
+        const node = document.querySelector(selector);
+        return node.title || node.textContent;
+      };
+      expect(text()).not.toContain("another account");
+      const reads = runtime.sendMessage.mock.calls.length;
+      document
+        .querySelector("#inventory-nav-button")
+        .setAttribute("href", "/user/b123456789abcdef01234567/inventory");
+      app.scan();
+      await settle();
+      expect(text()).toContain("another account");
+      expect(text()).toContain("save this account's key in the settings");
+      expect(runtime.sendMessage.mock.calls).toHaveLength(reads);
+    },
+  );
+
+  it("reads employees and prices only while My workforce is open and enabled", async () => {
+    window.history.replaceState({}, "", "/companies");
+    document.body.innerHTML = "<main></main>";
+    const runtime = mockRuntime();
+    const send = runtime.sendMessage.getMockImplementation();
+    runtime.sendMessage.mockImplementation(async (msg) =>
+      msg.type === "employees"
+        ? { employees: { rows: [], at: new Date().toISOString() } }
+        : send(msg),
+    );
+    const count = (type) =>
+      runtime.sendMessage.mock.calls.filter(([m]) => m.type === type).length;
+    app = await startLens(runtime);
+    await settle();
+    expect(count("employees")).toBe(0);
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      readFileSync("fixtures/v027-workforce-synthetic.html", "utf8"),
+    );
+    app.scan();
+    await settle();
+    expect(count("employees")).toBe(1);
+    expect(count("pointValue")).toBe(1);
+    expect(count("cases")).toBe(1);
+    expect(document.querySelectorAll(".ss-workforce")).toHaveLength(1);
+    await settle(306_000);
+    expect(count("employees")).toBe(2);
+    const prices = count("cases");
+    document.querySelector('[role="dialog"]').remove();
+    // fetchVisible must check the dialog itself even before the next scan.
+    await settle(310_000);
+    expect(count("employees")).toBe(2);
+    expect(count("cases")).toBe(prices);
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      readFileSync("fixtures/v027-workforce-synthetic.html", "utf8"),
+    );
+    runtime.info.settings.recruit = false;
+    runtime.info.revision++;
+    await settle(5100);
+    expect(count("employees")).toBe(2);
+    expect(document.querySelector(".ss-workforce")).toBeNull();
+  });
+  it("remembers Your Leadership once per Train window through the worker", async () => {
+    document.body.innerHTML = readFileSync(
+      "fixtures/v027-live-train-mohannad.html",
+      "utf8",
+    );
+    const runtime = mockRuntime();
+    const send = runtime.sendMessage.getMockImplementation();
+    runtime.sendMessage.mockImplementation(async (msg) =>
+      msg.type === "leadership"
+        ? { leadership: { level: msg.level, at: new Date().toISOString() } }
+        : send(msg),
+    );
+    app = await startLens(runtime);
+    await settle();
+    app.scan();
+    await settle();
+    const writes = runtime.sendMessage.mock.calls.filter(
+      ([m]) => m.type === "leadership",
+    );
+    expect(writes).toHaveLength(1);
+    expect(writes[0][0].level).toBe(3);
+  });
   it("reads employees only for open Recruit or Train windows, with no game clicks", async () => {
     window.history.replaceState({}, "", "/companies");
     document.body.innerHTML = "<main></main>";
@@ -246,8 +349,8 @@ describe("SPA lifecycle and DOM work", () => {
       // The header's 1/3 already counts this hand, leaving two future hands.
     ).toEqual([
       ["★ +0.30 g/day", "7.6 g in 25 d"],
-      ["+0.34 g", "2 trainings"],
-      ["+0.12 g/day", "2.9 g in 25 d"],
+      ["+0.29 g", "2 trainings"],
+      ["+0.11 g/day", "2.9 g in 25 d"],
     ]);
     const best = dialog.querySelector("[data-ss-best]");
     expect(best).not.toBeNull();

@@ -363,6 +363,7 @@ export function createTrain() {
     employees = null,
     employeesError = null,
     hasKey = true,
+    pageUserId = null,
     now = Date.now(),
   } = {}) {
     const read = readTrainDialog();
@@ -376,6 +377,7 @@ export function createTrain() {
       employees,
       error: employeesError,
       hasKey,
+      pageUserId,
       now,
     });
     const subject = !teamMissing

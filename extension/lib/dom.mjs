@@ -19,6 +19,21 @@ import { readStatBlock } from "./offers.mjs";
 export { RARITIES } from "./items.mjs";
 export { escapeHtml, fmtQty } from "./format.mjs";
 
+/** The logged-in player's inventory link, for display checks only. */
+export function pageUserId(doc = document) {
+  const inventoryId = (link) =>
+    /^\/user\/([0-9a-f]{24})\/inventory(?:[/?#]|$)/i
+      .exec(link?.getAttribute("href") ?? "")?.[1]
+      ?.toLowerCase() ?? null;
+  const nav = inventoryId(doc.querySelector("a#inventory-nav-button"));
+  if (nav) return nav;
+  for (const link of doc.querySelectorAll("a[href]")) {
+    const id = inventoryId(link);
+    if (id) return id;
+  }
+  return null;
+}
+
 /**
  * Tile border colours per rarity, as the toolbar paints its own tiles: the
  * 2026-09-03 sample (the game theme's 600 shade), kept for the toolbar and for

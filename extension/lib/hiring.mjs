@@ -1128,40 +1128,44 @@ export function trainingPool(trainee) {
   return pool;
 }
 
+/** n choose k, for the small counts of a card pool. @param {number} n @param {number} k */
+function choose(n, k) {
+  if (k < 0 || k > n) return 0;
+  let c = 1;
+  for (let i = 1; i <= k; i++) c = (c * (n - k + i)) / i;
+  return c;
+}
+
 /**
- * Exact expected best card: the single-draw CDF raised to handSize.
- * Model assumption: independent rarity draws, renormalised over the pool's
- * available rarities, then uniform cards within that rarity; keep the best.
- * Unpriced cards are omitted; an empty hand or pool has value zero.
+ * Exact expected best card of a hand. A hand draws one rarity (the odds,
+ * renormalised over the rarities the pool holds), then handSize different
+ * cards of it (all of them when it holds fewer); the best is kept. Every
+ * card of a live hand shares its rarity: the five hands read on 2026-10-27
+ * to 29 did, and the Intel planner says so. Unpriced cards are omitted; an
+ * empty hand or pool has value zero.
  * @param {ReadonlyArray<{ rarity?: string | null, gold: number | null }>} pricedPool
  * @param {Readonly<Record<string, number>>} odds
  * @param {number} [handSize]
  */
 export function bestOfHand(pricedPool, odds, handSize = TRAIN_HAND_SIZE) {
   if (handSize <= 0) return 0;
-  const cards = pricedPool.flatMap(({ rarity, gold }) =>
-    rarity && gold != null && Number.isFinite(gold) && odds[rarity] > 0
-      ? [{ rarity, gold }]
-      : [],
-  );
-  /** @type {Map<string, number>} */
-  const counts = new Map();
-  for (const c of cards) counts.set(c.rarity, (counts.get(c.rarity) ?? 0) + 1);
-  const weight = [...counts.keys()].reduce((s, r) => s + odds[r], 0);
+  /** @type {Map<string, number[]>} */
+  const byRarity = new Map();
+  for (const { rarity, gold } of pricedPool)
+    if (rarity && gold != null && Number.isFinite(gold) && odds[rarity] > 0)
+      byRarity.set(rarity, [...(byRarity.get(rarity) ?? []), gold]);
+  const weight = [...byRarity.keys()].reduce((s, r) => s + odds[r], 0);
   if (!weight) return 0;
-  cards.sort((a, b) => a.gold - b.gold);
-  let cdf = 0;
-  let prev = 0;
   let expected = 0;
-  for (const c of cards) {
-    cdf = Math.min(
-      1,
-      cdf +
-        odds[c.rarity] / weight / /** @type {number} */ (counts.get(c.rarity)),
-    );
-    const next = cdf ** handSize;
-    expected += c.gold * (next - prev);
-    prev = next;
+  for (const [rarity, golds] of byRarity) {
+    golds.sort((a, b) => a - b);
+    const n = golds.length;
+    const k = Math.min(handSize, n);
+    // the i-th lowest (from 0) is the best of k different cards in C(i, k-1) of the C(n, k) hands
+    let best = 0;
+    for (let i = k - 1; i < n; i++)
+      best += (golds[i] * choose(i, k - 1)) / choose(n, k);
+    expected += (odds[rarity] / weight) * best;
   }
   return expected;
 }
@@ -1528,7 +1532,8 @@ export function trainingValues(cards, trainee, ctx) {
   const percent = (/** @type {number} */ x) =>
     `${x >= 0 ? "+" : ""}${Math.round(x * 10000) / 100}%`;
   // the server's draw is not in the client: each card draws a rarity, then a card of it at random
-  const assumption = "model: each card draws a rarity, then a card of it";
+  const assumption =
+    "model: a hand draws one rarity, then three different cards of it";
   const luckValue = (/** @type {number} */ k) => {
     const improvedOdds = trainingOdds(luck + k, leadership);
     const gain = bestOfHand(pricedPool, improvedOdds) - baseline;

@@ -26,6 +26,7 @@
     "extension/lib/observed.mjs",
     "extension/lib/hiring.mjs",
     "extension/lib/team.mjs",
-    "extension/lib/teamview.mjs"
+    "extension/lib/teamview.mjs",
+    "extension/lib/workforce.mjs"
   ]
 }

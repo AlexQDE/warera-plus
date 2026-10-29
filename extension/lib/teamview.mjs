@@ -5,12 +5,33 @@ import { freshness, TTL } from "./quality.mjs";
 
 /** @typedef {{ rows: import("./team.mjs").ApiEmployee[], at: string }} Employees */
 
+/** Display-only comparison; an unknown page id or empty roster proves nothing.
+ * @param {Employees | null | undefined} employees
+ * @param {string | null | undefined} pageUserId */
+export function employeeAccountMismatch(employees, pageUserId) {
+  return Boolean(
+    pageUserId &&
+    employees?.rows.length &&
+    !employees.rows.some(
+      (row) => row.owner?.toLowerCase() === pageUserId.toLowerCase(),
+    ),
+  );
+}
+
 /** A snapshot is used only while fresh and without a failed refresh.
- * @param {{ employees?: Employees | null, error?: string | null, hasKey?: boolean, now: number }} state */
-export function unreadTeam({ employees, error, hasKey = true, now }) {
+ * @param {{ employees?: Employees | null, error?: string | null, hasKey?: boolean, pageUserId?: string | null, now: number }} state */
+export function unreadTeam({
+  employees,
+  error,
+  hasKey = true,
+  pageUserId,
+  now,
+}) {
   if (!hasKey) return "team not counted: no API key";
   if (error) return `team not counted: ${error}`;
   if (!employees) return "reading your employees…";
+  if (employeeAccountMismatch(employees, pageUserId))
+    return "team not counted: your API key belongs to another account; save this account's key in the settings";
   if (freshness(employees.at, TTL.employees, now) !== "fresh")
     return "team not counted: employees are stale; waiting for a fresh read";
   return null;

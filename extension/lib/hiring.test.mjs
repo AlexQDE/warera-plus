@@ -452,7 +452,8 @@ describe("the training cards", () => {
     const [wind, drill, habits] = /** @type {any} */ (r).values;
     // 41 days to 65 and 7 trainings left after this hand: four more on days 8 to 11
     const top = expectedBest(brenda, 0.0943);
-    expect(top).toBeCloseTo(15.7, 1);
+    // a hand is one rarity: 14.7 g (15.7 g when every card drew its own rarity)
+    expect(top).toBeCloseTo(14.7, 1);
     expect(wind.hands).toBe(4);
     expect(wind.gold).toBeCloseTo(
       [8, 9, 10, 11].reduce(
@@ -461,17 +462,17 @@ describe("the training cards", () => {
       ),
       9,
     );
-    // about 30 g, where pricing each later hand at the +4 drill beside it (28.3 g) read 69 g
-    expect(wind.gold).toBeCloseTo(30.2, 1);
+    // about 27 g, where pricing each later hand at the +4 drill beside it (28.3 g) read 69 g: the drill edges it
+    expect(wind.gold).toBeCloseTo(27.3, 1);
     expect(drill.gold).toBeCloseTo(28.3, 1);
     expect(habits.gold).toBe(0);
-    expect(r?.best).toBe(0);
+    expect(r?.best).toBe(1);
     // the same alone, or beside a weak card
     for (const cards of [[hand[0]], [hand[0], hand[2]]])
       expect(
         trainingValues(cards, brenda, { pointValue: 0.0943 }).values[0].gold,
       ).toBe(wind.gold);
-    expect(wind.note).toContain("a hand's best card averages 15.7 g");
+    expect(wind.note).toContain("a hand's best card averages 14.7 g");
   });
   it("takes Negotiation for an expensive worker: 10 points off his wage for 25 days", () => {
     const r = trainingValues(HAND, SORAYUT, { pointValue: PV });
@@ -663,7 +664,7 @@ describe("the training cards", () => {
     );
     expect(one.note).toContain("toolbox chance +0.2% an hour, not priced");
     expect(one.note).toContain(
-      "model: each card draws a rarity, then a card of it",
+      "model: a hand draws one rarity, then three different cards of it",
     );
     // potential already counts the hand open now
     expect(one.note).toContain("1 more training after this one");
@@ -863,7 +864,7 @@ describe("future training hands", () => {
       false,
     );
   });
-  it("computes the exact CDF-powered maximum, drawing a rarity then a uniform card", () => {
+  it("draws one rarity for the whole hand, then different cards of it, and keeps the best", () => {
     const pool = [
       { rarity: "common", gold: 0 },
       { rarity: "common", gold: 4 },
@@ -877,9 +878,16 @@ describe("future training hands", () => {
       epic: 0,
       legendary: 0,
     };
-    // P(max=0)=1/64; P(max=4)=7/64; P(max=10)=7/8.
-    expect(hiring.bestOfHand(pool, odds)).toBeCloseTo(9.1875, 12);
+    // a common hand holds both common cards (best 4), an uncommon one the 10: never a mix
+    expect(hiring.bestOfHand(pool, odds)).toBeCloseTo(7, 12);
     expect(hiring.bestOfHand(pool, odds, 1)).toBeCloseTo(6, 12);
+    // three different cards out of four: {1,2,3} -> 3, the three hands with the 4 -> 4
+    expect(
+      hiring.bestOfHand(
+        [1, 2, 3, 4].map((gold) => ({ rarity: "common", gold })),
+        odds,
+      ),
+    ).toBeCloseTo(3.75, 12);
     expect(hiring.bestOfHand(pool, odds, 0)).toBe(0);
     expect(hiring.bestOfHand([], odds)).toBe(0);
     expect(hiring.bestOfHand([{ rarity: "common", gold: -4 }], odds)).toBe(-4);

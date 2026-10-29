@@ -272,9 +272,14 @@ export function createController({
             await storage.remove(
               Object.keys(all).filter(
                 (k) =>
-                  ["book", "cases", "avg", "pointValue", "employees"].includes(
-                    k,
-                  ) ||
+                  [
+                    "book",
+                    "cases",
+                    "avg",
+                    "pointValue",
+                    "employees",
+                    "leadership",
+                  ].includes(k) ||
                   k.startsWith("sales:") ||
                   k.startsWith("crafts:"),
               ),
@@ -324,7 +329,14 @@ export function createController({
         await storage.remove(
           Object.keys(all).filter(
             (k) =>
-              ["book", "cases", "avg", "pointValue", "employees"].includes(k) ||
+              [
+                "book",
+                "cases",
+                "avg",
+                "pointValue",
+                "employees",
+                "leadership",
+              ].includes(k) ||
               k.startsWith("sales:") ||
               k.startsWith("crafts:"),
           ),
@@ -764,9 +776,14 @@ export function createController({
             await storage.remove(
               Object.keys(keys).filter(
                 (k) =>
-                  ["book", "cases", "avg", "pointValue", "employees"].includes(
-                    k,
-                  ) || k.startsWith("sales:"),
+                  [
+                    "book",
+                    "cases",
+                    "avg",
+                    "pointValue",
+                    "employees",
+                    "leadership",
+                  ].includes(k) || k.startsWith("sales:"),
               ),
             );
             await storage.set({ rejectedAuthRevision: authRevision });
@@ -1002,15 +1019,21 @@ export function createController({
     cleanup,
     async handle(msg, { trusted = false } = {}) {
       if (msg?.type === "getSettings") {
-        const { settings = {}, rejectedAuthRevision } = await storage.get([
+        const {
+          settings = {},
+          rejectedAuthRevision,
+          leadership,
+        } = await storage.get([
           "settings",
           "rejectedAuthRevision",
+          "leadership",
         ]);
         return {
           settings: preferences(settings),
           hasKey: !!keyOf(settings),
           revision: settings.revision ?? 0,
           authRevision: settings.authRevision ?? 0,
+          leadership: leadership ?? null,
           rejected:
             rejectedAuthRevision === (Number(settings.authRevision) || 0),
           ...(trusted ? { apiKey: keyOf(settings) } : {}),
@@ -1018,6 +1041,18 @@ export function createController({
       }
       if (msg?.type === "saveSettings")
         return patchSettings(msg.settings ?? {}, trusted);
+      if (msg?.type === "leadership") {
+        if (!Number.isSafeInteger(msg.level) || msg.level < 0)
+          return {
+            error: "bad-leadership",
+            message: "Unknown Leadership level",
+          };
+        return serial(async () => {
+          const leadership = { level: msg.level, at: iso() };
+          await storage.set({ leadership });
+          return { leadership };
+        });
+      }
       if (msg?.type === "testKey") {
         if (!trusted)
           return {

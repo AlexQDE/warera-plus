@@ -76,6 +76,42 @@ it("reads the trainee name and shows a real coworker's change on a taught team t
   );
 });
 
+it("warns about another account's key before finding the trainee or counting coworkers", () => {
+  live("claudia");
+  const now = Date.parse("2026-10-28T12:00:00Z");
+  const owner = "a123456789abcdef01234567";
+  const rows = JSON.parse(
+    readFileSync("fixtures/employees-live-2026-10-28.json", "utf8"),
+  ).map((row) => ({ ...row, owner }));
+  train.readTrainDialog().cards[0].button.innerHTML =
+    '<span>Rare</span><span>New habit</span><span>Bully</span><span role="img" aria-label="Bully"></span>';
+  const advisor = train.createTrain();
+  const state = {
+    now,
+    pointValue: { value: 0.1012, at: new Date(now).toISOString() },
+    employees: { rows, at: new Date(now - 120_000).toISOString() },
+    pageUserId: owner.toUpperCase(),
+  };
+  const line = () => document.querySelector(".ss-train-cell small").textContent;
+  const tip = () => document.querySelector(".ss-train-value .lens-help").title;
+  try {
+    advisor.render(state);
+    const matching = line();
+    expect(matching).toContain("team −");
+    advisor.render({ ...state, pageUserId: "b123456789abcdef01234567" });
+    expect(tip()).toContain(
+      "team not counted: your API key belongs to another account; save this account's key in the settings",
+    );
+    expect(line()).not.toContain("team");
+    expect(tip()).not.toContain("0 coworkers");
+    expect(tip()).not.toContain("trainee not among your employees");
+    advisor.render(state);
+    expect(line()).toBe(matching);
+  } finally {
+    advisor.clear();
+  }
+});
+
 // The Employee window stays open before Train; the decimals are split by the game.
 const employee = (name, wage = "2.87") => {
   const [whole, fraction] = wage.split(".");
@@ -178,14 +214,14 @@ it("reads the live legendary hand: Intensive drill +4, Second wind +4 and Two ne
   const advisor = train.createTrain();
   advisor.render(fresh());
   // 23 days to 65 and 8 trainings already left: four more come on days 9 to 12, each a hand whose best card is what
-  // a hand at her odds averages, weighted by the days left, for 10 energy (4.5 g) each: about 1 g in all
+  // a hand at her odds averages, weighted by the days left, for 10 energy (4.5 g) each: about 0.5 g in all
   expect(
     [...document.querySelectorAll(".ss-train-value .ss-train-cell")].map(
       (c) => c.textContent,
     ),
   ).toEqual([
     "+0.21 g/day4.7 g in 23 d",
-    "+0.99 g+4 trainings",
+    "+0.46 g+4 trainings",
     "★ +0.21 g/day4.9 g in 23 d",
   ]);
   expect(read.boxes[2].hasAttribute("data-ss-best")).toBe(true);
@@ -386,14 +422,14 @@ it("marks Negotiation as the pick for an expensive worker, one line above the ca
   // The 1/3 includes this hand, leaving two future trainings, weighted by time.
   expect(cells).toEqual([
     ["★ +0.30 g/day", "7.6 g in 25 d"],
-    ["+0.34 g", "2 trainings"],
-    ["+0.12 g/day", "2.9 g in 25 d"],
+    ["+0.29 g", "2 trainings"],
+    ["+0.11 g/day", "2.9 g in 25 d"],
   ]);
   const tip = line.querySelector(".lens-help").getAttribute("title");
   expect(tip).toContain(
     "★ Negotiation (-10%): +7.59 g, +0.30 g/day - wage chip +13.8% → +3.8%: saves 0.30 g a day",
   );
-  expect(tip).toContain("Intensive drill (+2): +0.34 g - +2 Luck");
+  expect(tip).toContain("Intensive drill (+2): +0.29 g - +2 Luck");
   expect(tip).toContain("Leadership was not read; odds use 0");
   expect(tip).toContain("25 days counted");
   // the best card's own box is outlined, and only it

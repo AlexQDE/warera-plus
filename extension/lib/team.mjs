@@ -149,7 +149,7 @@ export const TEAM_RULES = {
  * @typedef {{ delta: number | null, until: number | null }} HappinessItem
  * @typedef {{ code?: string, delta?: number, percent?: boolean }} Contribution
  * @typedef {{ total?: number, contributions?: Contribution[] }} StatBreakdown
- * @typedef {{ _id?: string, name?: string, company?: string, gender?: string | null,
+ * @typedef {{ _id?: string, owner?: string, name?: string, company?: string, gender?: string | null,
  *   age?: number, nationality?: string | null,
  *   base?: { production?: number }, traits?: { code?: string, revealed?: boolean }[],
  *   wage?: number, wageExpectation?: number,

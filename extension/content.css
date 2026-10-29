@@ -32,6 +32,20 @@
   height: 15px;
   font-size: 9.5px;
 }
+.ss-workforce[data-lens] {
+  flex-direction: column;
+  align-items: stretch;
+  white-space: normal;
+}
+.ss-workforce[data-lens] .ss-workforce-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.ss-workforce[data-lens] [data-workforce] {
+  display: block;
+}
 /* the best pick: the game's own card, outlined */
 [data-ss-best] {
   outline: 2px solid #3fb950 !important;

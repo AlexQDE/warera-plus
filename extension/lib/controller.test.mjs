@@ -68,6 +68,29 @@ function setup(fetchImpl = vi.fn(async () => response()), initial = {}) {
   };
 }
 
+describe("Leadership memory", () => {
+  it("stores only a valid observed level locally and exposes it without an API read", async () => {
+    const { controller, storage, fetchImpl } = setup();
+    expect(
+      (await controller.handle({ type: "getSettings" })).leadership,
+    ).toBeNull();
+    await controller.handle({ type: "leadership", level: 3 });
+    expect(storage.data.leadership).toEqual({
+      level: 3,
+      at: new Date(NOW).toISOString(),
+    });
+    expect(
+      (await controller.handle({ type: "getSettings" })).leadership,
+    ).toEqual(storage.data.leadership);
+    for (const level of [-1, 1.5, "4", NaN, Infinity])
+      expect(
+        (await controller.handle({ type: "leadership", level })).error,
+      ).toBe("bad-leadership");
+    expect(storage.data.leadership.level).toBe(3);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
 describe("employees resource", () => {
   it("requires a key even when an employee cache exists", async () => {
     const { controller, fetchImpl } = setup(undefined, {
@@ -136,6 +159,8 @@ describe("employees resource", () => {
       .mockResolvedValue(response({}, { status: 401 }));
     const { controller, storage, advance } = setup(f);
     await controller.handle({ type: "employees" });
+    await controller.handle({ type: "leadership", level: 3 });
+    expect(storage.data.leadership.level).toBe(3);
     expect(
       (await controller.handle({ type: "employees", force: true })).error,
     ).toBe("rate-limited");
@@ -148,6 +173,8 @@ describe("employees resource", () => {
       (await controller.handle({ type: "employees", force: true })).employees,
     ).toBeNull();
     expect(storage.data.employees).toBeUndefined();
+    // the Leadership level read in a Train window goes with the rejected key too
+    expect(storage.data.leadership).toBeUndefined();
     await controller.handle(
       { type: "saveSettings", settings: { apiKey: "another-test-key" } },
       { trusted: true },

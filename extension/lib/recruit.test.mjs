@@ -130,6 +130,54 @@ it("anchors an expiring happiness item at the employee snapshot's timestamp", ()
   advisor.dispose();
 });
 
+it("warns about another account's key and removes its team estimate", () => {
+  const now = Date.parse("2026-10-28T12:00:00Z");
+  const owner = "a123456789abcdef01234567";
+  const rows = JSON.parse(
+    readFileSync("fixtures/employees-live-2026-10-28.json", "utf8"),
+  ).map((row) => ({ ...row, owner }));
+  document.body.insertAdjacentHTML(
+    "afterbegin",
+    '<div id="company"><a href="/company/c00000000000000000000001">Iron</a><img alt="iron"><span>0%</span><button>Recruit 1/2</button></div>',
+  );
+  const candidate = recruit.readRecruitDialog().candidates[0];
+  candidate.statsGroup.children[0].lastElementChild.textContent = "2";
+  candidate.statsGroup.parentElement.insertAdjacentHTML(
+    "beforeend",
+    '<span role="img" aria-label="Bully"></span>',
+  );
+  const advisor = recruit.createRecruit({ clock: () => now });
+  try {
+    document
+      .querySelector("#company button")
+      .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    const state = {
+      now,
+      pointValue: { value: 0.1012, at: new Date(now).toISOString() },
+      employees: { rows, at: new Date(now - 120_000).toISOString() },
+      pageUserId: owner.toUpperCase(),
+    };
+    const line = () =>
+      candidate.card.querySelector(".ss-recruit-line").textContent;
+    const tip = () =>
+      candidate.card.querySelector(".ss-recruit-value .lens-help").title;
+    advisor.render(state);
+    const matching = line();
+    expect(matching).toContain("team −3.3 g");
+    advisor.render({ ...state, pageUserId: "b123456789abcdef01234567" });
+    expect(tip()).toContain(
+      "team not counted: your API key belongs to another account; save this account's key in the settings",
+    );
+    expect(line()).not.toContain("team");
+    expect(tip()).not.toContain("Lionel Leannon:");
+    expect(tip()).not.toContain("0 coworkers");
+    advisor.render(state);
+    expect(line()).toBe(matching);
+  } finally {
+    advisor.dispose();
+  }
+});
+
 it("reads all four candidates, with no hidden trait invented when no badge exists", () => {
   expect(recruit.readRecruitDialog).toBeTypeOf("function");
   const read = recruit.readRecruitDialog();
