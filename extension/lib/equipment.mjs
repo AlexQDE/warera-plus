@@ -39,6 +39,7 @@ import {
   similarValue,
   rowSkills,
   listedPeers,
+  offerCap,
   spanWords,
   windowFills,
   WINDOW_HOURS,
@@ -118,6 +119,7 @@ export function valueOf({ code, stats, sales, avg, avgAt, now, similar }) {
         low: v.low,
         high: v.high,
         sellsHours: v.sellsHours,
+        trend: v.trend,
         skills,
       };
   }
@@ -683,6 +685,16 @@ export function createEquipment({
       lines.push(
         `Sells for <b>${fmt(value.amount)} g</b> · ${escapeHtml(value.detail ?? value.label)}${value.low != null ? ` · ${fmt(value.low)}–${fmt(value.high)}` : ""}${value.sellsHours != null ? ` · listed to sold in ${value.sellsHours < 1 ? `${Math.round(value.sellsHours * 60)} min` : `${value.sellsHours.toFixed(1)} h`} (median)` : ""}${gap != null ? ` · against this price <b>${signed(gap)} g</b> (${signed((gap / r.price) * 100, 1)}%)` : ""}`,
       );
+      // what the value and the FLIP stand on beyond the sales themselves: the market's fall, the offers it would list against
+      const basis = [
+        value.trend != null
+          ? `trend ${signed(value.trend * 100, Math.abs(value.trend) >= 0.01 ? 0 : 1)}%/day, sales brought to today`
+          : "",
+        r.cap
+          ? `cap: 2nd offer ${fmt(r.cap.cap)}${r.cap.taxRead ? (r.cap.cap < r.cap.offer ? " before tax" : "") : " (tax not read)"}`
+          : "",
+      ].filter(Boolean);
+      if (basis.length) lines.push(basis.join(" · "));
       if (value.source === "fills" && r.sales) {
         const fills = comparableFills(r.sales.fills, {
           code: r.code,
@@ -726,12 +738,13 @@ export function createEquipment({
     // number; a PASS shows the better route, muted. The value's mark: none for the same stats, ≈ otherwise.
     const scrapRoute =
       r.v.margin != null ? { gain: r.v.margin, pct: r.v.marginPct } : null;
+    // sold on: at what these stats sell for, no higher than the offers it would be listed against (offerCap)
+    const resale = value?.matched
+      ? Math.min(value.amount, r.cap?.cap ?? Infinity)
+      : null;
     const sellRoute =
-      value?.matched && r.price > 0
-        ? {
-            gain: value.amount - r.price,
-            pct: (value.amount - r.price) / r.price,
-          }
+      resale != null && r.price > 0
+        ? { gain: resale - r.price, pct: (resale - r.price) / r.price }
         : null;
     const route =
       kind === "hit"
@@ -899,6 +912,14 @@ export function createEquipment({
     const peerRows = valuations.map((r) =>
       r.ownOffer ? { ...r, price: null } : r,
     );
+    // A flip sells again against what is listed now: the second cheapest offer of stats at least as good caps the
+    // resale, on the sales' basis (before the buyer's tax, the page's rate).
+    const taxPct = dom.taxRateFromText(dom.taxNotice()?.textContent);
+    for (const [i, r] of valuations.entries()) {
+      r.cap = r.code ? offerCap(r.code, r.skills, peerRows, i, taxPct) : null;
+      if (r.flip && r.cap && (r.cap.cap - r.price) / r.price < s.flipPct / 100)
+        r.flip = false;
+    }
     for (const [i, r] of valuations.entries()) {
       if (setup || r.ownOffer) {
         r.row.querySelector(":scope > .ss-verdict")?.remove();
@@ -968,11 +989,12 @@ export function createEquipment({
         s.flipPct,
         r.sales?.at ?? "",
         r.value
-          ? `${r.value.amount}|${r.value.basis}|${r.value.n}|${r.value.matched}`
+          ? `${r.value.amount}|${r.value.basis}|${r.value.n}|${r.value.matched}|${r.value.trend ?? ""}`
           : "",
         salesState,
         r.statRank ? `${r.statRank.n}|${r.statRank.percentile ?? ""}` : "",
         peers ? `${peers.n}|${peers.cheapest ?? ""}` : "",
+        r.cap ? `${r.cap.cap}|${r.cap.taxRead}` : "",
         open,
         key,
         open ? Math.floor(now() / 60000) : "",
@@ -1056,7 +1078,7 @@ export function createEquipment({
     const sales = code ? state.salesByCode?.[code] : null;
     const err = code ? state.salesErrors?.[code] : null;
     const legend = helpMark(
-      `Floors: what each rarity dismantles into at the scrap bids. SNIPE: the scraps a piece dismantles into sell for more than its price (minimum ROI ${s.minMarginPct}%). FLIP: pieces with these stats sold in the last 7 days for ${s.flipPct}% or more above this price; the game's average never earns it. ~ is a value from sales of the same stats, ≈ from any stats or the game's average. Quotes are snapshots, not reserved liquidity.`,
+      `Floors: what each rarity dismantles into at the scrap bids. SNIPE: the scraps a piece dismantles into sell for more than its price (minimum ROI ${s.minMarginPct}%). FLIP: pieces with these stats sold in the last 7 days, brought down to today's level when the market fell, for ${s.flipPct}% or more above this price, and the second cheapest offer of stats at least as good lists no lower than that, before tax; the game's average never earns it. ~ is a value from sales of the same stats, ≈ from any stats or the game's average. Quotes are snapshots, not reserved liquidity.`,
     );
     let salesLine;
     if (!code)

@@ -386,6 +386,47 @@ describe("row annotation", () => {
     );
     expect(text).not.toContain("under the cheapest");
   });
+  it("says in Details how fast the market fell and that the sales were brought to today; a rising one says nothing", () => {
+    // a week of knives of these stats every 8 hours, the market falling 4% a day to 1.5 today
+    const week = (level) =>
+      sales(
+        Array.from({ length: 21 }, (_, i) => 1 + 8 * i).map((h) =>
+          fill(level(h / 24), h),
+        ),
+      );
+    state.salesByCode = { knife: week((d) => 1.5 / 0.96 ** d) };
+    equipment.render(state);
+    details().click();
+    equipment.render(state);
+    const text = () => annotation().querySelector(".lens-details").textContent;
+    expect(text()).toContain("Sells for 1.500 g · 3 sales · atk 30 · crit 3%");
+    expect(text()).toContain("trend −4%/day, sales brought to today");
+    state.salesByCode = { knife: week((d) => 1.5 * 0.96 ** d) };
+    equipment.render(state);
+    expect(text()).toContain("Sells for 1.477 g");
+    expect(text()).not.toContain("trend");
+  });
+  it("tags no FLIP the listings beside it would undercut: two others of these stats at its price cap its resale, before tax", () => {
+    state.book = { at: iso(), bids: [{ price: 0.1, quantity: 2000 }] }; // scraps 0.6: no snipe
+    state.salesByCode = {
+      knife: sales([fill(1.5, 1), fill(1.5, 2), fill(1.5, 3)]),
+    };
+    mount("knife", 2);
+    equipment.render(state);
+    expect(tag()).toBe("FLIP"); // one other offer caps nothing
+    mount("knife", 3);
+    equipment.render(state);
+    // its two neighbours list at 1, 0.952 before the page's 5% tax: below this price, so it would not resell at 1.5
+    expect(tag()).toBe("PASS");
+    expect(annotation().textContent).toContain("−0.05 · −5%");
+    expect(annotation().textContent).toContain("sells 1.50"); // what these stats sell for is unchanged
+    details().click();
+    equipment.render(state);
+    const text = annotation().querySelector(".lens-details").textContent;
+    expect(text).toContain("cap: 2nd offer 0.952 before tax");
+    expect(text).not.toContain("trend");
+    expect(equipment.pulse()).not.toContain("flip");
+  });
   it("keeps Details per row when two listings look identical", () => {
     mount("knife", 2);
     const second = document.getElementById("offer2");
@@ -412,12 +453,13 @@ describe("row annotation", () => {
 
 describe("states, pulse and the Market section", () => {
   it("counts snipes, flips and rows for the pulse; a failed sales read changes nothing there", () => {
-    mount("knife", 3);
+    // two listings: each has one other offer of its stats, too few to cap its resale (a third would)
+    mount("knife", 2);
     state.salesByCode = {
       knife: sales([fill(1.5, 1), fill(1.5, 2), fill(1.5, 3)]),
     };
     equipment.render(state);
-    expect(equipment.pulse()).toContain("<b>3</b> snipes");
+    expect(equipment.pulse()).toContain("<b>2</b> snipes");
     expect(equipment.pulse()).not.toContain("flip"); // nothing to say about zero
     expect(equipment.pulse()).not.toContain("rows");
     state.book = { at: iso(), bids: [{ price: 0.1, quantity: 2000 }] };
@@ -425,12 +467,12 @@ describe("states, pulse and the Market section", () => {
     const r = equipment.render(state);
     expect(r).toMatchObject({
       hits: 0,
-      flips: 3,
-      scanned: 3,
-      readable: 3,
+      flips: 2,
+      scanned: 2,
+      readable: 2,
       codes: ["knife"],
     });
-    expect(equipment.pulse()).toContain("<b>3</b> flips");
+    expect(equipment.pulse()).toContain("<b>2</b> flips");
   });
   it("shows reading, failed and stale quote states without tags", () => {
     state.book = null;
