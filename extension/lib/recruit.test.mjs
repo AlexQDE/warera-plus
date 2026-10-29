@@ -309,6 +309,49 @@ it("takes the company id from the page's address on a company's own page, whose 
   }
 });
 
+it("requests a roster refresh only when the known company's readable rows trail the window count", () => {
+  const now = Date.parse("2026-10-28T12:00:00Z");
+  const companyId = "c00000000000000000000001";
+  const rows = JSON.parse(
+    readFileSync("fixtures/employees-live-2026-10-28.json", "utf8"),
+  );
+  const read = recruit.readRecruitDialog();
+  read.rosterNode.textContent = "Roster 2/3";
+  document.body.insertAdjacentHTML(
+    "afterbegin",
+    `<div id="company"><a href="/company/${companyId}">Iron</a><img alt="iron"><div><button>Recruit 2/3</button></div></div>`,
+  );
+  const advisor = recruit.createRecruit({ clock: () => now });
+  const state = {
+    now,
+    employees: { rows, at: new Date(now - 20_000).toISOString() },
+  };
+  try {
+    expect(advisor.render(state).rosterStale).not.toBeTruthy();
+    document.querySelector("#company button").click();
+    expect(advisor.render(state)).toMatchObject({
+      root: read.root,
+      companyId,
+      rosterCount: 2,
+      rosterStale: true,
+    });
+    for (const unavailable of [
+      { ...state, hasKey: false },
+      { ...state, employees: null },
+      { ...state, pageUserId: "b123456789abcdef01234567" },
+      { ...state, employeesError: "read failed" },
+      { ...state, employees: { ...state.employees, at: "2000-01-01" } },
+    ])
+      expect(advisor.render(unavailable).rosterStale).not.toBeTruthy();
+    read.rosterNode.textContent = "Roster 1/3";
+    expect(advisor.render(state).rosterStale).not.toBeTruthy();
+    read.rosterNode.textContent = "Roster 0/3";
+    expect(advisor.render(state).rosterStale).not.toBeTruthy();
+  } finally {
+    advisor.dispose();
+  }
+});
+
 it("shows the Bully's real loss to Lionel and keeps the old line without employees", () => {
   const now = Date.parse("2026-10-28T12:00:00Z");
   const employees = {

@@ -37,6 +37,43 @@ it("v0.27.3 reads Your Management 7 through the existing cache field", () => {
   expect(train.readTrainDialog().trainee.leadership).toBe(7);
 });
 
+it("requests a trainee refresh only when readable employees do not include the trainee", () => {
+  live("claudia");
+  const now = Date.parse("2026-10-28T12:00:00Z");
+  const rows = JSON.parse(
+    readFileSync("fixtures/employees-live-2026-10-28.json", "utf8"),
+  );
+  const read = train.readTrainDialog();
+  const advisor = train.createTrain();
+  const state = {
+    now,
+    employees: { rows, at: new Date(now - 20_000).toISOString() },
+  };
+  const missing = {
+    ...state,
+    employees: {
+      ...state.employees,
+      rows: rows.filter((row) => row.name !== read.name),
+    },
+  };
+  expect(advisor.render(missing)).toMatchObject({
+    root: read.root,
+    name: read.name,
+    age: read.trainee.age,
+    traineeMissing: true,
+  });
+  expect(advisor.render(state).traineeMissing).not.toBeTruthy();
+  for (const unavailable of [
+    { ...missing, hasKey: false },
+    { ...missing, employees: null },
+    { ...missing, pageUserId: "b123456789abcdef01234567" },
+    { ...missing, employeesError: "read failed" },
+    { ...missing, employees: { ...missing.employees, at: "2000-01-01" } },
+  ])
+    expect(advisor.render(unavailable).traineeMissing).not.toBeTruthy();
+  advisor.clear();
+});
+
 it("reads the trainee name and shows a real coworker's change on a taught team trait", () => {
   live("claudia");
   const read = train.readTrainDialog();

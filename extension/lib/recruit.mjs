@@ -613,7 +613,16 @@ export function createRecruit({ clock = () => Date.now() } = {}) {
         node.remove();
         owned.delete(node);
       }
-    return read;
+    return {
+      ...read,
+      companyId: here?.companyId ?? null,
+      rosterCount: read.roster?.count ?? null,
+      rosterStale: !!(
+        roster &&
+        read.roster &&
+        read.roster.count > roster.length
+      ),
+    };
   }
   return { render, clear, dispose, company: () => company };
 }

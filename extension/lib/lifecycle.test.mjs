@@ -269,6 +269,175 @@ describe("SPA lifecycle and DOM work", () => {
     expect(reads()).toBe(3);
     expect(clicks).not.toHaveBeenCalled();
   });
+  it("refreshes a missing trainee once per name and age every sixty seconds", async () => {
+    const original = readFileSync("fixtures/v027-train-synthetic.html", "utf8");
+    document.body.innerHTML = original;
+    const runtime = mockRuntime();
+    const send = runtime.sendMessage.getMockImplementation();
+    const forcedAt = [];
+    runtime.sendMessage.mockImplementation(async (msg) => {
+      if (msg.type !== "employees") return send(msg);
+      if (msg.force) forcedAt.push(Date.now());
+      return {
+        employees: {
+          rows: [],
+          at: new Date(Date.now() - (msg.force ? 0 : 20_000)).toISOString(),
+        },
+      };
+    });
+    app = await startLens(runtime);
+    await settle();
+    expect(forcedAt).toHaveLength(1);
+    const first = forcedAt[0];
+    vi.setSystemTime(first + 20_000);
+    app.scan();
+    await settle();
+    expect(forcedAt).toHaveLength(1);
+    // A different name is independent even inside the first trainee's minute.
+    document.body.innerHTML = original.replaceAll(
+      "Sorayut Chaichana",
+      "Moreno La Sala",
+    );
+    app.scan();
+    await settle();
+    expect(forcedAt).toHaveLength(2);
+    vi.setSystemTime(first + 40_000);
+    // The same name at a different age is a different key too.
+    document.body.innerHTML = original
+      .replaceAll("Sorayut Chaichana", "Moreno La Sala")
+      .replace("</svg>40</span>", "</svg>41</span>");
+    app.scan();
+    await settle();
+    expect(forcedAt).toHaveLength(3);
+    vi.setSystemTime(first + 59_000);
+    document.body.innerHTML = original;
+    app.scan();
+    await settle();
+    expect(forcedAt).toHaveLength(3);
+    vi.setSystemTime(first + 60_000);
+    app.scan();
+    await settle();
+    expect(forcedAt).toHaveLength(4);
+  });
+  it("waits ten seconds after the employee snapshot and keeps refreshes single-flight", async () => {
+    const original = readFileSync("fixtures/v027-train-synthetic.html", "utf8");
+    document.body.innerHTML = original;
+    const runtime = mockRuntime();
+    const send = runtime.sendMessage.getMockImplementation();
+    let release;
+    const forced = [];
+    let snapshotAt;
+    runtime.sendMessage.mockImplementation(async (msg) => {
+      if (msg.type !== "employees") return send(msg);
+      if (msg.force) {
+        forced.push(msg);
+        if (forced.length === 1)
+          await new Promise((resolve) => (release = resolve));
+      }
+      snapshotAt = Date.now();
+      return { employees: { rows: [], at: new Date().toISOString() } };
+    });
+    app = await startLens(runtime);
+    await settle();
+    expect(forced).toHaveLength(0);
+    vi.setSystemTime(snapshotAt + 9999);
+    app.scan();
+    expect(forced).toHaveLength(0);
+    vi.setSystemTime(snapshotAt + 10_000);
+    app.scan();
+    expect(forced).toHaveLength(1);
+    vi.setSystemTime(snapshotAt + 80_000);
+    app.scan();
+    document.body.innerHTML = original.replaceAll(
+      "Sorayut Chaichana",
+      "Moreno La Sala",
+    );
+    app.scan();
+    expect(forced).toHaveLength(1);
+    release();
+    await settle();
+    expect(forced).toHaveLength(1);
+    vi.setSystemTime(snapshotAt + 10_000);
+    app.scan();
+    await settle();
+    expect(forced).toHaveLength(2);
+  });
+  it("finds a fresh hire when the forced employee read schedules another render", async () => {
+    document.body.innerHTML = readFileSync(
+      "fixtures/v027-live-train-claudia.html",
+      "utf8",
+    );
+    const rows = JSON.parse(
+      readFileSync("fixtures/employees-live-2026-10-28.json", "utf8"),
+    );
+    const runtime = mockRuntime();
+    const send = runtime.sendMessage.getMockImplementation();
+    runtime.sendMessage.mockImplementation(async (msg) =>
+      msg.type === "employees"
+        ? {
+            employees: {
+              rows: msg.force
+                ? rows
+                : rows.filter((row) => row.name !== "Claudia Heathcote"),
+              at: new Date(Date.now() - (msg.force ? 0 : 20_000)).toISOString(),
+            },
+          }
+        : send(msg),
+    );
+    app = await startLens(runtime);
+    await settle();
+    expect(
+      runtime.sendMessage.mock.calls.filter(
+        ([msg]) => msg.type === "employees" && msg.force,
+      ),
+    ).toHaveLength(1);
+    const tip = document.querySelector(".ss-train-value .lens-help").title;
+    expect(tip).toContain("team read 0 min ago");
+    expect(tip).not.toContain("trainee not among your employees");
+  });
+  it("refreshes stale recruit rosters once per company and window count", async () => {
+    document.body.innerHTML = `<div id="company"><a href="/company/c00000000000000000000001">Iron</a><img alt="iron"><div><button>Recruit 2/3</button></div></div>${readFileSync("fixtures/v0273-live-recruit.html", "utf8")}`;
+    const roster = [...document.querySelectorAll("span, div")].find((node) =>
+      /^Roster \d\/\d$/.test(node.textContent),
+    );
+    roster.textContent = "Roster 2/3";
+    const runtime = mockRuntime();
+    const send = runtime.sendMessage.getMockImplementation();
+    const forcedAt = [];
+    runtime.sendMessage.mockImplementation(async (msg) => {
+      if (msg.type !== "employees") return send(msg);
+      if (msg.force) forcedAt.push(Date.now());
+      return {
+        employees: {
+          rows: [],
+          at: new Date(Date.now() - (msg.force ? 0 : 20_000)).toISOString(),
+        },
+      };
+    });
+    app = await startLens(runtime);
+    await settle();
+    document.querySelector("#company button").click();
+    app.scan();
+    await settle();
+    expect(forcedAt).toHaveLength(1);
+    const first = forcedAt[0];
+    vi.setSystemTime(first + 20_000);
+    app.scan();
+    await settle();
+    expect(forcedAt).toHaveLength(1);
+    roster.textContent = "Roster 3/3";
+    app.scan();
+    await settle();
+    expect(forcedAt).toHaveLength(2);
+    vi.setSystemTime(first + 40_000);
+    document
+      .querySelector("#company a")
+      .setAttribute("href", "/company/c00000000000000000000002");
+    document.querySelector("#company button").click();
+    app.scan();
+    await settle();
+    expect(forcedAt).toHaveLength(3);
+  });
   it("applies wooden mode and ROI changes to the strip and wooden window without clicking game controls", async () => {
     document.body.insertAdjacentHTML(
       "beforeend",

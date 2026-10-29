@@ -2,6 +2,10 @@
 
 What changed in each release of WarEra Plus, newest first. Every number here was measured as it says; a synthetic page or market says so.
 
+## 3.14.1
+
+- **A fresh hire is counted at once.** The extension reads your employees at most every five minutes. So a worker hired minutes before had no team in his Train window: "trainee not among your employees", for Moreno La Sala on 2026-10-29. Recruit's team estimate also left him out while its "Roster N/3" counted him. Now, when the Train window's employee is missing from that list, or Recruit's roster holds more than it does, the list is read again at once: at most once a minute for the same employee or roster, and never over a read that is seconds old.
+
 ## 3.14.0
 
 The game's v0.27.3 (2026-10-29) changed how employees work. The rules below were read the same day from the live game client and from the account's 19 employees in the API.

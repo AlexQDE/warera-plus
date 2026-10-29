@@ -387,7 +387,8 @@ export function createTrain() {
     const subject = !teamMissing
       ? findTrainee(employees.rows, read.name, read.trainee.age)
       : null;
-    if (!teamMissing && !subject)
+    const traineeMissing = !teamMissing && !subject;
+    if (traineeMissing)
       teamMissing = "team not counted: trainee not among your employees";
     if (!teamMissing && !subject?.company)
       teamMissing = "team not counted: trainee's company not found";
@@ -450,7 +451,7 @@ export function createTrain() {
         box.removeAttribute(BEST_ATTR);
         marked.delete(box);
       }
-    return read;
+    return { ...read, age: read.trainee.age, traineeMissing };
   }
   return { render, clear };
 }

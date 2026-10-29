@@ -57,6 +57,7 @@ export async function startLens(runtime = chrome.runtime) {
   const SALES_RETRY_MS = 15_000; // a failed or empty sales read is not asked again at once
   const salesAttempts = new Map(); // code -> last attempt
   const salesPending = new Map(); // code -> forced?: sales reads asked for while another item's read was in flight
+  const employeeRefreshes = new Map(); // trainee or roster key -> last forced read
   let context = {};
   let disposed = false;
   let timer;
@@ -130,6 +131,7 @@ export async function startLens(runtime = chrome.runtime) {
         state.salesErrors = {};
         salesAttempts.clear();
         salesPending.clear();
+        employeeRefreshes.clear();
         state.errors = {};
         state.rejected = false;
       }
@@ -275,6 +277,17 @@ export async function startLens(runtime = chrome.runtime) {
       )
         void read("sales", false, salesWanted);
     }
+  }
+  function refreshEmployees(key) {
+    const now = Date.now();
+    if (
+      state.busy.has("employees") ||
+      now - Date.parse(state.employees?.at) < 10_000 ||
+      now - (employeeRefreshes.get(key) ?? -Infinity) < 60_000
+    )
+      return;
+    employeeRefreshes.set(key, now);
+    void read("employees", true);
   }
   /** Run the sales reads kept while one was in flight, one at a time; the rest wait for the next completion. */
   function drainSales() {
@@ -724,6 +737,8 @@ export async function startLens(runtime = chrome.runtime) {
       }
     }
     recruitRoot = context.recruit;
+    if (recruits?.rosterStale)
+      refreshEmployees(`recruit|${recruits.companyId}|${recruits.rosterCount}`);
     const trainRead =
       state.settings.recruit && !state.setup ? readTrainDialog() : null;
     const training = trainRead
@@ -746,6 +761,8 @@ export async function startLens(runtime = chrome.runtime) {
       }
     }
     trainRoot = context.train;
+    if (training?.traineeMissing)
+      refreshEmployees(`train|${training.name}|${training.age}`);
     const seenLeadership = trainRead?.trainee.leadership;
     if (
       seenLeadership != null &&
