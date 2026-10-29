@@ -75,7 +75,7 @@ it("mounts before sort buttons once, never clicks or replaces the game's nodes, 
   expect(panel.querySelector(".lens-help").title).toContain(
     "employees read 2 min ago",
   );
-  expect(panel.querySelector(".lens-help").title).toContain("Leadership 3");
+  expect(panel.querySelector(".lens-help").title).toContain("Management 3");
   read.root.remove();
   expect(view.render(state())).toBeNull();
   expect(panel.parentNode).toBeNull();
@@ -145,7 +145,7 @@ it("uses the case books' best bids less inputs, then falls back when books becom
     document.querySelector('[data-workforce="losing"]').textContent,
   ).toContain("−0.1 g a day");
 });
-it("discloses assumptions, unknown products, stale books and missing Leadership", () => {
+it("discloses assumptions, unknown products, stale books and missing Management", () => {
   const employee = {
     ...rows.find((e) => e.name === "Dwight Harris"),
     lastSpecializedDay: "2026-10-27",
@@ -158,7 +158,7 @@ it("discloses assumptions, unknown products, stale books and missing Leadership"
     }),
   );
   const title = document.querySelector(".ss-workforce .lens-help").title;
-  expect(title).toContain("Leadership 0");
+  expect(title).toContain("Management 0");
   expect(title).toContain("never seen");
   expect(title).toContain("unknown product");
   expect(title).toContain("point value");

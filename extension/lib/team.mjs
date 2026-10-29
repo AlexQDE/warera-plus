@@ -9,9 +9,10 @@ import {
   SPEC_PER_DAY,
   SPEC_CAP,
   HOURS_PER_POINT,
+  ageProductionDelta,
 } from "./hiring.mjs";
 
-export const SHIELD_PER_RESPONSIBILITY = 0.1;
+export const HAPPINESS_PER_RESPONSIBILITY = 3;
 export const HAPPINESS_NEUTRAL = 50;
 export const POINTS_PER_PRODUCTION_HOUR = 0.25;
 export const HOURS_PER_DAY = 24;
@@ -154,21 +155,22 @@ export const TEAM_RULES = {
  *   base?: { production?: number }, traits?: { code?: string, revealed?: boolean }[],
  *   wage?: number, wageExpectation?: number,
  *   breakdown?: { production?: StatBreakdown, responsibility?: StatBreakdown, luck?: StatBreakdown },
- *   happinessBreakdown?: { contributions?: { delta?: number, until?: string | number | null }[],
- *     shield?: number, value?: number },
+ *   happinessBreakdown?: { contributions?: { reason?: string, delta?: number, until?: string | number | null }[],
+ *     base?: number, mitigated?: number, value?: number },
  *   productionBonus?: { total?: number, contributions?: { source?: string, percent?: number }[] }
  * }} ApiEmployee
  * @typedef {{ id: string | null, name: string | null, company: string | null,
  *   gender: "male" | "female" | null, age: number | null, nationality: string | null,
  *   baseP: number | null, P: number | null, R: number | null, L: number | null,
  *   traits: string[] | null, wageHour: number | null, bonus: number | null,
- *   spec: number | null, items: HappinessItem[] | null, shield: number | null,
+ *   spec: number | null, items: HappinessItem[] | null,
+ *   management?: number | null, incomeTax?: number | null,
  *   happiness: number | null, horizon: number | null,
  *   productionContributions: Record<string, number> | null,
  *   observedAt?: number, wageExpectation?: number | null }} Member
  * @typedef {{ name?: string, gender: "male" | "female" | null,
  *   nationality: string | null, age: number, baseP: number, R: number,
- *   traits: string[], wageHour: number }} Candidate
+ *   traits: string[], wageHour: number, happiness?: number }} Candidate
  * @typedef {{ kind: "drill", stat: "production" | "responsibility" | "luck", delta: number }
  *   | { kind: "habit", traitTo: string[], trait?: string }
  *   | { kind: "rehab", trait: string } | { kind: "cleanSlate", traits: string[] }
@@ -177,7 +179,7 @@ export const TEAM_RULES = {
  * @typedef {{ kind: "hire", candidate: Candidate }
  *   | { kind: "card", id: string, card: TeamCard }} TeamChange
  * @typedef {{ now: number, pointValue: number, valuePerPoint?: number,
- *   subjectHorizon: number }} TeamContext
+ *   subjectHorizon: number, directHappiness?: number }} TeamContext
  * @typedef {{ P: number | null, happiness: number | null, bonus: number | null }} OutputState
  * @typedef {{ id: string | null, name: string | null, gold: number | null,
  *   days: number | null, before: OutputState, after: OutputState, why: string[] }} CoworkerChange
@@ -220,6 +222,11 @@ export function memberOf(employee, now) {
     (part) => part.source === "specialization",
   );
   const age = numberOf(employee.age);
+  const taxDelta = numberOf(
+    employee.happinessBreakdown?.contributions?.find(
+      (part) => part.reason === "incomeTax",
+    )?.delta,
+  );
   return {
     id: textOf(employee._id),
     name: textOf(employee.name),
@@ -253,9 +260,12 @@ export function memberOf(employee, now) {
         delta: numberOf(item.delta),
         until: untilOf(item.until),
       })) ?? null,
-    shield:
-      numberOf(employee.happinessBreakdown?.shield) ??
-      (R == null ? null : Math.min(1, R * SHIELD_PER_RESPONSIBILITY)),
+    management: numberOf(
+      employee.productionBonus?.contributions?.find(
+        (part) => part.source === "management",
+      )?.percent,
+    ),
+    incomeTax: taxDelta == null ? null : -taxDelta,
     happiness: numberOf(employee.happinessBreakdown?.value),
     horizon: horizonOf(age),
     productionContributions,
@@ -490,8 +500,7 @@ function signed(value, digits) {
   return `${value < 0 ? "−" : "+"}${digits == null ? Math.abs(value) : Math.abs(value).toFixed(digits)}`;
 }
 
-/** Keep negative items negative when removing them: a positive compensation
- * item would evade the shield and overstate Rehab's happiness gain.
+/** Track the happiness items that switch while keeping server totals authoritative.
  * @param {Effects} before @param {Effects} after @returns {Delta} */
 function difference(before, after) {
   const delta = {
@@ -530,8 +539,8 @@ function difference(before, after) {
   return delta;
 }
 
-/** @param {Member} member @param {number} at @param {number} shield */
-function itemHappiness(member, at, shield) {
+/** @param {Member} member @param {number} at */
+function itemHappiness(member, at) {
   if (member.items == null || member.items.some((item) => item.delta == null))
     return null;
   return (
@@ -539,44 +548,40 @@ function itemHappiness(member, at, shield) {
     member.items.reduce((sum, item) => {
       if (item.until != null && item.until <= at) return sum;
       const delta = /** @type {number} */ (item.delta);
-      return sum + delta * (delta < 0 ? 1 - shield : 1);
+      return sum + delta;
     }, 0)
   );
 }
 
 /** @param {Member} member @param {Delta} delta @param {number} at
- * @param {number} day @returns {{ before: OutputState, after: OutputState, shield: number | null }} */
+ * @param {number} day @returns {{ before: OutputState, after: OutputState }} */
 function statesAt(member, delta, at, day) {
-  const shield = delta.R
-    ? member.R == null
-      ? null
-      : Math.min(1, SHIELD_PER_RESPONSIBILITY * (member.R + delta.R))
-    : member.shield;
-  const rawBefore =
-    member.shield == null ? null : itemHappiness(member, at, member.shield);
-  const rawObserved =
-    member.shield == null
-      ? null
-      : itemHappiness(
-          member,
-          member.observedAt ?? at - day * DAY_MS,
-          member.shield,
-        );
+  const rawBefore = itemHappiness(member, at);
+  const rawObserved = itemHappiness(
+    member,
+    member.observedAt ?? at - day * DAY_MS,
+  );
   const happiness =
     member.happiness == null
       ? null
-      : member.happiness +
-        (rawBefore != null && rawObserved != null
-          ? rawBefore - rawObserved
-          : 0);
+      : clampHappiness(
+          member.happiness +
+            (rawBefore != null && rawObserved != null
+              ? rawBefore - rawObserved
+              : 0),
+        );
   const hasHappinessChange =
     delta.R !== 0 || delta.positive !== 0 || delta.negative !== 0;
-  const rawAfter = shield == null ? null : itemHappiness(member, at, shield);
   const afterHappiness = !hasHappinessChange
     ? happiness
-    : rawAfter == null || shield == null
+    : happiness == null
       ? null
-      : rawAfter + delta.positive + delta.negative * (1 - shield);
+      : clampHappiness(
+          happiness +
+            delta.R * HAPPINESS_PER_RESPONSIBILITY +
+            delta.positive +
+            delta.negative,
+        );
   // Missing specialization does not hide a known day-zero bonus; later
   // days cannot price flat Production accurately without its current part.
   const growth =
@@ -597,29 +602,41 @@ function statesAt(member, delta, at, day) {
     bonus == null || happiness == null || afterHappiness == null
       ? null
       : bonus + afterHappiness - happiness + delta.pct;
+  const P =
+    member.P == null
+      ? null
+      : member.P + ageProductionDelta(member.traits ?? [], member.age, day);
   return {
-    before: { P: member.P, happiness, bonus },
+    before: { P, happiness, bonus },
     after: {
-      P: plus(member.P, delta.prod),
+      P: plus(P, delta.prod),
       happiness: afterHappiness,
       bonus: afterBonus,
     },
-    shield,
   };
 }
 
-/** @param {Member} member @param {Delta} delta @param {number} shield @param {number} now */
-function ownHappiness(member, delta, shield, now) {
-  // A new hire's own tax and recentlyMoved are deliberately outside v1.
-  let shieldChange = 0;
-  if (delta.R) {
-    const before =
-      member.shield == null ? null : itemHappiness(member, now, member.shield);
-    const after = itemHappiness(member, now, shield);
-    if (before == null || after == null) return null;
-    shieldChange = after - before;
-  }
-  return delta.positive + delta.negative * (1 - shield) + shieldChange;
+/** @param {number} value */
+const clampHappiness = (value) => Math.max(0, Math.min(100, value));
+
+/** Server happiness plus only the switched items, including their expiry.
+ * ASSUMED: the API's mitigated field is Loyal's removed negative happiness.
+ * Loyal mitigation is not modeled; see TEAM-MODEL.md.
+ * @param {Member} member @param {Delta} delta @param {number} at
+ * @param {number} day @param {number} directHappiness */
+function ownHappiness(member, delta, at, day, directHappiness) {
+  const state = statesAt(member, delta, at, day);
+  if (state.before.happiness == null) return null;
+  const before = state.before.happiness;
+  return (
+    clampHappiness(
+      before +
+        directHappiness +
+        delta.R * HAPPINESS_PER_RESPONSIBILITY +
+        delta.positive +
+        delta.negative,
+    ) - clampHappiness(before + directHappiness)
+  );
 }
 
 /** @param {Member} member @param {TeamCard} card @param {TeamContext} ctx @returns {Member} */
@@ -712,8 +729,9 @@ export function teamEffect(roster, change, ctx) {
       bonus: 0,
       spec: 0,
       items: [],
-      shield: Math.min(1, c.R * SHIELD_PER_RESPONSIBILITY),
-      happiness: HAPPINESS_NEUTRAL,
+      happiness:
+        c.happiness ??
+        clampHappiness(HAPPINESS_NEUTRAL + c.R * HAPPINESS_PER_RESPONSIBILITY),
       horizon: horizonOf(c.age),
       productionContributions: null,
       observedAt: ctx.now,
@@ -744,31 +762,24 @@ export function teamEffect(roster, change, ctx) {
     if (index === subject) {
       // Only conditional team changes belong here; direct card effects are
       // already valued in hiring.mjs (including a Responsibility drill).
-      let original = roster[index] ?? member;
-      // A Wild card can raise Responsibility and add a happiness trait in
-      // the same case. Its direct shield gain is priced by the caller;
-      // mitigate only the new team items at the card's resulting shield.
-      if (change.kind === "card" && original.R !== member.R)
-        original = {
-          ...original,
-          R: member.R,
-          shield:
-            member.R == null
-              ? null
-              : Math.min(1, member.R * SHIELD_PER_RESPONSIBILITY),
-        };
-      const shield = delta.R
-        ? original.R == null
-          ? null
-          : Math.min(1, SHIELD_PER_RESPONSIBILITY * (original.R + delta.R))
-        : original.shield;
+      const original = roster[index] ?? member;
+      // Clamp the signed direct and team changes together, then subtract the
+      // direct contribution already priced by the caller. Clamping direct
+      // Responsibility first would exaggerate an opposing team loss.
+      const directR =
+        change.kind === "card" && original.R != null && member.R != null
+          ? member.R - original.R
+          : 0;
       const pctAt = (/** @type {number} */ day) => {
         if (delta.positive === 0 && delta.negative === 0 && delta.R === 0)
           return delta.pct / 100;
-        const happinessChange =
-          shield == null
-            ? null
-            : ownHappiness(original, delta, shield, ctx.now + day * DAY_MS);
+        const happinessChange = ownHappiness(
+          original,
+          delta,
+          ctx.now + day * DAY_MS,
+          day,
+          ctx.directHappiness ?? directR * HAPPINESS_PER_RESPONSIBILITY,
+        );
         return happinessChange == null
           ? null
           : (delta.pct + happinessChange) / 100;
@@ -794,10 +805,9 @@ export function teamEffect(roster, change, ctx) {
     ) {
       const sources = delta.why.filter((line) => !line.includes(":"));
       why.push(
-        `happiness ${signed(state.after.happiness - state.before.happiness, 1)} (${[...sources, `shield ${state.shield}`].join(", ")})`,
+        `happiness ${signed(state.after.happiness - state.before.happiness, 1)} (${sources.length ? sources.join(", ") : `Responsibility ${signed(delta.R)}`})`,
       );
     }
-    if (delta.R) why.push(`shield ${state.shield}`);
     let gold = days == null ? null : 0;
     const priced =
       delta.prod || delta.R || delta.pct || delta.positive || delta.negative;

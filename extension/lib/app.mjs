@@ -38,6 +38,7 @@ export async function startLens(runtime = chrome.runtime) {
     cases: null,
     avg: null,
     pointValue: null,
+    countries: null,
     employees: null,
     leadership: null,
     sales: null,
@@ -74,7 +75,7 @@ export async function startLens(runtime = chrome.runtime) {
   let leadershipRoot = null;
   let leadershipLevel = null;
   const signature = () =>
-    ["book", "cases", "avg", "pointValue", "employees"]
+    ["book", "cases", "avg", "pointValue", "countries", "employees"]
       .map((k) =>
         freshness(
           state[k]?.at,
@@ -161,6 +162,11 @@ export async function startLens(runtime = chrome.runtime) {
   async function read(kind, force = false, code) {
     if (disposed || document.hidden || state.setup || state.invalidated) return;
     if (kind === "sales" && !state.hasKey) return; // the API serves sales only with a key
+    if (
+      kind === "countries" &&
+      (!state.settings.recruit || !readRecruitDialog())
+    )
+      return;
     if (
       kind === "employees" &&
       (!state.hasKey ||
@@ -695,6 +701,7 @@ export async function startLens(runtime = chrome.runtime) {
       state.settings.recruit && !state.setup
         ? recruit.render({
             pointValue: state.pointValue,
+            countries: state.countries,
             error: state.errors.pointValue,
             employees: state.employees,
             employeesError: state.errors.employees,
@@ -711,6 +718,7 @@ export async function startLens(runtime = chrome.runtime) {
       if (recruitRoot !== context.recruit) {
         // wages rest on the point value; the company's product and inputs are priced from the case books (all 20 resources)
         void read("pointValue");
+        void read("countries");
         void read("employees");
         void read("cases");
       }
@@ -883,6 +891,7 @@ export async function startLens(runtime = chrome.runtime) {
       (context.workforce && readWorkforceDialog())
     )
       jobs.push(read("cases"));
+    if (context.recruit && readRecruitDialog()) jobs.push(read("countries"));
     if (
       (context.recruit && readRecruitDialog()) ||
       (context.train && readTrainDialog()) ||

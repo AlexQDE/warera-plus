@@ -234,7 +234,11 @@ export function readTrainDialog(root = document) {
       .filter((b) => native(b) && !inCard(b))
       .map((b) => traitCode(b.getAttribute("aria-label")))
       .filter(Boolean);
-    const leadershipNode = textNodes(dialog, /^Your Leadership$/i, inCard)[0];
+    const leadershipNode = textNodes(
+      dialog,
+      /^Your (?:Management|Leadership)$/i,
+      inCard,
+    )[0];
     const leadershipText =
       leadershipNode?.nextElementSibling?.textContent?.trim() ?? "";
     const leadership = /^\d+$/.test(leadershipText)
@@ -322,8 +326,8 @@ export function trainHtml(
     `Production ${t.production}, wage chip ${t.wageChip == null ? "?" : `${t.wageChip >= 0 ? "+" : ""}${Math.round(t.wageChip * 1000) / 10}%`}, bonus ${t.bonus >= 0 ? "+" : ""}${Math.round(t.bonus * 1000) / 10}% + specialization still to come`,
     `${result?.horizon ?? "?"} days counted (until 65, 60 at most), output at the game's point value ${pointValue?.toFixed(4)}`,
     t.leadership == null
-      ? "Leadership was not read; odds use 0"
-      : `Leadership ${t.leadership}`,
+      ? "Management was not read; odds use 0"
+      : `Management ${t.leadership}`,
     ...(result?.paidProduction != null && result.paidProduction !== t.production
       ? [
           `paid on Production ${result.paidProduction}, ${t.production} with traits`,

@@ -87,8 +87,20 @@ export function trainOrder(employees, ctx) {
       continue;
     const H = Math.max(0, Math.min(RETIRE_AGE - age, HORIZON_DAYS));
     if (!H) continue;
+    /** @type {import("./hiring.mjs").Trainee} */
     const trainee = {
       production: P,
+      gender:
+        employee.gender === "male" || employee.gender === "female"
+          ? employee.gender
+          : null,
+      happiness: employee.happinessBreakdown?.value,
+      incomeTax:
+        -(
+          employee.happinessBreakdown?.contributions?.find(
+            (part) => part.reason === "incomeTax",
+          )?.delta ?? 0
+        ) / 100,
       responsibility: employee.breakdown?.responsibility?.total,
       luck: employee.breakdown?.luck?.total ?? 0,
       // today's hand is not drawn yet; trainingValues prices a hand already counted in the potential
@@ -128,7 +140,7 @@ export function trainOrder(employees, ctx) {
     }));
     const handGold = bestOfHand(
       pool,
-      trainingOdds(trainee.luck, trainee.leadership),
+      trainingOdds(trainee.luck ?? 0, trainee.leadership ?? 0),
     );
     const hands = Math.min(Math.floor(potentialMax - potential), Math.ceil(H));
     let gold = 0;

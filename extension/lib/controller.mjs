@@ -5,6 +5,7 @@ import {
   fetchEquipmentAvg,
   fetchPointValue,
   fetchMyEmployees,
+  fetchCountries,
   fetchHistoryPage,
   fetchInputAverages,
   fetchOwner,
@@ -130,7 +131,11 @@ export function createController({
               : "Sales of these stats need your API key",
         };
       const authRevision = Number(got.settings?.authRevision) || 0;
-      if (key && got.rejectedAuthRevision === authRevision)
+      if (
+        kind !== "countries" &&
+        key &&
+        got.rejectedAuthRevision === authRevision
+      )
         return {
           error: "key-rejected",
           message: "API key rejected. Check and save your key in settings.",
@@ -169,6 +174,8 @@ export function createController({
           result = await fetchBooks(fetchImpl, key, CASE_BOOKS);
         else if (kind === "pointValue")
           result = { value: await fetchPointValue(fetchImpl, key) };
+        else if (kind === "countries")
+          result = { rows: await fetchCountries(fetchImpl) };
         else if (kind === "employees")
           result = { rows: await fetchMyEmployees(fetchImpl, key) };
         else if (kind === "sales") {
@@ -358,7 +365,14 @@ export function createController({
       const all = await storage.get(null);
       const keys = Object.keys(all).filter(
         (k) =>
-          ["book", "cases", "avg", "pointValue", "employees"].includes(k) ||
+          [
+            "book",
+            "cases",
+            "avg",
+            "pointValue",
+            "countries",
+            "employees",
+          ].includes(k) ||
           k.startsWith("sales:") ||
           k.startsWith("crafts:"),
       );
@@ -1045,7 +1059,7 @@ export function createController({
         if (!Number.isSafeInteger(msg.level) || msg.level < 0)
           return {
             error: "bad-leadership",
-            message: "Unknown Leadership level",
+            message: "Unknown Management level",
           };
         return serial(async () => {
           const leadership = { level: msg.level, at: iso() };
@@ -1114,9 +1128,15 @@ export function createController({
       }
       if (msg?.type === "craftPick") return recordPick(msg);
       if (
-        ["book", "cases", "avg", "pointValue", "sales", "employees"].includes(
-          msg?.type,
-        )
+        [
+          "book",
+          "cases",
+          "avg",
+          "pointValue",
+          "countries",
+          "sales",
+          "employees",
+        ].includes(msg?.type)
       ) {
         if (msg.type === "sales" && !ITEM_CODES.has(msg.itemCode))
           return { error: "bad-item", message: "Unknown equipment item" };

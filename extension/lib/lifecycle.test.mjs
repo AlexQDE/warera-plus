@@ -60,14 +60,70 @@ function mockRuntime(overrides = {}) {
         return { avg: { at: new Date().toISOString(), values: {}, times: {} } };
       if (msg.type === "pointValue")
         return { pointValue: { at: new Date().toISOString(), value: 0.1012 } };
+      if (msg.type === "countries")
+        return { countries: { at: new Date().toISOString(), rows: [] } };
       return {};
     }),
   };
 }
 
 describe("SPA lifecycle and DOM work", () => {
+  it("reads countries keyless only while Recruit is open, visible and enabled", async () => {
+    window.history.replaceState({}, "", "/companies");
+    document.body.innerHTML = "<main></main>";
+    const runtime = mockRuntime({ hasKey: false });
+    app = await startLens(runtime);
+    await settle();
+    const reads = () =>
+      runtime.sendMessage.mock.calls.filter(([m]) => m.type === "countries")
+        .length;
+    expect(reads()).toBe(0);
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      readFileSync("fixtures/v0273-live-recruit.html", "utf8"),
+    );
+    app.scan();
+    await settle();
+    expect(reads()).toBe(1);
+    document.querySelector('[role="dialog"]').remove();
+    app.scan();
+    // Expire the day-long cache with the page hidden so no timers poll it.
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    vi.setSystemTime(Date.now() + 86_400_000);
+    await settle(5100);
+    expect(reads()).toBe(1);
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      readFileSync("fixtures/v027-train-synthetic.html", "utf8"),
+    );
+    document.dispatchEvent(new Event("visibilitychange"));
+    app.scan();
+    await settle(5100);
+    expect(reads()).toBe(1);
+    document.querySelector('[role="dialog"]').remove();
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      readFileSync("fixtures/v0273-live-recruit.html", "utf8"),
+    );
+    app.scan();
+    await settle();
+    expect(reads()).toBe(2);
+    runtime.info.settings.recruit = false;
+    runtime.info.revision++;
+    vi.setSystemTime(Date.now() + 86_400_000);
+    await settle(5100);
+    expect(reads()).toBe(2);
+  });
+
   it.each([
-    ["Recruit", "v027-live-recruit.html", ".ss-recruit-value .lens-help"],
+    ["Recruit", "v0273-live-recruit.html", ".ss-recruit-value .lens-help"],
     ["Train", "v027-live-train-claudia.html", ".ss-train-value .lens-help"],
     ["My workforce", "v027-workforce-synthetic.html", ".ss-workforce"],
   ])(
@@ -188,7 +244,7 @@ describe("SPA lifecycle and DOM work", () => {
     expect(reads()).toBe(0);
     document.body.insertAdjacentHTML(
       "beforeend",
-      readFileSync("fixtures/v027-live-recruit.html", "utf8"),
+      readFileSync("fixtures/v0273-live-recruit.html", "utf8"),
     );
     await settle();
     expect(reads()).toBe(1);
@@ -276,7 +332,7 @@ describe("SPA lifecycle and DOM work", () => {
     expect(pointReads()).toBe(0);
     document.body.insertAdjacentHTML(
       "beforeend",
-      readFileSync("fixtures/v027-live-recruit.html", "utf8"),
+      readFileSync("fixtures/v0273-live-recruit.html", "utf8"),
     );
     await settle();
     expect(reads()).toBe(1);
@@ -305,7 +361,7 @@ describe("SPA lifecycle and DOM work", () => {
     expect(reads()).toBe(1);
     document.body.insertAdjacentHTML(
       "beforeend",
-      readFileSync("fixtures/v027-live-recruit.html", "utf8"),
+      readFileSync("fixtures/v0273-live-recruit.html", "utf8"),
     );
     app.scan();
     await settle();
@@ -349,8 +405,8 @@ describe("SPA lifecycle and DOM work", () => {
       // The header's 1/3 already counts this hand, leaving two future hands.
     ).toEqual([
       ["★ +0.30 g/day", "7.6 g in 25 d"],
-      ["+0.29 g", "2 trainings"],
-      ["+0.11 g/day", "2.9 g in 25 d"],
+      ["+0.32 g", "2 trainings"],
+      ["+0.19 g/day", "4.7 g in 25 d"],
     ]);
     const best = dialog.querySelector("[data-ss-best]");
     expect(best).not.toBeNull();

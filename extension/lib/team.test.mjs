@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import {
   TEAM_RULES,
-  SHIELD_PER_RESPONSIBILITY,
+  HAPPINESS_PER_RESPONSIBILITY,
   HAPPINESS_NEUTRAL,
   POINTS_PER_PRODUCTION_HOUR,
   memberOf,
@@ -62,7 +62,6 @@ function member(overrides = {}) {
     bonus: 0,
     spec: 0,
     items: [],
-    shield: 0.1,
     happiness: 50,
     horizon: 20,
     productionContributions: {},
@@ -71,21 +70,34 @@ function member(overrides = {}) {
 }
 
 describe("the roster read", () => {
-  it("caps the Responsibility fallback shield at one", () => {
-    expect(
-      memberOf({ breakdown: { responsibility: { total: 12 } } }, now).shield,
-    ).toBe(1);
-    expect(
-      memberOf(
-        {
-          breakdown: { responsibility: { total: 12 } },
-          happinessBreakdown: { shield: 0.7 },
-        },
-        now,
-      ).shield,
-    ).toBe(0.7);
+  it("advances a coworker's owned Worn Out output when pricing Foreman", () => {
+    const coworker = member({ age: 59, P: 3, traits: ["wornOut"], horizon: 6 });
+    const result = effect([coworker], hire({ traits: ["foreman"], age: 59 }), {
+      subjectHorizon: 6,
+    });
+    expect(result.others[0].gold).toBeCloseTo(6 * 0.1012 * 8 * 0.09, 12);
   });
-  it("uses Wild card's raised Responsibility to mitigate its new happiness loss without pricing the drill twice", () => {
+  it("reads v0.27.3 Management and tax without deriving a shield", () => {
+    const m = memberOf(
+      {
+        breakdown: { responsibility: { total: 12 } },
+        happinessBreakdown: {
+          value: 82,
+          contributions: [{ reason: "incomeTax", delta: -4 }],
+        },
+        productionBonus: {
+          total: 54,
+          contributions: [{ source: "management", percent: 22 }],
+        },
+      },
+      now,
+    );
+    expect(m).not.toHaveProperty("shield");
+    expect(m.happiness).toBe(82);
+    expect(m.management).toBe(22);
+    expect(m.incomeTax).toBe(4);
+  });
+  it("keeps Wild card's direct Responsibility separate from its full happiness loss", () => {
     const subject = member({
       items: [{ delta: -4, until: null }],
       happiness: 46.4,
@@ -102,7 +114,57 @@ describe("the roster read", () => {
       },
     });
     expect(result.self.prod).toBe(-2);
-    expect(result.self.pct).toBeCloseTo((-5 * 0.8) / 100, 10);
+    expect(result.self.pct).toBeCloseTo(-5 / 100, 10);
+  });
+  it("combines Wild Responsibility and Xenophobe before capping daily happiness", () => {
+    const subject = member({
+      happiness: 99,
+      items: [{ delta: 5, until: now + 86400e3 }],
+      observedAt: now,
+    });
+    const result = effect(
+      [subject, member({ id: "peer", nationality: "foreign" })],
+      {
+        kind: "card",
+        id: subject.id,
+        card: {
+          kind: "wild",
+          trait: "xenophobe",
+          stat: "responsibility",
+          delta: 1,
+        },
+      },
+      { subjectHorizon: 2 },
+    );
+    // Day zero: 99 + 3 - 5 = 97. Subtract the +1 already priced directly.
+    expect(result.self.pctDays).toEqual([
+      expect.closeTo(-0.03, 12),
+      expect.closeTo(-0.05, 12),
+    ]);
+  });
+  it("shares Wild card's happiness cap after expiring items each day", () => {
+    const subject = member({
+      happiness: 99,
+      items: [{ delta: 5, until: now + 86400e3 }],
+    });
+    const result = effect(
+      [subject],
+      {
+        kind: "card",
+        id: subject.id,
+        card: {
+          kind: "wild",
+          trait: "loner",
+          stat: "responsibility",
+          delta: 1,
+        },
+      },
+      { subjectHorizon: 2 },
+    );
+    expect(result.self.pctDays).toEqual([
+      expect.closeTo(1, 12),
+      expect.closeTo(1.03, 12),
+    ]);
   });
   it("averages moved and unaffected cases over their full probabilities", () => {
     const roster = rosterOf(employees, company, now);
@@ -113,7 +175,7 @@ describe("the roster read", () => {
       { result: plain, prob: 0.75 },
     ]);
     expect(mean.team).toBeCloseTo(bully.team / 4, 10);
-    expect(mean.others[0].after.happiness).toBeCloseTo(41.9 - 9 / 4, 10);
+    expect(mean.others[0].after.happiness).toBeCloseTo(41.9 - 10 / 4, 10);
     expect(mean.others[0].why.join("\n")).toContain("25.0% of cases");
     expect(mean.self.prod).toBe(0.5);
   });
@@ -126,7 +188,6 @@ describe("the roster read", () => {
       R: 1,
       baseP: 3,
       happiness: 41.9,
-      shield: 0.1,
       horizon: 20,
     });
     expect(roster[0].bonus).toBeCloseTo(-0.1, 10);
@@ -143,7 +204,7 @@ describe("the roster read", () => {
     expect(mohannad.P).toBe(6);
   });
 
-  it("keeps hidden traits, finite missing values and the Responsibility fallback", () => {
+  it("keeps hidden traits and missing values without inventing happiness", () => {
     const m = memberOf(
       {
         _id: "missing",
@@ -160,16 +221,13 @@ describe("the roster read", () => {
       L: null,
       happiness: null,
       bonus: null,
-      shield: null,
+
       gender: null,
       nationality: null,
       horizon: 0,
       items: null,
       traits: ["bully"],
     });
-    expect(
-      memberOf({ breakdown: { responsibility: { total: 4 } } }, now).shield,
-    ).toBe(0.4);
     expect(memberOf({}, now).horizon).toBeNull();
   });
 
@@ -189,7 +247,7 @@ describe("the roster read", () => {
 });
 
 describe("team changes on the live fixture", () => {
-  it("prices the Bully acceptance case at -3.27888 gold", () => {
+  it("prices the Bully acceptance case at -3.6432 gold", () => {
     const roster = rosterOf(employees, company, now);
     const result = effect(roster, hire({ traits: ["bully"] }));
     expect(result.self.prod).toBe(2);
@@ -197,14 +255,14 @@ describe("team changes on the live fixture", () => {
     expect(result.others).toHaveLength(1);
     const lionel = result.others[0];
     expect(lionel.days).toBe(20);
-    expect(lionel.after.happiness).toBeCloseTo(32.9, 10);
-    expect(lionel.after.bonus - lionel.before.bonus).toBeCloseTo(-9, 10);
+    expect(lionel.after.happiness).toBeCloseTo(31.9, 10);
+    expect(lionel.after.bonus - lionel.before.bonus).toBeCloseTo(-10, 10);
     expect(
       (6 * 3 * (lionel.after.bonus - lionel.before.bonus)) / 100,
-    ).toBeCloseTo(-1.62, 10);
-    expect(result.team / 0.1012).toBeCloseTo(-32.4, 10);
-    expect(result.team).toBeCloseTo(-3.27888, 6);
-    expect(lionel.why).toContain("happiness −9.0 (Bully −10, shield 0.1)");
+    ).toBeCloseTo(-1.8, 10);
+    expect(result.team / 0.1012).toBeCloseTo(-36, 10);
+    expect(result.team).toBeCloseTo(-3.6432, 6);
+    expect(lionel.why).toContain("happiness −10.0 (Bully −10)");
     expect(result.checks).toEqual([]);
     // Both sides lose recentlyMoved and gain specialization; Bully's loss stays constant.
     for (let day = 0; day < 20; day++) {
@@ -212,7 +270,7 @@ describe("team changes on the live fixture", () => {
         now: now + day * 86400000,
         subjectHorizon: 1,
       });
-      expect(daily.team / 0.1012).toBeCloseTo(-1.62, 10);
+      expect(daily.team / 0.1012).toBeCloseTo(-1.8, 10);
     }
   });
 
@@ -234,7 +292,7 @@ describe("team changes on the live fixture", () => {
     expect(roster[0].spec).toBe(0);
     const result = effect(roster, hire({ traits: ["bully"] }));
     expect(result.others[0].days).toBe(20);
-    expect(result.team / 0.1012).toBeCloseTo(-32.4, 10);
+    expect(result.team / 0.1012).toBeCloseTo(-36, 10);
     // without a bonus at all the specialization stays unknown
     const { productionBonus, ...bare } = employees.find(
       (e) => e.company === company,
@@ -277,29 +335,19 @@ describe("team changes on the live fixture", () => {
     expect(mismatch.team).toBeCloseTo(24 * 0.1012 * 21.9, 10);
   });
 
-  it("recomputes Foreman's shield and the expiring happiness item day by day", () => {
+  it("gives Foreman's coworkers +9 happiness before and after an item expires", () => {
     const roster = rosterOf(employees, company, now);
     const change = hire({ traits: ["foreman"] });
     const result = effect(roster, change);
-    expect(result.others[0].after.happiness).toBeCloseTo(44.6, 10);
-    expect(result.others[0].why.join(" ")).toMatch(
-      /Responsibility.*3.*shield 0.4/,
-    );
-    const beforeExpiry = effect(roster, change, {
-      now: now + 5 * 86400000,
-      subjectHorizon: 1,
-    });
+    expect(result.others[0].after.happiness).toBeCloseTo(50.9, 10);
+    expect(result.others[0].why.join(" ")).toContain("Responsibility +3");
     const afterExpiry = effect(roster, change, {
       now: now + 6 * 86400000,
       subjectHorizon: 1,
     });
-    expect(beforeExpiry.team / 0.1012).toBeCloseTo(18 * 0.027, 10);
-    expect(afterExpiry.others[0].after.happiness).toBeCloseTo(47.6, 10);
-    expect(afterExpiry.team / 0.1012).toBeCloseTo(18 * 0.012, 10);
-    expect(result.team).toBeCloseTo(
-      (6 * 18 * 0.027 + 14 * 18 * 0.012) * 0.1012,
-      10,
-    );
+    expect(afterExpiry.others[0].after.happiness).toBeCloseTo(55.9, 10);
+    expect(afterExpiry.team / 0.1012).toBeCloseTo(18 * 0.09, 10);
+    expect(result.team).toBeCloseTo(20 * 18 * 0.09 * 0.1012, 10);
   });
 });
 
@@ -372,7 +420,7 @@ describe("conditional traits and cards", () => {
         traits: ["envious"],
         wageHour: peerWage,
         items: direction > 0 ? [{ delta: -5, until: null }] : [],
-        happiness: direction > 0 ? 45.5 : 50,
+        happiness: direction > 0 ? 45 : 50,
         bonus: direction > 0 ? -4.5 : 0,
       });
       const result = effect(
@@ -380,8 +428,8 @@ describe("conditional traits and cards", () => {
         { kind: "card", id: subject.id, card },
         { subjectHorizon: 1 },
       );
-      expect(result.others[0]?.after.happiness).toBe(direction > 0 ? 50 : 45.5);
-      expect(result.team).toBeCloseTo(direction * 18 * 0.045 * 0.1012, 10);
+      expect(result.others[0]?.after.happiness).toBe(direction > 0 ? 50 : 45);
+      expect(result.team).toBeCloseTo(direction * 18 * 0.05 * 0.1012, 10);
       expect(subject.wageHour).toBe(wageHour);
       expect(subject.traits).toEqual(traits);
     },
@@ -403,11 +451,11 @@ describe("conditional traits and cards", () => {
       },
       { subjectHorizon: 1 },
     );
-    expect(result.others[0]?.after.bonus).toBeCloseTo(11, 10);
-    expect(result.team).toBeCloseTo(18 * 0.11 * 0.1012, 10);
+    expect(result.others[0]?.after.bonus).toBeCloseTo(10, 10);
+    expect(result.team).toBeCloseTo(18 * 0.1 * 0.1012, 10);
   });
 
-  it("expires the trainee's own shield gain daily and averages each day", () => {
+  it("keeps Nationalist's +11 happiness when negative items expire", () => {
     const subject = member({
       items: [
         { delta: -4, until: null },
@@ -425,11 +473,11 @@ describe("conditional traits and cards", () => {
       },
       { subjectHorizon: 3 },
     );
-    expect(result.self.pct).toBeCloseTo(0.068, 10);
+    expect(result.self.pct).toBeCloseTo(0.11, 10);
     expect(result.self.pctDays).toEqual([
-      expect.closeTo(0.068, 10),
-      expect.closeTo(0.058, 10),
-      expect.closeTo(0.058, 10),
+      expect.closeTo(0.11, 10),
+      expect.closeTo(0.11, 10),
+      expect.closeTo(0.11, 10),
     ]);
     const unchanged = effect(roster, drill(subject.id, "luck", 1), {
       subjectHorizon: 3,
@@ -439,9 +487,9 @@ describe("conditional traits and cards", () => {
       { result: unchanged, prob: 0.75 },
     ]);
     expect(mean.self.pctDays).toEqual([
-      expect.closeTo(0.017, 10),
-      expect.closeTo(0.0145, 10),
-      expect.closeTo(0.0145, 10),
+      expect.closeTo(0.0275, 10),
+      expect.closeTo(0.0275, 10),
+      expect.closeTo(0.0275, 10),
     ]);
     expect(mean.self.pct).toBeCloseTo(mean.self.pctDays[0], 10);
   });
@@ -494,13 +542,13 @@ describe("conditional traits and cards", () => {
     const sociable = member({
       traits: ["sociable"],
       items: [{ delta: -10, until: null }],
-      happiness: 41,
-      bonus: -9,
+      happiness: 40,
+      bonus: -10,
     });
     const first = effect([sociable], hire(), { subjectHorizon: 1 });
     expect(first.others[0].after.happiness).toBe(50);
     expect(first.others[0].after.bonus).toBe(25);
-    expect(first.team).toBeCloseTo(18 * 0.34 * 0.1012, 10);
+    expect(first.team).toBeCloseTo(18 * 0.35 * 0.1012, 10);
     const peers = [member({ id: "b" }), member({ id: "c" })];
     const capped = effect(
       [member({ traits: ["sociable"], bonus: 50 }), ...peers],
@@ -515,12 +563,12 @@ describe("conditional traits and cards", () => {
     const first = effect([envious], hire({ wageHour: 0.06 }), {
       subjectHorizon: 1,
     });
-    expect(first.others[0].after.happiness).toBe(45.5);
-    expect(first.team).toBeCloseTo(-18 * 0.045 * 0.1012, 10);
+    expect(first.others[0].after.happiness).toBe(45);
+    expect(first.team).toBeCloseTo(-18 * 0.05 * 0.1012, 10);
     const already = {
       ...envious,
-      happiness: 41,
-      bonus: -9,
+      happiness: 40,
+      bonus: -10,
       items: [{ delta: -10, until: null }],
     };
     expect(
@@ -537,8 +585,8 @@ describe("conditional traits and cards", () => {
       [
         {
           ...envious,
-          happiness: 45.5,
-          bonus: -4.5,
+          happiness: 45,
+          bonus: -5,
           items: [{ delta: -5, until: null }],
         },
         member({ id: "b", wageHour: 0.06 }),
@@ -546,7 +594,7 @@ describe("conditional traits and cards", () => {
       hire({ wageHour: 0.07 }),
       { subjectHorizon: 1 },
     );
-    expect(second.others[0].after.happiness).toBe(41);
+    expect(second.others[0].after.happiness).toBe(40);
     expect(second.team).toBeCloseTo(first.team, 10);
   });
 
@@ -554,15 +602,15 @@ describe("conditional traits and cards", () => {
     const prima = member({
       traits: ["primaDonna"],
       items: [{ delta: -10, until: null }],
-      happiness: 41,
-      bonus: 11,
+      happiness: 40,
+      bonus: 10,
     });
     const result = effect([prima], hire({ wageHour: 0.06 }), {
       subjectHorizon: 1,
     });
     expect(result.others[0].after.happiness).toBe(50);
     expect(result.others[0].after.bonus).toBe(0);
-    expect(result.team).toBeCloseTo(-18 * 0.11 * 0.1012, 10);
+    expect(result.team).toBeCloseTo(-18 * 0.1 * 0.1012, 10);
     expect(result.assumed.join(" ")).toMatch(/Prima Donna/);
     expect(effect([prima], hire({ wageHour: 0.05 })).team).toBe(0);
   });
@@ -599,10 +647,10 @@ describe("conditional traits and cards", () => {
     const nationalist = member({
       traits: ["nationalist"],
       R: 3,
-      shield: 0.3,
-      happiness: 55,
-      bonus: 5,
-      items: [{ delta: 5, until: null }],
+
+      happiness: 61,
+      bonus: 11,
+      items: [{ delta: 11, until: null }],
     });
     const result = effect(
       [nationalist, member({ id: "b" })],
@@ -611,14 +659,14 @@ describe("conditional traits and cards", () => {
     );
     expect(result.others[0].after.happiness).toBe(50);
     expect(result.others[0].after.bonus).toBe(0);
-    expect(result.team).toBeCloseTo(-18 * 0.05 * 0.1012, 10);
+    expect(result.team).toBeCloseTo(-18 * 0.11 * 0.1012, 10);
     expect(result.assumed.join(" ")).toMatch(/Nationalist.*every/i);
     const xenophobe = effect(
       [member()],
       hire({ nationality: "foreign", traits: ["xenophobe"] }),
     );
     expect(xenophobe.self.prod).toBe(-2);
-    expect(xenophobe.self.pct).toBeCloseTo(-0.045, 10);
+    expect(xenophobe.self.pct).toBeCloseTo(-0.05, 10);
     const cosmopolitan = effect(
       [
         member(),
@@ -640,8 +688,8 @@ describe("conditional traits and cards", () => {
     const bully = member({ traits: ["bully"], P: 5 });
     const peer = member({
       id: "b",
-      happiness: 41,
-      bonus: -9,
+      happiness: 40,
+      bonus: -10,
       items: [{ delta: -10, until: null }],
     });
     const replace = effect(
@@ -655,7 +703,7 @@ describe("conditional traits and cards", () => {
     );
     expect(replace.self.prod).toBe(-3);
     expect(replace.others[0].after.happiness).toBe(60);
-    expect(replace.team).toBeCloseTo(18 * 0.19 * 0.1012, 10);
+    expect(replace.team).toBeCloseTo(18 * 0.2 * 0.1012, 10);
     for (const card of [
       { kind: "rehab", trait: "bully" },
       { kind: "cleanSlate", traits: ["bully"] },
@@ -667,7 +715,7 @@ describe("conditional traits and cards", () => {
       );
       expect(result.self.prod).toBe(-2);
       expect(result.others[0].after.happiness).toBe(50);
-      expect(result.team).toBeCloseTo(18 * 0.09 * 0.1012, 10);
+      expect(result.team).toBeCloseTo(18 * 0.1 * 0.1012, 10);
     }
   });
 
@@ -676,8 +724,8 @@ describe("conditional traits and cards", () => {
     const envious = member({
       traits: ["envious"],
       wageHour: 0.099,
-      happiness: 45.5,
-      bonus: -4.5,
+      happiness: 45,
+      bonus: -5,
       items: [{ delta: -5, until: null }],
     });
     const result = effect(
@@ -688,7 +736,7 @@ describe("conditional traits and cards", () => {
     expect(result.self.prod).toBe(0);
     expect(result.self.pct).toBe(0);
     expect(result.others[0].after.happiness).toBe(50);
-    expect(result.team).toBeCloseTo(18 * 0.045 * 0.1012, 10);
+    expect(result.team).toBeCloseTo(18 * 0.05 * 0.1012, 10);
     const drilled = effect(
       [
         member({ id: "paid", baseP: 2, wageHour: 0.04 }),
@@ -697,7 +745,7 @@ describe("conditional traits and cards", () => {
       drill("paid", "production", 1),
       { subjectHorizon: 1 },
     );
-    expect(drilled.team).toBeCloseTo(-18 * 0.045 * 0.1012, 10);
+    expect(drilled.team).toBeCloseTo(-18 * 0.05 * 0.1012, 10);
   });
 
   it("names Luck, Trainer and partners without pricing them", () => {
@@ -736,34 +784,34 @@ describe("conditional traits and cards", () => {
       hire({ nationality: "foreign", traits: ["xenophobe"] }),
     );
     expect(result.self.prod).toBe(0); // Mentor +2, Xenophobe −2.
-    expect(result.self.pct).toBeCloseTo((-15 * 0.6) / 100, 10);
+    expect(result.self.pct).toBeCloseTo((-15 + 9) / 100, 10);
     expect(result.team).toBe(0);
     expect(
       effect([member()], hire({ traits: ["primaDonna"], wageHour: 0.1 })).self
         .pct,
-    ).toBeCloseTo(0.11, 10);
+    ).toBeCloseTo(0.1, 10);
   });
 
-  it("caps shields at one and reverses a Foreman's shield when Rehab removes it", () => {
+  it("caps Foreman's +9 happiness at 100 and reverses it when Rehab removes it", () => {
     const full = effect(
       [
         member({
           R: 9,
-          shield: 0.9,
-          happiness: 49,
-          bonus: -1,
+
+          happiness: 98,
+          bonus: 48,
           items: [{ delta: -10, until: null }],
         }),
       ],
       hire({ traits: ["foreman"] }),
       { subjectHorizon: 1 },
     );
-    expect(full.others[0].after.happiness).toBe(50);
-    expect(full.team).toBeCloseTo(18 * 0.01 * 0.1012, 10);
+    expect(full.others[0].after.happiness).toBe(100);
+    expect(full.team).toBeCloseTo(18 * 0.02 * 0.1012, 10);
     const foreman = member({ id: "foreman", traits: ["foreman"] });
     const peer = member({
       R: 4,
-      shield: 0.4,
+
       items: [{ delta: -10, until: null }],
       happiness: 44,
       bonus: -6,
@@ -777,8 +825,8 @@ describe("conditional traits and cards", () => {
       },
       { subjectHorizon: 1 },
     );
-    expect(removed.others[0].after.happiness).toBe(41);
-    expect(removed.team).toBeCloseTo(-18 * 0.03 * 0.1012, 10);
+    expect(removed.others[0].after.happiness).toBe(35);
+    expect(removed.team).toBeCloseTo(-18 * 0.09 * 0.1012, 10);
     const direct = effect([peer], drill("a", "responsibility", 2));
     expect(direct.self.prod).toBe(0);
     expect(direct.self.pct).toBe(0);
@@ -813,11 +861,11 @@ describe("conditional traits and cards", () => {
     const result = effect([moved], hire({ traits: ["bully"] }), {
       subjectHorizon: 3,
     });
-    expect(result.others[0].after.happiness).toBe(41.5);
-    expect(result.team).toBeCloseTo(-3 * 18 * 0.09 * 0.1012, 10);
+    expect(result.others[0].after.happiness).toBe(40.5);
+    expect(result.team).toBeCloseTo(-3 * 18 * 0.1 * 0.1012, 10);
   });
 
-  it("prices the subject's shield change only on unexpired items", () => {
+  it("adds Nationalist's +6 Responsibility happiness and +5 trait happiness", () => {
     const subject = member({
       traits: [],
       items: [
@@ -833,7 +881,7 @@ describe("conditional traits and cards", () => {
       card: { kind: "habit", traitTo: ["nationalist"] },
     });
     expect(result.self.prod).toBe(0);
-    expect(result.self.pct).toBeCloseTo((5 + 4 * 0.2) / 100, 10);
+    expect(result.self.pct).toBeCloseTo((5 + 2 * 3) / 100, 10);
   });
 
   it("names an unreadable Mentor condition without reporting a false server disagreement", () => {
@@ -882,7 +930,7 @@ describe("conditional traits and cards", () => {
     expect(TEAM_RULES.sociable.effect.happinessWhenAlone).toBe(-10);
     expect(TEAM_RULES.foreman.effect.coworkerResponsibility).toBe(3);
     expect(TEAM_RULES.trainer.priced).toBe(false);
-    expect(SHIELD_PER_RESPONSIBILITY).toBe(0.1);
+    expect(HAPPINESS_PER_RESPONSIBILITY).toBe(3);
     expect(HAPPINESS_NEUTRAL).toBe(50);
     expect(POINTS_PER_PRODUCTION_HOUR).toBe(0.25);
   });

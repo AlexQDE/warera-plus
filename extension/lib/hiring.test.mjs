@@ -24,6 +24,567 @@ const EMPLOYEES = JSON.parse(
 const TEAM_CTX = { pointValue: 0.1012, now: TEAM_NOW };
 const LIONEL = rosterOf(EMPLOYEES, "c00000000000000000000001", TEAM_NOW);
 
+describe("v0.27.3 employee rules", () => {
+  it("shares daily happiness headroom between Statist and Nationalist", () => {
+    const subject = {
+      ...LIONEL[0],
+      id: "trainee",
+      traits: [],
+      happiness: 98,
+      incomeTax: 25,
+      items: [{ delta: 5, until: TEAM_NOW + 86400e3 }],
+      observedAt: TEAM_NOW,
+    };
+    const price = (age) =>
+      trainingValues(
+        [{ kind: "habit", traitTo: ["statist", "nationalist"] }],
+        { production: 4, wageChip: 0, age, traits: [] },
+        {
+          pointValue: 0.1,
+          now: TEAM_NOW,
+          roster: [subject, { ...subject, id: "peer" }],
+          traineeId: subject.id,
+        },
+      ).values[0].gold;
+    expect(price(64)).toBeCloseTo(0.048, 12);
+    expect(price(63)).toBeCloseTo(0.6 * 4 * (0.02 + 0.07), 12);
+  });
+
+  it("applies Wild's combined happiness to the Production left after Xenophobe", () => {
+    const subject = {
+      ...LIONEL[0],
+      id: "trainee",
+      P: 4,
+      baseP: 4,
+      traits: ["nationalist"],
+      happiness: 99,
+      bonus: 49,
+      items: [],
+    };
+    const trainee = {
+      production: 4,
+      wageChip: 0,
+      age: 64,
+      bonus: 0.49,
+      traits: subject.traits,
+      potential: 0,
+      potentialMax: 0,
+    };
+    const peer = { ...subject, id: "peer", traits: [], nationality: "foreign" };
+    const price = (nationality) =>
+      trainingValues([{ kind: "wild" }], trainee, {
+        pointValue: 0.1,
+        now: TEAM_NOW,
+        roster: [{ ...subject, nationality }, peer],
+        traineeId: subject.id,
+      }).values[0].gold;
+    const count = hiring.eligibleTrainingTraits({
+      ...trainee,
+      gender: subject.gender,
+    }).length;
+    // Nationalist excludes Cosmopolitan, leaving Xenophobe as the only
+    // newly enabled nationality rule. Two outcomes lose 5 happiness on P2;
+    // Responsibility ends at 97 on P2, versus the skipped rule's +1 on P4.
+    expect(price(subject.nationality) - price(null)).toBeCloseTo(
+      (0.6 * (-2 * 1.49 + (-2 * 0.05 * 2 - 2 * 0.02 - 4 * 0.01) / 3)) / count,
+      12,
+    );
+  });
+
+  it.each([
+    [{ kind: "habit", traitTo: ["statist", "loyal"] }, [], 98, 0.048],
+    [
+      { kind: "habit", trait: "loyal", traitTo: ["statist"] },
+      ["loyal"],
+      99,
+      0.024,
+    ],
+  ])(
+    "clamps a card's signed direct happiness together: %j",
+    (card, traits, happiness, gold) => {
+      const value = trainingValues(
+        [card],
+        {
+          production: 4,
+          wageChip: 0,
+          age: 64,
+          incomeTax: 0.25,
+          traits,
+          happiness,
+        },
+        { pointValue: 0.1 },
+      ).values[0];
+      expect(value.gold).toBeCloseTo(gold, 12);
+    },
+  );
+
+  it.each([
+    ["male", ["girlPower", "manHater"], ["bandOfBrothers", "misogynist"]],
+    ["female", ["bandOfBrothers", "misogynist"], ["girlPower", "manHater"]],
+  ])(
+    "filters hidden hire traits for %s and renormalizes their weights",
+    (gender, excluded, included) => {
+      const cases = traitCases({ wageDay: 1, gender, hiddenTraits: 1 });
+      const codes = cases.flatMap((c) => c.codes);
+      for (const code of excluded) expect(codes).not.toContain(code);
+      for (const code of included) expect(codes).toContain(code);
+      const weight = codes.reduce((sum, code) => sum + TRAITS[code].weight, 0);
+      expect(cases.reduce((sum, c) => sum + c.share, 0)).toBeCloseTo(1, 12);
+      expect(cases.find((c) => c.codes.includes("greedy")).share).toBeCloseTo(
+        10 / weight,
+        12,
+      );
+      expect(traitCases({ wageDay: 1, hiddenTraits: 1 })).toHaveLength(
+        cases.length + 2,
+      );
+    },
+  );
+
+  it.each([
+    ["loyal", 98, [], { kind: "habit", traitTo: ["loyal"] }, 0.02],
+    ["loyal", 100, [], { kind: "habit", traitTo: ["loyal"] }, 0],
+    ["homesick", 2, [], { kind: "habit", traitTo: ["homesick"] }, -0.02],
+    ["homesick", 98, ["homesick"], { kind: "rehab", trait: "homesick" }, 0.02],
+    ["homesick", 100, ["homesick"], { kind: "rehab", trait: "homesick" }, 0],
+  ])(
+    "caps %s training at happiness %i",
+    (code, happiness, traits, card, pct) => {
+      const value = trainingValues(
+        [card],
+        { production: 4, wageChip: 0, age: 64, happiness, traits },
+        { pointValue: 0.1 },
+      ).values[0];
+      const prod = code === "homesick" ? (card.kind === "rehab" ? 1 : -1) : 0;
+      expect(value.gold).toBeCloseTo(0.6 * (prod + 4 * pct), 12);
+    },
+  );
+  it("uses daily expiring happiness headroom for traits and Responsibility", () => {
+    const subject = {
+      ...LIONEL[0],
+      id: "trainee",
+      traits: [],
+      happiness: 98,
+      items: [{ delta: 5, until: TEAM_NOW + 86400e3 }],
+      observedAt: TEAM_NOW,
+    };
+    const values = trainingValues(
+      [
+        { kind: "habit", traitTo: ["loyal"] },
+        { kind: "drill", stat: "responsibility", delta: 1 },
+      ],
+      { production: 4, wageChip: 0, age: 63, traits: [] },
+      {
+        pointValue: 0.1,
+        now: TEAM_NOW,
+        roster: [subject],
+        traineeId: subject.id,
+      },
+    ).values;
+    expect(values[0].gold).toBeCloseTo(0.6 * 4 * (0.02 + 0.0375), 12);
+    expect(values[1].gold).toBeCloseTo(0.6 * 4 * (0.02 + 0.03), 12);
+  });
+  it("prices a replaced happiness trait as a removal from observed happiness", () => {
+    const value = trainingValues(
+      [{ kind: "habit", trait: "loyal", traitTo: ["anchor"] }],
+      {
+        production: 4,
+        wageChip: 0,
+        age: 64,
+        happiness: 100,
+        traits: ["loyal"],
+      },
+      { pointValue: 0.1 },
+    ).values[0];
+    expect(value.gold).toBeCloseTo(-0.6 * 4 * 0.0375, 12);
+  });
+  it.each([
+    [98, 0.13092244897959188],
+    [100, 0.11320816326530617],
+  ])(
+    "caps happiness in Wild card's average at %i happiness",
+    (happiness, gold) => {
+      const value = trainingValues(
+        [{ kind: "wild" }],
+        {
+          production: 4,
+          wageChip: 0,
+          age: 64,
+          happiness,
+          potential: 0,
+          potentialMax: 0,
+        },
+        { pointValue: 0.1 },
+      ).values[0];
+      expect(value.gold).toBeCloseTo(gold, 12);
+    },
+  );
+  it.each([
+    [0.04, -0.04],
+    [0.6, -0.3],
+    [0, 0],
+    [undefined, -0.1],
+  ])(
+    "prices Tax-shy's production percentage at income tax %s",
+    (incomeTax, pct) => {
+      const c = { production: 2, wageDay: 1.2, responsibility: 0, age: 64 };
+      const ctx = { pointValue: 0.1, incomeTax };
+      const plain = candidateValue(c, ctx);
+      const shy = candidateValue({ ...c, traits: ["taxShy"] }, ctx);
+      expect(shy.perDayNow - plain.perDayNow).toBeCloseTo(0.6 * 2 * pct, 12);
+    },
+  );
+  it.each([
+    [0.19, 0],
+    [0.2, 0.06],
+    [0.4, 0.06],
+    [undefined, 0],
+  ])("prices Statist's happiness at income tax %s", (incomeTax, pct) => {
+    const c = { production: 2, wageDay: 1.2, responsibility: 0, age: 64 };
+    const ctx = { pointValue: 0.1, incomeTax };
+    expect(
+      candidateValue({ ...c, traits: ["statist"] }, ctx).perDayNow -
+        candidateValue(c, ctx).perDayNow,
+    ).toBeCloseTo(0.6 * 2 * pct, 12);
+  });
+  it("uses roster tax for hire traits and gives the Recruit tax precedence", () => {
+    const c = { production: 2, wageDay: 1.2, responsibility: 0, age: 64 };
+    const ctx = {
+      pointValue: 0.1,
+      roster: [{ ...LIONEL[0], traits: [], incomeTax: 25 }],
+    };
+    for (const [code, pct] of [
+      ["taxShy", -0.25],
+      ["statist", 0.06],
+    ]) {
+      expect(
+        candidateValue({ ...c, traits: [code] }, ctx).perDayNow -
+          candidateValue(c, ctx).perDayNow,
+      ).toBeCloseTo(0.6 * 2 * pct, 12);
+    }
+    const chip = { ...ctx, incomeTax: 0.04 };
+    expect(
+      candidateValue({ ...c, traits: ["taxShy"] }, chip).perDayNow -
+        candidateValue(c, chip).perDayNow,
+    ).toBeCloseTo(-0.6 * 2 * 0.04, 12);
+  });
+  it.each([
+    [0.04, 0.04, 0],
+    [0.25, 0.25, 0.02],
+    [0.6, 0.3, 0.02],
+  ])(
+    "prices tax training at trainee income tax %s with capped Statist happiness",
+    (incomeTax, taxPct, statistPct) => {
+      const values = trainingValues(
+        [
+          { kind: "rehab", trait: "taxShy" },
+          { kind: "habit", traitTo: ["statist"] },
+        ],
+        {
+          production: 4,
+          wageChip: 0,
+          age: 64,
+          happiness: 98,
+          incomeTax,
+          traits: ["taxShy"],
+        },
+        { pointValue: 0.1 },
+      ).values;
+      expect(values[0].gold).toBeCloseTo(0.6 * 4 * taxPct, 12);
+      expect(values[1].gold).toBeCloseTo(0.6 * 4 * statistPct, 12);
+    },
+  );
+  it("uses a trainee's roster tax before his Train-window tax", () => {
+    const subject = {
+      ...LIONEL[0],
+      id: "trainee",
+      incomeTax: 25,
+      happiness: 98,
+      traits: ["taxShy"],
+    };
+    const values = trainingValues(
+      [
+        { kind: "rehab", trait: "taxShy" },
+        { kind: "habit", traitTo: ["statist"] },
+      ],
+      {
+        production: 4,
+        wageChip: 0,
+        age: 64,
+        happiness: 98,
+        incomeTax: 0.04,
+        traits: ["taxShy"],
+      },
+      { pointValue: 0.1, roster: [subject], traineeId: subject.id },
+    ).values;
+    expect(values[0].gold).toBeCloseTo(0.6 * 4 * 0.25, 12);
+    expect(values[1].gold).toBeCloseTo(0.6 * 4 * 0.02, 12);
+  });
+  it("shares Nationalist happiness headroom once when hiring", () => {
+    const c = {
+      production: 2,
+      wageDay: 1.2,
+      responsibility: 16,
+      nationality: LIONEL[0].nationality,
+      age: 64,
+    };
+    const ctx = {
+      pointValue: 0.1,
+      incomeTax: 0,
+      roster: [{ ...LIONEL[0], traits: [] }],
+    };
+    expect(
+      candidateValue({ ...c, traits: ["nationalist"] }, ctx).perDayNow -
+        candidateValue(c, ctx).perDayNow,
+    ).toBeCloseTo(0.6 * 2 * 0.02, 12);
+  });
+  it.each([
+    ["earlyBloomer", 39, 9, 144],
+    ["lateBloomer", 49, 3, 88],
+    ["wornOut", 59, 3, 8],
+  ])(
+    "advances owned %s output for training percentage effects",
+    (code, age, production, sumP) => {
+      const values = trainingValues(
+        [
+          { kind: "drill", stat: "responsibility", delta: 1 },
+          { kind: "habit", traitTo: ["loyal"] },
+        ],
+        { production, wageChip: 0, age, happiness: 50, traits: [code] },
+        { pointValue: 0.1 },
+      ).values;
+      expect(values[0].gold).toBeCloseTo(0.6 * sumP * 0.03, 12);
+      expect(values[1].gold).toBeCloseTo(0.6 * sumP * 0.0375, 12);
+    },
+  );
+  it("advances owned age traits when pricing a trainee's team percentage", () => {
+    const subject = {
+      ...LIONEL[0],
+      id: "trainee",
+      age: 59,
+      P: 3,
+      traits: ["wornOut"],
+      happiness: 50,
+    };
+    const value = trainingValues(
+      [{ kind: "habit", traitTo: ["sociable"] }],
+      { production: 3, wageChip: 0, age: 59, traits: ["wornOut"] },
+      {
+        pointValue: 0.1,
+        roster: [subject, { ...subject, id: "peer", traits: [] }],
+        traineeId: subject.id,
+      },
+    ).values[0];
+    expect(value.gold).toBeCloseTo(0.6 * 8 * 0.25, 12);
+  });
+  it("adds Management and Responsibility happiness, subtracting the Recruit tax", () => {
+    const c = { production: 2, wageDay: 1.2, responsibility: 4, age: 64 };
+    expect(
+      candidateValue(c, { pointValue: 0.1, management: 0.22, incomeTax: 0.04 })
+        .perDayNow,
+    ).toBeCloseTo(6 * 0.1 * 2 * 1.3 - 1.2, 12);
+    const specialist = candidateValue(
+      { ...c, traits: ["specialist"] },
+      { pointValue: 0.1 },
+    );
+    expect(specialist.perDayNow).toBeCloseTo(6 * 0.1 * 5 * 1.17 - 1.2, 12);
+    const taxed = candidateValue(
+      { ...c, responsibility: 1, traits: ["specialist"] },
+      { pointValue: 0.1, incomeTax: 0.6 },
+    );
+    expect(taxed.perDayNow).toBeCloseTo(6 * 0.1 * 5 * 0.5 - 1.2, 12);
+    const roster = [{ ...LIONEL[0], traits: [], management: 22, incomeTax: 4 }];
+    const ctx = { pointValue: 0.1, roster };
+    expect(candidateValue(c, ctx).perDayNow).toBeCloseTo(0.36, 12);
+    expect(candidateValue(c, { ...ctx, incomeTax: 0.1 }).perDayNow).toBeCloseTo(
+      0.288,
+      12,
+    );
+    expect(candidateValue(c, { pointValue: 0.1 }).assumed.join("\n")).toContain(
+      "Management bonus not counted",
+    );
+    expect(candidateValue(c, { pointValue: 0.1 }).assumed.join("\n")).toContain(
+      "Income tax not read: using 0",
+    );
+  });
+  it.each([
+    [39, 6],
+    [44, 4],
+    [55, 2],
+    [60, 0],
+  ])("prices Early Bloomer at age %i", (age, production) => {
+    const c = { production: 2, wageDay: 1.2, responsibility: 0, age };
+    const plain = candidateValue(c, { pointValue: 0.1 });
+    const early = candidateValue(
+      { ...c, traits: ["earlyBloomer"] },
+      { pointValue: 0.1 },
+    );
+    expect(early.perDayNow - plain.perDayNow).toBeCloseTo(0.6 * production, 12);
+    const daily = Array.from(
+      { length: early.horizon },
+      (_, d) =>
+        0.6 *
+        Math.max(0, 6 - 2 * Math.floor(Math.max(0, age + d - 30) / 10)) *
+        (1 + Math.min(d / 100, 0.2)),
+    ).reduce((sum, v) => sum + v, 0);
+    expect(early.total - plain.total).toBeCloseTo(daily, 10);
+  });
+  it("offers rare Rehab only for negative traits and filters habits and Wild card", () => {
+    const trainee = {
+      production: 2,
+      wageChip: 0,
+      gender: "female",
+      traits: ["handy", "gambler", "greedy"],
+    };
+    const pool = hiring.trainingPool(trainee);
+    expect(pool.filter((c) => c.kind === "rehab")).toEqual([
+      { kind: "rehab", rarity: "rare", trait: "greedy" },
+    ]);
+    const eligible = hiring.eligibleTrainingTraits(trainee);
+    for (const code of [
+      "handy",
+      "improviser",
+      "scavenger",
+      "modest",
+      "oldFriends",
+      "nemesis",
+      "sweethearts",
+      "bandOfBrothers",
+      "misogynist",
+    ])
+      expect(eligible).not.toContain(code);
+    expect(eligible).toContain("girlPower");
+    expect(eligible).toContain("manHater");
+    expect(
+      pool
+        .filter((c) => c.kind === "habit")
+        .every((c) => c.traitTo.every((code) => eligible.includes(code))),
+    ).toBe(true);
+    expect(
+      pool.some(
+        (c) => c.traitTo?.includes("loner") && c.traitTo?.includes("comic"),
+      ),
+    ).toBe(false);
+  });
+  it("values Responsibility as three output bonus points, capped by happiness", () => {
+    const price = (happiness) =>
+      trainingValues(
+        [{ kind: "drill", stat: "responsibility", delta: 2 }],
+        { production: 4, responsibility: 3, wageChip: 0, age: 64, happiness },
+        { pointValue: 0.1 },
+      ).values[0].gold;
+    expect(price(70)).toBeCloseTo(6 * 0.1 * 4 * 0.06, 12);
+    expect(price(98)).toBeCloseTo(6 * 0.1 * 4 * 0.02, 12);
+    expect(price(100)).toBe(0);
+  });
+  it("uses +9 coworker happiness for Foreman in the reference team too", () => {
+    const c = { production: 2, wageDay: 1.2, responsibility: 0, age: 64 };
+    const ctx = { pointValue: 0.1, alone: false };
+    const plain = candidateValue(c, ctx).perDayNow;
+    expect(
+      candidateValue({ ...c, traits: ["foreman"] }, ctx).perDayNow - plain,
+    ).toBeCloseTo(6 * 0.1 * 2 * 3 * 0.09, 12);
+    expect(
+      candidateValue({ ...c, traits: ["nationalist"] }, ctx).perDayNow - plain,
+    ).toBeCloseTo(6 * 0.1 * 2 * 0.11 * hiring.CONDITION_ODDS.nationalist, 12);
+  });
+  it("prices Wild card uniformly over eligible traits rather than hire weights", () => {
+    const trainee = {
+      production: 3,
+      responsibility: 2,
+      wageChip: 0,
+      potential: 5,
+      potentialMax: 5,
+      age: 50,
+      gender: "female",
+      traits: ["handy"],
+    };
+    const eligible = hiring.eligibleTrainingTraits(trainee);
+    const cards = [
+      ...eligible.map((code) => ({ kind: "habit", traitTo: [code] })),
+      ...hiring.TRAIN_STATS.map((stat) => ({ kind: "drill", stat, delta: 1 })),
+      { kind: "wild" },
+    ];
+    const values = trainingValues(cards, trainee, { pointValue: 0.1 }).values;
+    const traits =
+      values.slice(0, eligible.length).reduce((sum, v) => sum + v.gold, 0) /
+      eligible.length;
+    const stats =
+      values.slice(eligible.length, -1).reduce((sum, v) => sum + v.gold, 0) / 3;
+    expect(values.at(-1).gold).toBeCloseTo(traits + stats, 10);
+    expect(eligible).not.toContain("improviser");
+    expect(eligible).not.toContain("nemesis");
+    expect(eligible).not.toContain("bandOfBrothers");
+  });
+  it("filters both directions of all exclusions and disallows exclusive positive pairs", () => {
+    const trainee = { production: 2, wageChip: 0 };
+    expect(hiring.EXCLUSIVE_TRAIT_PAIRS).toHaveLength(30);
+    for (const [a, b] of hiring.EXCLUSIVE_TRAIT_PAIRS) {
+      expect(hiring.eligibleTrainingTraits({ traits: [a] })).not.toContain(b);
+      expect(hiring.eligibleTrainingTraits({ traits: [b] })).not.toContain(a);
+    }
+    const pairs = hiring
+      .trainingPool(trainee)
+      .filter((c) => c.traitTo?.length === 2);
+    for (const [a, b] of hiring.EXCLUSIVE_TRAIT_PAIRS)
+      expect(
+        pairs.some((c) => c.traitTo.includes(a) && c.traitTo.includes(b)),
+      ).toBe(false);
+    const male = hiring.eligibleTrainingTraits({ gender: "male" });
+    expect(male).not.toContain("girlPower");
+    expect(male).not.toContain("manHater");
+    expect(male).toContain("bandOfBrothers");
+    expect(male).toContain("misogynist");
+    const unknown = hiring.eligibleTrainingTraits({});
+    expect(unknown).toEqual(
+      expect.arrayContaining([
+        "girlPower",
+        "manHater",
+        "bandOfBrothers",
+        "misogynist",
+      ]),
+    );
+  });
+  it("uses Management 7 for the rarity shifts", () => {
+    const expected = {
+      common: 0.41,
+      uncommon: 0.32,
+      rare: 0.172,
+      epic: 0.071,
+      legendary: 0.027,
+    };
+    const odds = hiring.trainingOdds(0, 7);
+    for (const [rarity, share] of Object.entries(expected))
+      expect(odds[rarity]).toBeCloseTo(share, 12);
+  });
+  it("advances all age traits daily and averages unknown starting ages uniformly", () => {
+    expect(hiring.ageProduction("lateBloomer", 49)).toBe(0);
+    expect(hiring.ageProduction("lateBloomer", 49, 1)).toBe(2);
+    expect(hiring.ageProduction("wornOut", 59)).toBeCloseTo(0, 12);
+    expect(hiring.ageProduction("wornOut", 59, 1)).toBe(-2);
+    for (const code of ["earlyBloomer", "lateBloomer", "wornOut"]) {
+      const mean =
+        Array.from({ length: 28 }, (_, i) =>
+          hiring.ageProduction(code, 18 + i, 25),
+        ).reduce((s, p) => s + p, 0) / 28;
+      expect(hiring.ageProduction(code, null, 25)).toBeCloseTo(mean, 12);
+      const trainee = { production: 3, wageChip: 0, age: 39, bonus: 0 };
+      const value = trainingValues(
+        [{ kind: "habit", traitTo: [code] }],
+        trainee,
+        { pointValue: 0.1 },
+      ).values[0];
+      const expected = Array.from(
+        { length: 26 },
+        (_, d) =>
+          0.6 *
+          hiring.ageProduction(code, 39, d) *
+          (1 + Math.min(d / 100, 0.2)),
+      ).reduce((s, g) => s + g, 0);
+      expect(value.gold).toBeCloseTo(expected, 10);
+    }
+  });
+});
+
 describe("roster-aware hiring and training", () => {
   const bully = {
     production: 2,
@@ -34,15 +595,18 @@ describe("roster-aware hiring and training", () => {
     gender: "male",
   };
   it("separates the Bully's unpaid self points from Lionel's loss", () => {
-    const plain = candidateValue({ ...bully, traits: [] }, TEAM_CTX);
+    const plain = candidateValue(
+      { ...bully, traits: [] },
+      { ...TEAM_CTX, roster: LIONEL },
+    );
     const value = candidateValue(bully, { ...TEAM_CTX, roster: LIONEL });
     let self = 0;
     for (let d = 0; d < 35; d++)
-      self += 6 * 0.1012 * 2 * (1 + Math.min(d / 100, 0.2));
+      self += 6 * 0.1012 * 2 * (1.05 + Math.min(d / 100, 0.2));
     expect(value.total).toBeCloseTo(plain.total + self, 9);
-    expect(value.team).toBeCloseTo(-3.27888, 9);
+    expect(value.team).toBeCloseTo(-3.6432, 9);
     expect(value.others[0].name).toBe("Lionel Leannon");
-    expect(value.others[0].after.happiness).toBeCloseTo(32.9, 9);
+    expect(value.others[0].after.happiness).toBeCloseTo(31.9, 9);
     expect(candidateValue(bully, TEAM_CTX).team).toBeUndefined();
   });
 
@@ -50,11 +614,11 @@ describe("roster-aware hiring and training", () => {
     const roster = [{ ...LIONEL[0], traits: ["bully"] }];
     const value = candidateValue(bully, { ...TEAM_CTX, roster });
     expect(value.self.prod).toBe(2);
-    expect(value.self.pct).toBeCloseTo(-0.09, 10);
-    expect(value.perDayNow).toBeCloseTo(6 * 0.1012 * 4 * 0.91 - 1.2, 10);
+    expect(value.self.pct).toBeCloseTo(-0.1, 10);
+    expect(value.perDayNow).toBeCloseTo(6 * 0.1012 * 4 * 0.95 - 1.2, 10);
     let expected = 0;
     for (let d = 0; d < 35; d++)
-      expected += 6 * 0.1012 * 4 * (0.91 + Math.min(d / 100, 0.2)) - 1.2;
+      expected += 6 * 0.1012 * 4 * (0.95 + Math.min(d / 100, 0.2)) - 1.2;
     expect(value.total).toBeCloseTo(expected, 10);
     // The legacy trait percentage keeps its existing formula without a roster.
     const legacy = candidateValue(
@@ -62,7 +626,7 @@ describe("roster-aware hiring and training", () => {
       TEAM_CTX,
     );
     expect(legacy.perDayNow).toBeCloseTo(
-      6 * 0.1012 * (4 + 2 * 0.12 - 0.6) - 1.2,
+      6 * 0.1012 * (4 * 1.03 + 2 * 0.12 - 0.6) - 1.2,
       10,
     );
     const mixed = candidateValue(
@@ -70,7 +634,7 @@ describe("roster-aware hiring and training", () => {
       { ...TEAM_CTX, roster },
     );
     expect(mixed.perDayNow).toBeCloseTo(
-      6 * 0.1012 * (4 * 0.91 + 2 * 0.12) - 1.2,
+      6 * 0.1012 * (4 * 0.95 + 2 * 0.12) - 1.2,
       10,
     );
   });
@@ -108,7 +672,7 @@ describe("roster-aware hiring and training", () => {
       "Xenophobe: unknown nationality; rule skipped",
     );
     expect(unknown.total).toBeCloseTo(
-      candidateValue({ ...bully, traits: [] }, TEAM_CTX).total,
+      candidateValue({ ...bully, traits: [] }, ctx).total,
       9,
     );
   });
@@ -152,13 +716,13 @@ describe("roster-aware hiring and training", () => {
     );
     let expected = 0;
     for (let d = 0; d < 20; d++)
-      expected += 6 * 0.1012 * (2 * (0.999 + d / 100) + 5 * 0.11);
+      expected += 6 * 0.1012 * (2 * (0.999 + d / 100) + 5 * 0.1);
     expect(r.values[0].self.prod).toBe(2);
-    expect(r.values[0].self.pct).toBeCloseTo(0.11, 10);
+    expect(r.values[0].self.pct).toBeCloseTo(0.1, 10);
     expect(r.values[0].gold).toBeCloseTo(expected, 10);
   });
 
-  it("prices Nationalist's own shield only while each happiness loss lasts", () => {
+  it("prices Nationalist's +6 Responsibility happiness and +5 trait happiness", () => {
     const subject = {
       ...LIONEL[0],
       id: "trainee",
@@ -176,10 +740,7 @@ describe("roster-aware hiring and training", () => {
         traineeId: subject.id,
       },
     );
-    expect(r.values[0].gold).toBeCloseTo(
-      6 * 0.1012 * 3 * (0.068 + 19 * 0.058),
-      10,
-    );
+    expect(r.values[0].gold).toBeCloseTo(6 * 0.1012 * 3 * (20 * 0.11), 10);
   });
 
   it("lets Rehab's Greedy wage cut end a coworker's Envious penalty", () => {
@@ -194,8 +755,8 @@ describe("roster-aware hiring and training", () => {
       id: "peer",
       traits: ["envious"],
       wageHour: 0.11,
-      happiness: 45.5,
-      bonus: -4.5,
+      happiness: 45,
+      bonus: -5,
       items: [{ delta: -5, until: null }],
     };
     const r = trainingValues(
@@ -204,7 +765,7 @@ describe("roster-aware hiring and training", () => {
       { ...TEAM_CTX, roster: [subject, peer], traineeId: subject.id },
     );
     expect(r.values[0].others[0]?.after.happiness).toBe(50);
-    expect(r.values[0].team).toBeCloseTo(20 * 6 * 0.1012 * 3 * 0.045, 10);
+    expect(r.values[0].team).toBeCloseTo(20 * 6 * 0.1012 * 3 * 0.05, 10);
   });
   it("prices a taught Bully and Rehab through self and team deltas, and ranks their sum", () => {
     const cards = [
@@ -264,27 +825,15 @@ describe("roster-aware hiring and training", () => {
     );
   });
 
-  it("values a Responsibility drill using actual, expiring negative happiness items", () => {
+  it("values a Responsibility drill at +3 happiness regardless of expiring losses", () => {
     const r = trainingValues(
       [{ kind: "drill", stat: "responsibility", delta: 1 }],
       trainee,
       { ...TEAM_CTX, roster: LIONEL, traineeId: LIONEL[0].id },
     );
-    let expected = 0;
-    for (let day = 0; day < 20; day++) {
-      const negative = LIONEL[0].items.reduce(
-        (s, item) =>
-          s +
-          (item.delta < 0 &&
-          (item.until == null || item.until > TEAM_NOW + day * 86400e3)
-            ? -item.delta
-            : 0),
-        0,
-      );
-      expected += (6 * 0.1012 * 3 * negative * 0.1) / 100;
-    }
+    const expected = 20 * 6 * 0.1012 * 3 * 0.03;
     expect(r.values[0].gold).toBeCloseTo(expected, 10);
-    expect(r.values[0].note).toContain("actual happiness losses");
+    expect(r.values[0].note).toContain("+3 happiness and output bonus points");
     expect(r.values[0].team).toBe(0);
   });
 
@@ -295,10 +844,14 @@ describe("roster-aware hiring and training", () => {
       roster,
       traineeId: "trainee",
     });
-    const expected = hiddenTraitPool().reduce(
-      (sum, p) =>
+    const eligible = hiring.eligibleTrainingTraits({
+      ...trainee,
+      gender: roster[0].gender,
+    });
+    const expected = eligible.reduce(
+      (sum, code) =>
         sum +
-        p.share *
+        (1 / eligible.length) *
           hiring.TRAIN_STATS.reduce(
             (s, stat) =>
               s +
@@ -307,7 +860,7 @@ describe("roster-aware hiring and training", () => {
                 {
                   kind: "card",
                   id: "trainee",
-                  card: { kind: "wild", trait: p.code, stat, delta: 1 },
+                  card: { kind: "wild", trait: code, stat, delta: 1 },
                 },
                 { ...TEAM_CTX, subjectHorizon: 20 },
               ).team /
@@ -341,9 +894,11 @@ describe("roster-aware hiring and training", () => {
       ).values[0].gold;
     // Known foreign peers enable Cosmopolitan +2 and Xenophobe -2: their
     // flat gains cancel. Xenophobe's loss applies to his remaining P1,
-    // shielded by R1 (R2 in Wild card's Responsibility case).
+    // every negative happiness item counts in full in all three stat cases.
     expect(price(subject.nationality) - price(null)).toBeCloseTo(
-      ((6 * 0.1012 * (3 - 2) * -(0.045 + 0.04 + 0.045)) / 3) * (10 / 354),
+      (6 * 0.1012 * (3 - 2) * -0.05) /
+        hiring.eligibleTrainingTraits({ ...trainee, gender: subject.gender })
+          .length,
       10,
     );
   });
@@ -363,7 +918,7 @@ describe("roster-aware hiring and training", () => {
       traits: ["envious"],
       wageHour: 0.089,
       items: [{ delta: -5, until: null }],
-      happiness: 45.5,
+      happiness: 45,
     };
     // 10 points off expectation: 0.1 → 0.09, still above 0.089.
     const r = trainingValues(
@@ -452,8 +1007,8 @@ describe("the training cards", () => {
     const [wind, drill, habits] = /** @type {any} */ (r).values;
     // 41 days to 65 and 7 trainings left after this hand: four more on days 8 to 11
     const top = expectedBest(brenda, 0.0943);
-    // a hand is one rarity: 14.7 g (15.7 g when every card drew its own rarity)
-    expect(top).toBeCloseTo(14.7, 1);
+    // One rarity per hand with the v0.27.3 eligible pool.
+    expect(top).toBeCloseTo(16.7109869827, 9);
     expect(wind.hands).toBe(4);
     expect(wind.gold).toBeCloseTo(
       [8, 9, 10, 11].reduce(
@@ -462,17 +1017,17 @@ describe("the training cards", () => {
       ),
       9,
     );
-    // about 27 g, where pricing each later hand at the +4 drill beside it (28.3 g) read 69 g: the drill edges it
-    expect(wind.gold).toBeCloseTo(27.3, 1);
+    // Later hands average less than the dealt +4 drill, but four extra hands now beat it.
+    expect(wind.gold).toBeCloseTo(33.3557160932, 9);
     expect(drill.gold).toBeCloseTo(28.3, 1);
     expect(habits.gold).toBe(0);
-    expect(r?.best).toBe(1);
+    expect(r?.best).toBe(0);
     // the same alone, or beside a weak card
     for (const cards of [[hand[0]], [hand[0], hand[2]]])
       expect(
         trainingValues(cards, brenda, { pointValue: 0.0943 }).values[0].gold,
       ).toBe(wind.gold);
-    expect(wind.note).toContain("a hand's best card averages 14.7 g");
+    expect(wind.note).toContain("a hand's best card averages 16.7 g");
   });
   it("takes Negotiation for an expensive worker: 10 points off his wage for 25 days", () => {
     const r = trainingValues(HAND, SORAYUT, { pointValue: PV });
@@ -753,8 +1308,8 @@ describe("future training hands", () => {
     [1, [48, 28.5, 15.1, 6.05, 2.35]],
     [2, [47, 29, 15.4, 6.2, 2.4]],
     [4, [45, 30, 16, 6.5, 2.5]],
-  ])("matches the live Leadership 3 table at Luck %i", (luck, percentages) => {
-    expect(hiring.LEADERSHIP_TRAIN_SHIFT).toEqual({
+  ])("matches the Management 3 table at Luck %i", (luck, percentages) => {
+    expect(hiring.MANAGEMENT_TRAIN_SHIFT).toEqual({
       uncommon: 1,
       rare: 0.6,
       epic: 0.3,
@@ -797,24 +1352,23 @@ describe("future training hands", () => {
       }, {});
     expect(counts("kind")).toEqual({
       drill: 12,
-      rehab: 3,
+      rehab: 2,
       cleanSlate: 1,
-      habit: 335,
+      habit: 214,
       wild: 1,
       secondWind: 2,
       negotiation: 2,
     });
     expect(counts("rarity")).toEqual({
       common: 4,
-      uncommon: 6,
-      rare: 13,
-      epic: 29,
-      legendary: 304,
+      uncommon: 5,
+      rare: 12,
+      epic: 24,
+      legendary: 189,
     });
     expect(pool.filter((c) => c.kind === "rehab")).toEqual([
       { kind: "rehab", rarity: "rare", trait: "greedy" },
       { kind: "rehab", rarity: "rare", trait: "homesick" },
-      { kind: "rehab", rarity: "uncommon", trait: "gambler" },
     ]);
     const habits = pool.filter((c) => c.kind === "habit");
     expect(
@@ -823,7 +1377,7 @@ describe("future training hands", () => {
       ),
     ).toBe(true);
     const pairs = habits.filter((c) => c.rarity === "legendary");
-    expect(pairs).toHaveLength(300);
+    expect(pairs).toHaveLength(185);
     expect(
       pairs.every(
         (c) =>
@@ -833,7 +1387,7 @@ describe("future training hands", () => {
     ).toBe(true);
     expect(
       new Set(pairs.map((c) => [...c.traitTo].sort().join(","))).size,
-    ).toBe(300);
+    ).toBe(185);
   });
   it("limits Second wind by the potential cap and Negotiation by the expectation floor", () => {
     const pool = (potentialMax, wageChip, traits = []) =>
@@ -894,9 +1448,8 @@ describe("future training hands", () => {
   });
 });
 
-// The four candidates of one live Recruit window (2026-10-26, point value
-// 0.1019; fixtures/v027-live-recruit.html). The server sent their hidden
-// stats as 0 with revealed: false, so the card's wage is all there is.
+// Synthetic model inputs cover hidden Production inferred from wages as well
+// as shown Production. The current Recruit DOM is covered in recruit.test.mjs.
 const PP = 0.1019;
 const SHERMAN = {
   wageDay: 1.2,
@@ -1002,15 +1555,15 @@ describe("what a candidate is worth", () => {
   it("adds up the gold until he turns 65, specialization growing 1% a day to 20%", () => {
     const v = candidateValue(SHERMAN, { pointValue: PP, alone: true });
     const out = 6 * PP * 2;
-    expect(v?.perDayNow).toBeCloseTo(out - 1.2, 9);
-    expect(v?.perDaySettled).toBeCloseTo(out * 1.2 - 1.2, 9);
+    expect(v?.perDayNow).toBeCloseTo(out * 1.075 - 1.2, 9);
+    expect(v?.perDaySettled).toBeCloseTo(out * 1.275 - 1.2, 9);
     expect(v?.daysLeft).toBe(33);
     // 33 days: sum of min(d, 20) over d = 0..32 is 450
-    expect(v?.total).toBeCloseTo(out * (33 + 4.5) - 33 * 1.2, 9);
+    expect(v?.total).toBeCloseTo(out * (33 * 1.075 + 4.5) - 33 * 1.2, 9);
   });
   it("counts trait output on top of his own and leaves a wage trait inside the wage", () => {
     const moaz = candidateValue(MOAZ, { pointValue: PP, alone: true });
-    const settled = 6 * PP * 2.4 * (1 + 0.2 - 0.15) - 1.58;
+    const settled = 6 * PP * 2.4 * (1.075 + 0.2 - 0.15) - 1.58;
     expect(moaz?.perDaySettled).toBeCloseTo(settled, 9);
     const greedy = candidateValue(
       { ...JOSCHA, traits: ["greedy"], wageDay: 1.88 * 1.2 },
@@ -1040,7 +1593,7 @@ describe("what a candidate is worth", () => {
       { ...base, traits: ["sociable"] },
       { pointValue: PP, alone: false },
     );
-    expect(sociableTeam?.perDayNow).toBeCloseTo(6 * PP * 2 * 0.5, 9);
+    expect(sociableTeam?.perDayNow).toBeCloseTo(6 * PP * 2 * 0.575, 9);
   });
   it("prices output at the product's own value per point when it is known", () => {
     const atPoint = candidateValue(JOSCHA, { pointValue: PP });
@@ -1051,7 +1604,7 @@ describe("what a candidate is worth", () => {
     expect(
       /** @type {number} */ (atSteel?.perDayNow) -
         /** @type {number} */ (atPoint?.perDayNow),
-    ).toBeCloseTo(6 * PP * 3, 9);
+    ).toBeCloseTo(6 * PP * 3 * 1.075, 9);
   });
   it("flags a Flight Risk instead of pricing it, and a hidden trait by its share", () => {
     const v = candidateValue(
@@ -1121,39 +1674,39 @@ describe("what a candidate is worth", () => {
     const day0 = (c, x = ctx) =>
       /** @type {number} */ (candidateValue(c, x)?.perDayNow);
     expect(day0({ ...base, traits: ["patriot"], home: true })).toBeCloseTo(
-      6 * PP * (2 + 2 * 0.1),
+      6 * PP * (4 * 1.175 - 2),
       9,
     );
     expect(day0({ ...base, traits: ["patriot"], home: false })).toBeCloseTo(
-      0,
+      6 * PP * 2 * 0.075,
       9,
     );
     expect(day0({ ...base, traits: ["expat"], home: false })).toBeCloseTo(
-      6 * PP * 2,
+      6 * PP * (4 * 1.075 - 2),
       9,
     );
     expect(day0({ ...base, traits: ["homesick"], home: true })).toBeCloseTo(
-      0,
+      6 * PP * 2 * 0.075,
       9,
     );
     expect(
       day0({ ...base, traits: ["craftsman"] }, { ...ctx, kind: "raw" }),
-    ).toBeCloseTo(-6 * PP, 9);
+    ).toBeCloseTo(6 * PP * (1.075 - 2), 9);
     expect(
       day0({ ...base, traits: ["laborer"] }, { ...ctx, kind: "raw" }),
-    ).toBeCloseTo(6 * PP * 3, 9);
+    ).toBeCloseTo(6 * PP * (5 * 1.075 - 2), 9);
   });
 });
 
 describe("the pick", () => {
-  it("picks the live window's best: Production 2 asking 98% over Production 4 asking 115%", () => {
+  it("ranks the historical candidate wages using the new Responsibility bonus", () => {
     const r = rankCandidates([SHERMAN, ALEXANDER, JOSCHA, MOAZ], {
       pointValue: PP,
       alone: true,
     });
-    expect(r.best).toBe(0);
+    expect(r.best).toBe(2);
     expect(r.bestPays).toBe(true);
-    expect(/** @type {number} */ (r.values[1]?.total)).toBeLessThan(0);
+    expect(/** @type {number} */ (r.values[1]?.total)).toBeGreaterThan(0);
     expect(/** @type {number} */ (r.values[3]?.total)).toBeLessThan(0);
   });
   it("keeps a wage just past 130% as a drifted reading instead of blanking it", () => {
@@ -1171,6 +1724,6 @@ describe("the pick", () => {
     const r = rankCandidates([odd, ALEXANDER], { pointValue: PP, alone: true });
     expect(r.values[0]?.fits).toBe(false);
     expect(r.best).toBe(1);
-    expect(r.bestPays).toBe(false);
+    expect(r.bestPays).toBe(true);
   });
 });

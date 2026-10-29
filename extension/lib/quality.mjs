@@ -6,6 +6,7 @@ export const TTL = Object.freeze({
   employees: 300_000,
   avg: 600_000,
   pointValue: 600_000,
+  countries: 86_400_000,
   feed: 60_000,
 });
 export const CACHE_VERSION = 2;

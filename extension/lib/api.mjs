@@ -25,6 +25,7 @@ export const BOOK_URL = withInput("tradingOrder.getTopOrders", {
 // This procedure takes no input; even an empty object is rejected.
 export const POINT_VALUE_URL = `${TRPC}gameStat.getPpMoneyValue`;
 export const EMPLOYEES_URL = `${TRPC}employee.getMyEmployees`;
+export const COUNTRIES_URL = withInput("country.getAllCountries", {});
 export const KEYLESS_LIMIT = 100;
 export const TIMEOUT_MS = 10_000; // a call that has not answered by then is given up, not left hanging
 
@@ -215,6 +216,31 @@ export async function fetchBook(
   });
   const depth = parseBook(data, 100);
   return { book: { ...summarizeBook(data), ...depth }, limit, remaining };
+}
+
+/**
+ * Public flag-to-country mapping, always keyless; retain no other country data.
+ * A malformed entry is left out rather than losing every flag (all 181 were
+ * well formed on 2026-10-29); a list with none usable is a schema error.
+ */
+export async function fetchCountries(fetchImpl) {
+  const { data } = await call(fetchImpl, "", COUNTRIES_URL);
+  const countries = Array.isArray(data)
+    ? data
+        .filter(
+          (country) =>
+            typeof country?._id === "string" &&
+            typeof country?.code === "string" &&
+            typeof country?.name === "string" &&
+            isId(country?._id) &&
+            /^[a-z]{2}$/.test(country?.code ?? "") &&
+            country.name.trim(),
+        )
+        .map(({ _id, code, name }) => ({ id: _id, code, name }))
+    : [];
+  if (!countries.length)
+    throw new ApiError("Invalid countries schema", "schema");
+  return countries;
 }
 
 /** The player's employees, with their server totals and company ids; key required. */

@@ -419,6 +419,11 @@ toolbox 1-10, case2 1`; the chance is not in the client): an `openCase` row
 
 ## 12. v0.27 live (2026-10-26)
 
+**Historical employee rules.** The Responsibility shield, half-of-candidates
+trait model, Sprinter, Leadership, mixed-trait Rehab and hire/move happiness
+figures recorded here are superseded by §13. The old API/HTML fixtures remain
+evidence of their capture dates; they are not current employee configuration.
+
 v0.27 went live on 2026-10-26 (client build `XmH-E6LDGflCh7NUJ-csh`, read
 22:00 UTC on the live page with the player's own session; nothing was bought,
 listed or hired). Several things differ from what the dev server showed in §11.
@@ -623,3 +628,129 @@ newest | mostExpensive, limit: 12, cursor?}` (the sort is kept in the
   hand's rarity by the odds, then three different cards of it at random. Luck also gives a toolbox chance of 0.001 an
   hour a point, at most 0.02 (`zr`), times the traits'
   `toolboxChanceMultiplier`.
+
+## 13. v0.27.3 (2026-10-29)
+
+Sources: live reads supplied on 2026-10-29 from client chunk
+`_app-4dc4091e745d6c41.js` (employee config, all 52 trait entries and the full
+training-pool function), `employee.getMyEmployees` (the player's 19 employees),
+`company.getProductionBonus` (the player's Steel company) and
+`country.getCountryById` (Mali). These facts supersede employee rules in §12.
+No live calls were needed for this model update.
+
+- **Employee config:** `traitsPerEmployee {min:1,max:1}`, `candidateSlots 3`,
+  `baseStat 1..4`, `startAge 18..45`, `aging.yearsPerDay 1`, hidden
+  `potentialMax 3..10`, `hireEnergyCost 10`, `rerollEnergyCost 10`,
+  `fire.hireLockHours 12`. Every candidate carries exactly one trait, shown as
+  a `?` badge until hired, drawn by hire weight (52 traits, total weight 354;
+  Sweethearts has weight 0). The current Recruit fixture is
+  `fixtures/v0273-live-recruit.html`; shown Production, Responsibility, Luck
+  and wage chips belong to the game. Advice repeats only hidden Production.
+- **Happiness config:** min 0, max 100, neutral 50, full-storage penalty 10,
+  unpaid penalty 10, tax penalty 1 per percent, maximum quit chance 0.05,
+  `happinessQuitThreshold 30`, production bonus 1 percent per happiness point.
+  `responsibilityHappinessPerPoint 3`: R1/R2/R3/R4 contribute +3/+6/+9/+12.
+  `wageExpectationSpread 0.3`; wages still depend on paid Production only.
+- **Moves still cost happiness:** `move.companyMoveHappinessPenalty 10`,
+  `penaltyDays 7`. Do not infer free transfers. Specialization grows 1 percent
+  a day, capped at 20 percent (`percentPerDay 1`, `maxPercent 20`).
+- **Live happiness:** all 19 employees returned
+  `{base:50, contributions:[{reason,delta,until?,code?,eventCode?}], mitigated,
+value, quitChance}` with no `shield`. Value is `clamp(50 + sum(delta),0,100)`.
+  Reasons include `responsibility` (+3R), `incomeTax` (−4 in Mali), `trait`
+  (Specialist +5, Patriot +10), `event`, and `recentlyMoved` (−10).
+  `mitigated` was 0 for everyone. **ASSUMED:** it is the part Loyal's
+  `happinessPenaltyMultiplier 0.5` removes from negative items. The team model
+  does not simulate Loyal mitigation; its changed negative items count in full.
+- **Live production bonus:** contributions are `management` (player-wide,
+  +22 here, 2 × Management skill), `happiness` (value − 50), `specialization`,
+  `tool` (the employee's held tool) and `event`. No company-wide production
+  part was present: `company.getProductionBonus` for Steel returned
+  `{depositBonus:0,total:0}`. `skills.managementBonusPercentPerLevel` is 2.
+- **Recruit's company percentage is income tax.** The client renders
+  `taxes.income` on every company card, including a disabled one. Mali returned
+  `taxes {income:4, market:0, manager:4}`. The reader's compatibility field
+  `bonus` is passed into valuation as `incomeTax`, never added to output.
+- **New hire valuation:** happiness is `clamp(50 + 3R − tax + trait happiness,
+0,100)`; production bonus is Management + (happiness − 50) + specialization,
+  without a tool. Read Management's percentage from any player employee row,
+  even in another company; without rows use 0 and disclose its omission. Tax
+  comes first from the company chip, then the `incomeTax` item of a member of
+  that company, else 0 with a note. Shown Responsibility is used; an unread
+  `?` falls back to the starting mean 2.5. Trait happiness already stored in
+  `TRAITS.pct` is counted once, and applies to unpaid Production too.
+- **Tax traits:** Tax-shy is a production percentage, not happiness:
+  `productionPercentPerTaxPercent:-1, capPercent:-30`. Price it at the known
+  income tax (Recruit chip, roster or trainee), otherwise the table's 10%
+  reference. Statist gives +2 Responsibility (+6 happiness) when known income
+  tax is at least 20%, none below; unknown tax keeps the table's value.
+  Training happiness effects and Responsibility share the daily 0..100 cap,
+  using observed happiness and the snapshot-anchored expiry of its items.
+  A card's signed direct trait, Responsibility and trainee team happiness
+  changes are summed before clamping, including replacements and each Wild
+  outcome. At happiness 98, Statist plus Nationalist can add only two points;
+  at 99, Wild's +1 Responsibility and Xenophobe's −5 happiness give 97.
+- **Age traits:** Sprinter is gone; Early Bloomer replaces it, weight 5,
+  positive, `PER_YEAR_OF_AGE {stat:PRODUCTION,peakDelta:6,delta:-2,perYears:10,
+ageAbove:30,capDelta:-6}`. Its production is
+  `max(0,6 − 2*floor(max(0,age−30)/10))`: +6 at 39, +4 at 44, +2 at 55, 0 at 60. Verified: Claudia Heathcote, age 44, had +4. Patch description: +6 until
+  40, then −2 per 10 years, gone at 60. Late Bloomer config is
+  `{delta:2,perYears:10,ageAbove:40,capDelta:6}`; Worn Out is
+  `{delta:-2,perYears:10,ageAbove:50,capDelta:-6}`. **ASSUMED**, by the verified
+  Early Bloomer step shape: Late Bloomer is
+  `min(6,2*floor(max(0,age−40)/10))`; Worn Out is
+  `max(-6,-2*floor(max(0,age−50)/10))`. All three use age + day throughout the
+  horizon. Unknown starting age averages uniformly over 18..45 each day.
+- **Specialist on hire** always matches the company's good: +3 Production
+  and +5 happiness, condition share 1. The training habit estimate keeps
+  `CONDITION_ODDS.specialist = 0.05`, because its good is unknown there.
+- **Training config:** rarity weights common/uncommon/rare/epic/legendary
+  55/25/13/5/2; hand size 3. Every stat has drills +1/+2/+3/+4 at
+  common/uncommon/epic/legendary. Wild card is fixed uncommon; negative Rehab
+  fixed rare, with no Rehab for mixed traits. Negotiation drops expectation
+  by 5/10/20 percentage points at common/uncommon/rare, floor 0.7. Mixed
+  habits are rare, positive habits epic, positive pairs legendary. Clean
+  slate requires at least two negatives and is legendary. Second wind gains
+  +2/+3/+4 at rare/epic/legendary while potentialMax stays at or below 15.
+- **Training eligibility:** a trait must be absent, nonexclusive with every
+  owned trait, permitted for the employee's known gender, and not a partner
+  trait (`oldFriends`, `nemesis`, `sweethearts`). Habits exclude negatives;
+  pair habits require two eligible positives also nonexclusive with each
+  other. Wild card is present only with at least one eligible trait, includes
+  any polarity and draws uniformly over that list, not by hire weight. Its
+  bad-trait chance is negative eligible count / total eligible count.
+  Female-only traits: `girlPower`, `manHater`; male-only: `bandOfBrothers`,
+  `misogynist`. An unknown gender does not filter the training pool.
+- **Recruit gender:** the live age icons (2026-10-29) are unlabelled Material
+  Design `mdiGenderMale` / `mdiGenderFemale` paths. Bouba Sall, 38, is male;
+  the other three candidates in the fixture are female. The reader identifies
+  the paths, retaining label/class checks for other renderings, and passes the
+  gender into team rules alongside coworkers' API `gender`. **ASSUMED:**
+  hires use the same gender restrictions as the client's training pool.
+  Hidden hire-trait weights are renormalized after that filter; unknown gender
+  leaves the full pool available. Bouba's cases exclude Girl Power and Man Hater.
+- **All 30 exclusive pairs:** `[handy,improviser]`, `[loner,sociable]`,
+  `[cosmopolitan,xenophobe]`, `[comic,bully]`, `[craftsman,laborer]`,
+  `[expat,homesick]`, `[statist,taxShy]`, `[diamondInTheRough,burnout]`,
+  `[greedy,modest]`, `[flightRisk,anchor]`, `[luckyCharm,jinx]`,
+  `[scavenger,handy]`, `[nationalist,cosmopolitan]`, `[loyal,flightRisk]`,
+  `[lateBloomer,wornOut]`, `[earlyBloomer,lateBloomer]`, `[veteran,burnout]`,
+  `[foreman,bully]`, `[mentor,bully]`, `[primaDonna,modest]`, `[climber,modest]`,
+  `[envious,modest]`, `[patriot,expat]`, `[xenophobe,expat]`,
+  `[stockpiler,claustrophobe]`, `[loner,comic]`, `[loner,foreman]`,
+  `[loner,mentor]`, `[loner,trainer]`, `[loner,luckyCharm]`.
+- **Management replaces Leadership:** training rarity shifts per Management
+  level are uncommon 1, rare 0.6, epic 0.3, legendary 0.1. Per Luck point the
+  shifts are 0.5/0.3/0.15/0.05. Add both shifts to each noncommon weight and
+  subtract their sum from common, floored at 0, then normalize. Train accepts
+  both `Your Management N` and historical `Your Leadership N`; the new label
+  has not yet been seen live. Internal `leadership` message/cache names stay
+  compatible, while user-visible text says Management.
+- **Responsibility and teams:** a +k drill gives +3k happiness, capped at 100,
+  therefore that many output bonus percentage points, with no wage change.
+  Foreman's +3 coworker Responsibility means +9 happiness, similarly capped.
+  Bully, Comic, Envious, Xenophobe, Prima Donna and Sociable happiness items
+  count in full. Server totals remain authoritative; valuation applies only
+  switched deltas, item expiry and specialization growth. Existing team
+  condition assumptions and unpriced partner/Luck/Trainer effects remain
+  documented in [TEAM-MODEL.md](TEAM-MODEL.md).

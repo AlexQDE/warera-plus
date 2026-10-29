@@ -3,8 +3,8 @@
 // shows: his wage a day, the one stat, trait or potential revealed, a "?"
 // badge for each hidden trait, his age. Pure model, no page access.
 //
-// Facts (v0.27, docs/GAME-FACTS.md §12): a starting stat is 1 to 4, all
-// equally likely; half of all candidates carry one trait. A wage is one hour
+// Facts (v0.27.3, docs/GAME-FACTS.md §13): a starting stat is 1 to 4, all
+// equally likely; every new candidate carries exactly one trait. A wage is one hour
 // of his own base output, Production / 4 points, at the game's point value
 // (gameStat.getPpMoneyValue), times his wage expectation, drawn between 70%
 // and 130% (config employee.wageExpectationSpread 0.3), times 1.2 for Greedy
@@ -91,7 +91,7 @@ export const TRAITS = {
     weight: 10,
     polarity: "positive",
     alone: {},
-    team: { pct: 0.05 },
+    team: { pct: 0.11 }, // +2 Responsibility (+6 happiness), plus +5 happiness
     note: "coworkers of his nationality",
   },
   xenophobe: {
@@ -147,7 +147,7 @@ export const TRAITS = {
     weight: 5,
     polarity: "positive",
     alone: {},
-    team: { flat: 0.18 },
+    team: { flat: 0.54 }, // two reference coworkers of P3, each +9% output
     note: "coworker Responsibility",
   },
   rival: {
@@ -288,13 +288,13 @@ export const TRAITS = {
     team: { pct: -0.2 },
     note: "storage level 1-2",
   },
-  sprinter: {
-    title: "Sprinter",
+  earlyBloomer: {
+    title: "Early Bloomer",
     weight: 5,
     polarity: "positive",
-    alone: { pct: 0.5 / 30 },
-    team: { pct: 0.5 / 30 },
-    note: "first day only",
+    alone: { prod: 6 },
+    team: { prod: 6 },
+    note: "+6 until 40, then -2 every 10 years; gone at 60",
   },
   veteran: {
     title: "Veteran",
@@ -334,7 +334,7 @@ export const TRAITS = {
     polarity: "positive",
     alone: { prod: 2 },
     team: { prod: 2 },
-    note: "at 40 or older",
+    note: "ASSUMED: +2 every 10 years above 40, capped at +6",
   },
   wornOut: {
     title: "Worn Out",
@@ -342,7 +342,7 @@ export const TRAITS = {
     polarity: "negative",
     alone: { prod: -0.7 },
     team: { prod: -0.7 },
-    note: "at 40 or older",
+    note: "ASSUMED: -2 every 10 years above 50, capped at -6",
   },
   patriot: {
     title: "Patriot",
@@ -377,7 +377,7 @@ export const TRAITS = {
     polarity: "negative",
     alone: { pct: -0.1 },
     team: { pct: -0.1 },
-    note: "at 10% tax",
+    note: "-1% output per income-tax percent, capped at -30%; unknown tax uses 10%",
   },
   statist: {
     title: "Statist",
@@ -385,7 +385,7 @@ export const TRAITS = {
     polarity: "positive",
     alone: {},
     team: {},
-    note: "tax 20% or more",
+    note: "+2 Responsibility (+6 happiness) at income tax 20% or more",
   },
   greedy: {
     title: "Greedy",
@@ -521,10 +521,16 @@ const effectOf = (e) => ({
 
 /**
  * The traits a hidden "?" can be, each with its share of new hires.
+ * ASSUMED: hires use the client's training gender filter (GAME-FACTS §13).
+ * @param {Candidate["gender"]} [gender]
  * @returns {Array<{ code: string, share: number }>}
  */
-export function hiddenTraitPool() {
-  const pool = Object.entries(TRAITS).filter(([, t]) => t.weight > 0);
+export function hiddenTraitPool(gender) {
+  const pool = Object.entries(TRAITS).filter(
+    ([code, t]) =>
+      t.weight > 0 &&
+      (!gender || !TRAIT_GENDER[code] || TRAIT_GENDER[code] === gender),
+  );
   const total = pool.reduce((s, [, t]) => s + t.weight, 0);
   return pool.map(([code, t]) => ({ code, share: t.weight / total }));
 }
@@ -546,12 +552,11 @@ export function hiddenTraitPool() {
  *   recognised (another language); hiddenTraits: "?" badges; home: his
  *   nationality is the company's country (null when not known).
  * @typedef {{ pointValue: number | null, valuePerPoint?: number | null,
- *   bonus?: number, alone?: boolean, kind?: "raw" | "product" | null,
+ *   management?: number | null, incomeTax?: number | null, alone?: boolean, kind?: "raw" | "product" | null,
  *   roster?: import("./team.mjs").Member[] | null, now?: number }} Context
  *   pointValue: the game's point value (wages rest on it); valuePerPoint:
  *   what a point of this company's product is worth (default the point
- *   value; see valuePerPoint()); bonus: the company's production bonus as a
- *   share (0.04 for +4%), less the income tax's happiness cost; alone: no
+ *   value; see valuePerPoint()); management and incomeTax: shares (0.04 for 4%); alone: no
  *   coworkers; kind: the company makes a raw resource or a product.
  */
 
@@ -619,8 +624,8 @@ export function valuePerPoint(code, bidOf) {
 /**
  * The trait cases a candidate can be, each with its prior share: his
  * recognised traits are certain, every hidden or unread badge is one draw
- * from the hire pool (half of all candidates carry one trait, so at most one
- * badge in practice; a second is drawn the same way).
+ * from the hire pool. Every v0.27.3 candidate has exactly one trait, hidden
+ * until hired; extra badges remain supported for older readings.
  * @param {Candidate} c
  * @returns {Array<{ codes: string[], share: number }>}
  */
@@ -629,7 +634,7 @@ export function traitCases(c) {
   const draws = Math.max(0, (c.hiddenTraits ?? 0) + (c.unknownTraits ?? 0));
   /** @type {Array<{ codes: string[], share: number }>} */
   let cases = [{ codes: known, share: 1 }];
-  const pool = hiddenTraitPool();
+  const pool = hiddenTraitPool(c.gender);
   for (let i = 0; i < Math.min(draws, 2); i++)
     cases = cases.flatMap((k) =>
       pool.map((p) => ({
@@ -726,10 +731,49 @@ export const CONDITION_ODDS = {
   specialist: 0.05, // his favourite product: one of twenty
   claustrophobe: 0.7,
 };
-/** Traits that work only from 40 on. */
-const FROM_40 = new Set(["lateBloomer", "wornOut"]);
-/** The share of candidates aged 40 or more (starting ages 18 to 45). */
-const P_40 = 6 / 28;
+/** Production from age traits; employees age one year per day (v0.27.3).
+ * Late Bloomer and Worn Out's step boundaries are ASSUMED by the verified
+ * Early Bloomer shape; see GAME-FACTS §13.
+ * @param {string} code @param {number | null | undefined} age @param {number} day */
+export function ageProduction(code, age, day = 0) {
+  const at = (/** @type {number} */ start) => {
+    const years = start + day;
+    if (code === "earlyBloomer")
+      return Math.max(0, 6 - 2 * Math.floor(Math.max(0, years - 30) / 10));
+    if (code === "lateBloomer")
+      return Math.min(6, 2 * Math.floor(Math.max(0, years - 40) / 10));
+    if (code === "wornOut")
+      return Math.max(-6, -2 * Math.floor(Math.max(0, years - 50) / 10));
+    return 0;
+  };
+  return age != null && Number.isFinite(age)
+    ? at(age)
+    : Array.from({ length: 28 }, (_, i) => at(18 + i)).reduce(
+        (s, p) => s + p,
+        0,
+      ) / 28;
+}
+const AGE_TRAITS = new Set(["earlyBloomer", "lateBloomer", "wornOut"]);
+/** Change from today's owned age-trait Production; server totals include day zero.
+ * @param {ReadonlyArray<string>} traits @param {number | null | undefined} age @param {number} day */
+export const ageProductionDelta = (traits, age, day) =>
+  traits.reduce(
+    (sum, code) =>
+      AGE_TRAITS.has(code)
+        ? sum + ageProduction(code, age, day) - ageProduction(code, age)
+        : sum,
+    0,
+  );
+const HAPPINESS_TRAITS = new Set([
+  "nationalist",
+  "specialist",
+  "patriot",
+  "homesick",
+  "statist",
+  "loyal",
+]);
+const clampHappiness = (/** @type {number} */ value) =>
+  Math.max(0, Math.min(100, value));
 
 /**
  * A trait's effect where he works: the company's kind of product, his
@@ -737,7 +781,7 @@ const P_40 = 6 / 28;
  * averaged), otherwise alone or in a team; conditions nothing settles are
  * weighed by CONDITION_ODDS.
  * @param {string} code
- * @param {{ alone: boolean, home: boolean | null, kind: "raw" | "product" | null, age?: number | null }} at
+ * @param {{ alone: boolean, home: boolean | null, kind: "raw" | "product" | null, age?: number | null, day?: number, hire?: boolean, incomeTax?: number | null }} at
  */
 function effectFor(code, at) {
   const t = TRAITS[code];
@@ -761,13 +805,22 @@ function effectFor(code, at) {
         ? effectOf(at.home ? t.home.yes : t.home.no)
         : mix(t.home.yes, t.home.no)
       : effectOf(at.alone ? t.alone : t.team);
-  let p = CONDITION_ODDS[code] ?? 1;
-  if (FROM_40.has(code))
-    p *=
-      at.age != null && Number.isFinite(at.age) ? (at.age >= 40 ? 1 : 0) : P_40;
+  const p = code === "specialist" && at.hire ? 1 : (CONDITION_ODDS[code] ?? 1);
+  const pct =
+    at.incomeTax != null && Number.isFinite(at.incomeTax)
+      ? code === "taxShy"
+        ? -Math.min(at.incomeTax, 0.3)
+        : code === "statist"
+          ? at.incomeTax >= 0.2
+            ? 0.06
+            : 0
+          : e.pct
+      : e.pct;
   return {
-    prod: e.prod * p,
-    pct: e.pct * p,
+    prod: AGE_TRAITS.has(code)
+      ? ageProduction(code, at.age, at.day ?? 0)
+      : e.prod * p,
+    pct: pct * p,
     flat: e.flat * p,
     drift: e.drift,
   };
@@ -777,19 +830,21 @@ function effectFor(code, at) {
  * Gold a day he makes his owner at a production bonus, one case.
  * @param {{ production: number, codes: string[] }} k
  * @param {{ wageDay: number, valuePerPoint: number, bonus: number, alone: boolean,
- *   home: boolean | null, kind: "raw" | "product" | null, age: number | null, day: number,
+ *   home: boolean | null, kind: "raw" | "product" | null, age: number | null, day: number, happiness: number, management: number, incomeTax: number,
  *   self?: import("./team.mjs").TeamResult["self"] }} at
  */
 function profitDay(k, at) {
   let prod = 0;
   let pct = 0;
+  let happiness = 0;
   let flat = 0;
   let drift = 0;
   for (const code of k.codes) {
     if (at.self && TEAM_RULES[code]) continue;
-    const e = effectFor(code, at);
+    const e = effectFor(code, { ...at, hire: true });
     prod += e.prod;
-    pct += e.pct;
+    if (HAPPINESS_TRAITS.has(code)) happiness += e.pct * 100;
+    else pct += e.pct;
     flat += e.flat;
     drift += e.drift;
   }
@@ -800,7 +855,12 @@ function profitDay(k, at) {
   const v = HOURS_PER_POINT * at.valuePerPoint;
   const out =
     v *
-    ((k.production + prod) * (1 + at.bonus + teamPct) +
+    ((k.production + prod) *
+      (1 +
+        at.management +
+        at.bonus +
+        teamPct +
+        (clampHappiness(at.happiness + happiness) - 50) / 100) +
       k.production * pct +
       flat);
   const wage = at.wageDay * (1 + drift * Math.floor(at.day / 7));
@@ -833,7 +893,26 @@ export function candidateValue(c, ctx) {
     ctx.valuePerPoint != null && Number.isFinite(ctx.valuePerPoint)
       ? ctx.valuePerPoint
       : /** @type {number} */ (ctx.pointValue);
-  const bonus = ctx.bonus ?? 0;
+  const management =
+    ctx.management ??
+    (ctx.roster?.find((m) => m.management != null)?.management ?? NaN) / 100;
+  const incomeTax =
+    ctx.incomeTax ??
+    (ctx.roster?.find((m) => m.incomeTax != null)?.incomeTax ?? NaN) / 100;
+  // Clamp after adding the trait's happiness, not before it.
+  const happiness =
+    50 +
+    3 * (c.responsibility ?? 2.5) -
+    (Number.isFinite(incomeTax) ? incomeTax * 100 : 0);
+  const assumptions = [];
+  if (!Number.isFinite(management))
+    assumptions.push(
+      "Management bonus not counted: no employee rows with a management contribution",
+    );
+  if (!Number.isFinite(incomeTax))
+    assumptions.push("Income tax not read: using 0");
+  if (c.responsibility == null)
+    assumptions.push("Responsibility not read: using the starting average 2.5");
   const alone = ctx.alone ?? false;
   const home = c.home ?? null;
   const kind = ctx.kind ?? null;
@@ -856,6 +935,23 @@ export function candidateValue(c, ctx) {
               name: c.name,
               baseP: k.production,
               R: c.responsibility ?? 2.5,
+              happiness: clampHappiness(
+                happiness +
+                  k.codes.reduce(
+                    (sum, code) =>
+                      sum +
+                      (HAPPINESS_TRAITS.has(code) && !TEAM_RULES[code]
+                        ? effectFor(code, {
+                            alone,
+                            home,
+                            kind,
+                            hire: true,
+                            incomeTax,
+                          }).pct * 100
+                        : 0),
+                    0,
+                  ),
+              ),
               traits: k.codes,
               wageHour: wageDay / 24,
               age: c.age ?? RETIRE_AGE - horizon,
@@ -880,16 +976,6 @@ export function candidateValue(c, ctx) {
         })),
       )
     : null;
-  if (
-    team &&
-    c.responsibility == null &&
-    team.self.why.some((why) =>
-      /^(?:Bully|Sociable|Envious|Xenophobe|Prima Donna) [−-]/.test(why),
-    )
-  )
-    team.assumed.push(
-      "Candidate Responsibility hidden: average 2.5 for happiness shield",
-    );
   /** @param {number} day */
   const expected = (day) =>
     cases.reduce(
@@ -899,7 +985,10 @@ export function candidateValue(c, ctx) {
           profitDay(k, {
             wageDay,
             valuePerPoint,
-            bonus: bonus + Math.min(day * SPEC_PER_DAY, SPEC_CAP),
+            bonus: Math.min(day * SPEC_PER_DAY, SPEC_CAP),
+            happiness,
+            incomeTax,
+            management: Number.isFinite(management) ? management : 0,
             alone,
             home,
             kind,
@@ -940,6 +1029,7 @@ export function candidateValue(c, ctx) {
     total: fits ? total : null,
     flightRisk: risky,
     ...(team ?? {}),
+    assumed: [...assumptions, ...(team?.assumed ?? [])],
   };
 }
 
@@ -989,8 +1079,6 @@ export function rankCandidates(list, ctx) {
 export const ENERGY_GOLD = 4.5;
 /** A Negotiation card never takes the wage expectation below this. */
 export const WAGE_FLOOR = 0.7;
-/** Income tax (%) a Responsibility drill is valued at: the v0.27 guide's reference. */
-export const REF_TAX = 10;
 /** Stats a drill can raise, in the order the Train window prints its chips. */
 export const TRAIN_STATS = ["production", "responsibility", "luck"];
 /** Client training config (module 56899, read 2026-10-27). */
@@ -1011,7 +1099,7 @@ export const LUCK_TRAIN_SHIFT = {
   epic: 0.15,
   legendary: 0.05,
 };
-export const LEADERSHIP_TRAIN_SHIFT = {
+export const MANAGEMENT_TRAIN_SHIFT = {
   uncommon: 1,
   rare: 0.6,
   epic: 0.3,
@@ -1029,21 +1117,22 @@ export const TOOLBOX_CHANCE_CAP = 0.02;
  *   luck?: number | null, potential?: number | null, potentialMax?: number | null,
  *   wageChip: number, traits?: ReadonlyArray<string>, bonus?: number,
  *   hiredDays?: number, age?: number | null, leadership?: number | null,
- *   wageDay?: number | null }} Trainee
+ *   wageDay?: number | null, gender?: "male" | "female" | null,
+ *   happiness?: number | null, incomeTax?: number | null, management?: number | null }} Trainee
  *   wageChip: his coin chip as a share (+0.138), Greedy / Modest and a
  *   Climber's drift included, as the game prints it; bonus: his pickaxe chip
  *   as a share (0.009 for +0.9%).
  */
 
 /**
- * Rarity shares at the employee's Luck and the player's Leadership.
+ * Rarity shares at the employee's Luck and the player's Management.
  * Common cannot go below zero; above that point the total weight grows.
  * @param {number} luck
- * @param {number} [leadership]
+ * @param {number} [management]
  */
-export function trainingOdds(luck, leadership = 0) {
+export function trainingOdds(luck, management = 0) {
   const points = Number.isFinite(luck) ? Math.max(0, luck) : 0;
-  const levels = Number.isFinite(leadership) ? Math.max(0, leadership) : 0;
+  const levels = Number.isFinite(management) ? Math.max(0, management) : 0;
   const weights = { ...TRAIN_WEIGHTS };
   let shift = 0;
   for (const rarity of /** @type {Array<keyof typeof LUCK_TRAIN_SHIFT>} */ (
@@ -1051,7 +1140,7 @@ export function trainingOdds(luck, leadership = 0) {
   )) {
     const gain =
       points * LUCK_TRAIN_SHIFT[rarity] +
-      levels * LEADERSHIP_TRAIN_SHIFT[rarity];
+      levels * MANAGEMENT_TRAIN_SHIFT[rarity];
     weights[rarity] += gain;
     shift += gain;
   }
@@ -1062,6 +1151,67 @@ export function trainingOdds(luck, leadership = 0) {
   ))
     weights[rarity] /= total;
   return weights;
+}
+
+/** Client exclusivity list, read 2026-10-29 (v0.27.3). */
+export const EXCLUSIVE_TRAIT_PAIRS = [
+  ["handy", "improviser"],
+  ["loner", "sociable"],
+  ["cosmopolitan", "xenophobe"],
+  ["comic", "bully"],
+  ["craftsman", "laborer"],
+  ["expat", "homesick"],
+  ["statist", "taxShy"],
+  ["diamondInTheRough", "burnout"],
+  ["greedy", "modest"],
+  ["flightRisk", "anchor"],
+  ["luckyCharm", "jinx"],
+  ["scavenger", "handy"],
+  ["nationalist", "cosmopolitan"],
+  ["loyal", "flightRisk"],
+  ["lateBloomer", "wornOut"],
+  ["earlyBloomer", "lateBloomer"],
+  ["veteran", "burnout"],
+  ["foreman", "bully"],
+  ["mentor", "bully"],
+  ["primaDonna", "modest"],
+  ["climber", "modest"],
+  ["envious", "modest"],
+  ["patriot", "expat"],
+  ["xenophobe", "expat"],
+  ["stockpiler", "claustrophobe"],
+  ["loner", "comic"],
+  ["loner", "foreman"],
+  ["loner", "mentor"],
+  ["loner", "trainer"],
+  ["loner", "luckyCharm"],
+];
+/** @param {string} a @param {string} b */
+const exclusive = (a, b) =>
+  EXCLUSIVE_TRAIT_PAIRS.some((pair) => pair.includes(a) && pair.includes(b));
+const PARTNER_TRAITS = new Set(["oldFriends", "nemesis", "sweethearts"]);
+/** @type {Readonly<Record<string, string>>} */
+const TRAIT_GENDER = {
+  girlPower: "female",
+  manHater: "female",
+  bandOfBrothers: "male",
+  misogynist: "male",
+};
+
+/** The same uniform eligible list drives Wild card and training habits.
+ * Unknown gender leaves both gender pools available, as the client does.
+ * @param {{ traits?: ReadonlyArray<string>, gender?: string | null }} trainee */
+export function eligibleTrainingTraits(trainee) {
+  const owned = trainee.traits ?? [];
+  return Object.keys(TRAITS).filter(
+    (code) =>
+      !owned.includes(code) &&
+      !PARTNER_TRAITS.has(code) &&
+      !owned.some((trait) => exclusive(code, trait)) &&
+      (!trainee.gender ||
+        !TRAIT_GENDER[code] ||
+        TRAIT_GENDER[code] === trainee.gender),
+  );
 }
 
 /**
@@ -1081,17 +1231,22 @@ export function trainingPool(trainee) {
   for (const code of owned) {
     const polarity = TRAITS[code]?.polarity;
     if (polarity === "negative") negatives++;
-    if (polarity === "negative" || polarity === "mixed")
+    if (polarity === "negative")
       pool.push({
         kind: "rehab",
-        rarity: polarity === "negative" ? "rare" : "uncommon",
+        rarity: "rare",
         trait: code,
       });
   }
   if (negatives >= 2) pool.push({ kind: "cleanSlate", rarity: "legendary" });
-  const available = Object.entries(TRAITS).filter(([code]) => !owned.has(code));
-  const positive = available.filter(([, t]) => t.polarity === "positive");
-  for (const [code, t] of available)
+  const available = eligibleTrainingTraits(trainee).map((code) => ({
+    code,
+    trait: TRAITS[code],
+  }));
+  const positive = available.filter(
+    ({ trait: t }) => t.polarity === "positive",
+  );
+  for (const { code, trait: t } of available)
     if (t.polarity === "positive" || t.polarity === "mixed")
       pool.push({
         kind: "habit",
@@ -1100,11 +1255,12 @@ export function trainingPool(trainee) {
       });
   for (let i = 0; i < positive.length; i++)
     for (let j = i + 1; j < positive.length; j++)
-      pool.push({
-        kind: "habit",
-        rarity: "legendary",
-        traitTo: [positive[i][0], positive[j][0]],
-      });
+      if (!exclusive(positive[i].code, positive[j].code))
+        pool.push({
+          kind: "habit",
+          rarity: "legendary",
+          traitTo: [positive[i].code, positive[j].code],
+        });
   if (available.length) pool.push({ kind: "wild", rarity: "uncommon" });
   for (const [i, rarity] of ["rare", "epic", "legendary"].entries()) {
     const delta = i + 2;
@@ -1192,6 +1348,11 @@ export function trainingValues(cards, trainee, ctx) {
   const subject = ctx.roster?.find((m) => m.id === ctx.traineeId);
   const now = ctx.now ?? Date.now();
   const traits = [...(trainee.traits ?? [])].filter((c) => TRAITS[c]);
+  const wildTraits = eligibleTrainingTraits({
+    ...trainee,
+    traits,
+    gender: subject?.gender ?? trainee.gender,
+  });
   // the markup Greedy and Modest put on his expectation (summed, as the chip sums it)
   const markup = traits.reduce((s, c) => s + ((TRAITS[c].wage ?? 1) - 1), 0);
   const M = 1 + trainee.wageChip; // his whole wage multiplier
@@ -1233,6 +1394,41 @@ export function trainingValues(cards, trainee, ctx) {
     subject?.spec != null
       ? subject.spec / (100 * SPEC_PER_DAY)
       : (trainee.hiredDays ?? 0);
+  const incomeTax =
+    subject?.incomeTax != null ? subject.incomeTax / 100 : trainee.incomeTax;
+  const productionAt = (/** @type {number} */ day) =>
+    P + ageProductionDelta(traits, trainee.age ?? subject?.age, day);
+  const observedHappiness =
+    subject?.happiness ??
+    trainee.happiness ??
+    clampHappiness(
+      50 +
+        3 * (subject?.R ?? trainee.responsibility ?? 2.5) -
+        (incomeTax ?? 0) * 100,
+    );
+  /** Today's observed happiness plus only the items expiring after its snapshot. */
+  const happinessAt = (/** @type {number} */ day) =>
+    clampHappiness(
+      observedHappiness +
+        (subject?.items?.reduce(
+          (sum, item) =>
+            sum +
+            (item.delta != null &&
+            item.until != null &&
+            item.until > (subject.observedAt ?? now) &&
+            item.until <= now + day * 86400e3
+              ? -item.delta
+              : 0),
+          0,
+        ) ?? 0),
+    );
+  const happinessChange = (
+    /** @type {number} */ day,
+    /** @type {number} */ delta,
+  ) => {
+    const happiness = happinessAt(day);
+    return (clampHappiness(happiness + delta) - happiness) / 100;
+  };
   const full = SPEC_CAP / SPEC_PER_DAY;
   /** His production bonus d days on: the chip now plus the specialization still to come. */
   const bonusAt = (/** @type {number} */ d) =>
@@ -1243,11 +1439,18 @@ export function trainingValues(cards, trainee, ctx) {
     for (let d = 0; d < H; d++) s += f(d);
     return s;
   };
-  /** Gold over the horizon of gaining one trait; alone and in a team averaged when not known. */
-  const traitGold = (/** @type {string} */ code) => {
-    const t = TRAITS[code];
-    if (!t) return null;
-    const where = { home: null, kind: null, age: trainee.age ?? null };
+  /** A direct trait effect; real team rules are priced separately when a roster is read. */
+  const traitEffectAt = (
+    /** @type {string} */ code,
+    /** @type {number} */ d,
+  ) => {
+    const where = {
+      home: null,
+      kind: null,
+      age: trainee.age ?? null,
+      day: d,
+      incomeTax,
+    };
     const a =
       subject && TEAM_RULES[code]
         ? effectOf({})
@@ -1267,52 +1470,92 @@ export function trainingValues(cards, trainee, ctx) {
         : ctx.alone
           ? a
           : b;
+    return e;
+  };
+  /** Gold of a trait excluding happiness, which is summed across the whole card below. */
+  const traitGold = (/** @type {string} */ code, direction = 1) => {
+    const t = TRAITS[code];
+    if (!t) return null;
     const paid = HOURS_PER_POINT * pp * paidProduction;
-    return sum(
-      (d) =>
-        HOURS_PER_POINT * V * (e.prod * (1 + bonusAt(d)) + P * e.pct + e.flat) -
-        paid * (1 + markup) * e.drift * Math.floor((hired + d) / 7) -
-        paid * expectation * ((t.wage ?? 1) - 1),
-    );
+    return sum((d) => {
+      const e = traitEffectAt(code, d);
+      const pct = HAPPINESS_TRAITS.has(code) ? 0 : direction * e.pct;
+      return (
+        HOURS_PER_POINT *
+          V *
+          (direction * e.prod * (1 + bonusAt(d)) +
+            productionAt(d) * pct +
+            direction * e.flat) -
+        direction *
+          paid *
+          (1 + markup) *
+          e.drift *
+          Math.floor((hired + d) / 7) -
+        direction * paid * expectation * ((t.wage ?? 1) - 1)
+      );
+    });
   };
   const drillGold = (/** @type {string | null | undefined} */ stat, k = 1) => {
     if (stat === "production")
       return sum((d) => HOURS_PER_POINT * k * (V * (1 + bonusAt(d)) - pp * M));
-    if (stat === "responsibility") {
-      if (subject) {
-        if (
-          subject.shield == null ||
-          subject.R == null ||
-          subject.items == null ||
-          subject.items.some((item) => item.delta == null)
-        )
-          return null;
-        const gain = Math.min(1, (subject.R + k) * 0.1) - subject.shield;
-        return sum((d) => {
-          const loss =
-            subject.items?.reduce(
-              (s, item) =>
-                s +
-                (item.delta != null &&
-                item.delta < 0 &&
-                (item.until == null || item.until > now + d * 86400e3)
-                  ? -item.delta
-                  : 0),
-              0,
-            ) ?? 0;
-          return (HOURS_PER_POINT * V * P * loss * gain) / 100;
-        });
-      }
-      // each point shields a tenth of his happiness losses: at REF_TAX
-      // income tax, k points keep k x tax / 10 % of his output
-      const kk = Math.max(0, Math.min(k, 10 - (trainee.responsibility ?? 0)));
-      return sum(
-        (d) =>
-          HOURS_PER_POINT * V * P * (1 + bonusAt(d)) * ((kk * REF_TAX) / 1000),
-      );
-    }
+    if (stat === "responsibility") return 0; // Included in the whole card's happiness.
     if (stat === "luck") return 0; // No recursive Luck value inside the future pool.
     return null;
+  };
+  /** Signed direct happiness, including Responsibility; team rules add their own deltas.
+   * A Wild card passed here has its trait and stat resolved.
+   * @param {TrainingCard} card */
+  const directHappiness = (card) => {
+    const happinessOf = (/** @type {string} */ code) =>
+      HAPPINESS_TRAITS.has(code) ? traitEffectAt(code, 0).pct * 100 : 0;
+    const added =
+      card.kind === "wild"
+        ? card.trait
+          ? [card.trait]
+          : []
+        : card.kind === "habit"
+          ? (card.traitTo ?? [])
+          : [];
+    const removed =
+      card.kind === "cleanSlate"
+        ? traits.filter((code) => TRAITS[code].polarity === "negative")
+        : (card.kind === "habit" || card.kind === "rehab") && card.trait
+          ? [card.trait]
+          : [];
+    const responsibility =
+      (card.kind === "drill" || card.kind === "wild") &&
+      card.stat === "responsibility"
+        ? 3 * (card.delta ?? 0)
+        : 0;
+    return (
+      responsibility +
+      added.reduce((s, code) => s + happinessOf(code), 0) -
+      removed.reduce((s, code) => s + happinessOf(code), 0)
+    );
+  };
+  /** Sum before clamping: multiple traits, replacements and Wild's random stat share headroom.
+   * @param {TrainingCard} card */
+  const directHappinessGold = (card) => {
+    const goldOf = (/** @type {TrainingCard} */ outcome) => {
+      const delta = directHappiness(outcome);
+      return sum(
+        (d) =>
+          HOURS_PER_POINT * V * productionAt(d) * happinessChange(d, delta),
+      );
+    };
+    return card.kind === "wild"
+      ? wildTraits.reduce(
+          (s, trait) =>
+            s +
+            TRAIN_STATS.reduce(
+              (value, stat) =>
+                value + goldOf({ kind: "wild", trait, stat, delta: 1 }),
+              0,
+            ) /
+              (wildTraits.length * TRAIN_STATS.length),
+          0,
+        )
+      : goldOf(card);
   };
   const pct = (/** @type {number} */ x) =>
     `${x >= 0 ? "+" : ""}${Math.round(x * 1000) / 10}%`;
@@ -1342,22 +1585,23 @@ export function trainingValues(cards, trainee, ctx) {
             card.stat === "production"
               ? `+${k} Production, paid too: his wage rises with it (wage chip ${pct(trainee.wageChip)})`
               : card.stat === "responsibility"
-                ? subject
-                  ? `+${k} Responsibility shields actual happiness losses, including their expiry`
-                  : `+${k} Responsibility shields happiness losses (valued at ${REF_TAX}% income tax)`
+                ? `+${k} Responsibility: +${3 * k} happiness and output bonus points, capped at happiness 100; wage unchanged`
                 : card.stat === "luck"
                   ? `+${k} Luck: held at zero inside the future pool`
                   : "the drilled stat was not read",
         };
       case "wild": {
+        if (!wildTraits.length)
+          return { gold: null, note: "no eligible trait for Wild card" };
         const luck = priceLuck ? luckValue(1).gold : 0;
         if (luck == null)
           return {
             gold: null,
             note: "trainings left not read for the random Luck stat",
           };
-        const trait = hiddenTraitPool().reduce(
-          (s, p) => s + p.share * /** @type {number} */ (traitGold(p.code)),
+        const trait = wildTraits.reduce(
+          (s, code) =>
+            s + /** @type {number} */ (traitGold(code)) / wildTraits.length,
           0,
         );
         const stat =
@@ -1369,37 +1613,37 @@ export function trainingValues(cards, trainee, ctx) {
           ) / TRAIN_STATS.length;
         return {
           gold: trait + stat,
-          note: "a random hidden trait (by how often each comes) and +1 to a random stat, on average",
+          note: "a random eligible hidden trait (uniform) and +1 to a random stat, on average",
         };
       }
       case "habit": {
-        const gains = (card.traitTo ?? []).map(traitGold);
+        const gains = (card.traitTo ?? []).map((code) => traitGold(code));
         if (!gains.length || gains.some((g) => g == null))
           return { gold: null, note: "the trait it teaches was not read" };
-        const lost = card.trait ? (traitGold(card.trait) ?? 0) : 0;
+        const removed = card.trait ? (traitGold(card.trait, -1) ?? 0) : 0;
         return {
           gold:
             gains.reduce(
               (/** @type {number} */ s, g) => s + /** @type {number} */ (g),
               0,
-            ) - lost,
+            ) + removed,
           note: `teaches ${(card.traitTo ?? []).map((c) => TRAITS[c].title).join(" and ")}${card.trait ? ` in place of ${TRAITS[card.trait]?.title ?? card.trait}` : ""}`,
         };
       }
       case "rehab": {
-        const g = card.trait ? traitGold(card.trait) : null;
+        const g = card.trait ? traitGold(card.trait, -1) : null;
         return g == null
           ? { gold: null, note: "the trait it removes was not read" }
           : {
-              gold: -g,
+              gold: g,
               note: `removes ${TRAITS[/** @type {string} */ (card.trait)].title}`,
             };
       }
       case "cleanSlate": {
         const bad = traits.filter((c) => TRAITS[c].polarity === "negative");
         return {
-          gold: -bad.reduce(
-            (s, c) => s + /** @type {number} */ (traitGold(c)),
+          gold: bad.reduce(
+            (s, c) => s + /** @type {number} */ (traitGold(c, -1)),
             0,
           ),
           note: `removes ${bad.map((c) => TRAITS[c].title).join(", ") || "no bad trait he shows"}`,
@@ -1409,20 +1653,23 @@ export function trainingValues(cards, trainee, ctx) {
         return { gold: null, note: "this card is not priced" };
     }
   };
-  /** @param {import("./team.mjs").TeamResult} team */
-  const correctionFor = (team) =>
+  /** @param {import("./team.mjs").TeamResult} team @param {TrainingCard} card */
+  const correctionFor = (team, card) =>
     sum(
       (d) =>
         HOURS_PER_POINT *
         V *
-        (team.self.prod * (1 + bonusAt(d)) +
-          (P + team.self.prod) * (team.self.pctDays[d] ?? team.self.pct ?? 0)),
+        (team.self.prod *
+          (1 + bonusAt(d) + happinessChange(d, directHappiness(card))) +
+          (productionAt(d) + team.self.prod) *
+            (team.self.pctDays[d] ?? team.self.pct ?? 0)),
     );
   const teamCache = new Map();
   /** @param {TrainingCard} card @param {boolean} [priceLuck]
    * @returns {{ gold: number | null, note: string, hands?: number | null } & Partial<import("./team.mjs").TeamResult>} */
   const priceCard = (card, priceLuck = false) => {
     const value = basePriceCard(card, priceLuck);
+    if (value.gold != null) value.gold += directHappinessGold(card);
     if (!subject || !ctx.roster || !subject.id) return value;
     if (value.gold == null) return { ...value, ...averageTeamEffects([]) };
     const key = JSON.stringify(card);
@@ -1434,26 +1681,38 @@ export function trainingValues(cards, trainee, ctx) {
         teamEffect(
           /** @type {import("./team.mjs").Member[]} */ (ctx.roster),
           { kind: "card", id: /** @type {string} */ (subject.id), card: c },
-          { now, pointValue: pp, valuePerPoint: V, subjectHorizon: H },
+          {
+            now,
+            pointValue: pp,
+            valuePerPoint: V,
+            subjectHorizon: H,
+            directHappiness: directHappiness(c),
+          },
         );
       if (card.kind === "wild") {
-        const cases = hiddenTraitPool().flatMap((t) =>
-          TRAIN_STATS.map((stat) => ({
-            result: effect({
+        const cases = wildTraits.flatMap((code) =>
+          TRAIN_STATS.map((stat) => {
+            const outcome = {
               kind: "wild",
-              trait: t.code,
+              trait: code,
               stat: /** @type {"production" | "responsibility" | "luck"} */ (
                 stat
               ),
               delta: 1,
-            }),
-            prob: t.share / TRAIN_STATS.length,
-          })),
+            };
+            return {
+              result: effect(
+                /** @type {import("./team.mjs").TeamCard} */ (outcome),
+              ),
+              card: outcome,
+              prob: 1 / (wildTraits.length * TRAIN_STATS.length),
+            };
+          }),
         );
         team = averageTeamEffects(cases);
         // Production and bonus multiply within each outcome, before averaging.
         correction = cases.reduce(
-          (s, c) => s + c.prob * correctionFor(c.result),
+          (s, c) => s + c.prob * correctionFor(c.result, c.card),
           0,
         );
       } else if (card.kind === "cleanSlate") {
@@ -1475,7 +1734,7 @@ export function trainingValues(cards, trainee, ctx) {
           }),
         );
       } else team = averageTeamEffects([]);
-      cached = { team, correction: correction ?? correctionFor(team) };
+      cached = { team, correction: correction ?? correctionFor(team, card) };
       teamCache.set(key, cached);
       if (team.self.pct == null)
         team.assumed.push(
@@ -1512,9 +1771,12 @@ export function trainingValues(cards, trainee, ctx) {
     };
   };
   const luck = trainee.luck ?? 0;
-  const leadership = trainee.leadership ?? 0;
-  const odds = trainingOdds(luck, leadership);
-  const pool = trainingPool(trainee);
+  const management = trainee.management ?? trainee.leadership ?? 0;
+  const odds = trainingOdds(luck, management);
+  const pool = trainingPool({
+    ...trainee,
+    gender: subject?.gender ?? trainee.gender,
+  });
   const otherPool = pool
     .filter((c) => c.kind !== "secondWind")
     .map((c) => ({ ...c, ...priceCard(c) }));
@@ -1535,7 +1797,7 @@ export function trainingValues(cards, trainee, ctx) {
   const assumption =
     "model: a hand draws one rarity, then three different cards of it";
   const luckValue = (/** @type {number} */ k) => {
-    const improvedOdds = trainingOdds(luck + k, leadership);
+    const improvedOdds = trainingOdds(luck + k, management);
     const gain = bestOfHand(pricedPool, improvedOdds) - baseline;
     const changes = Object.keys(LUCK_TRAIN_SHIFT)
       .map(

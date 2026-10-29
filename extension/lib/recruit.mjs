@@ -1,7 +1,7 @@
-// The live v0.27 Recruit dialog: read the visible cards and display hiring's
+// The live v0.27.3 Recruit dialog: read the visible rows and display hiring's
 // wage inference. No game actions and no input writes; one capturing click
 // listener notes which company's Recruit button was pressed (its product,
-// production bonus and country), never preventing or making a click.
+// income tax and country), never preventing or making a click.
 import {
   traitCode,
   rankCandidates,
@@ -22,77 +22,118 @@ export const COMPANY_MEMORY_MS = 15 * 60_000;
 export const BEST_ATTR = "data-ss-best";
 
 const native = (node) => !node.closest("[data-lens]");
-const hireButtons = (root) =>
-  [...root.querySelectorAll("button")].filter(
-    (b) => native(b) && /^\s*hire(?![a-z])/i.test(b.textContent ?? ""),
-  );
+const statChip = (c) =>
+  c.getAttribute("aria-haspopup") === "dialog" &&
+  c.querySelector("svg") &&
+  !c.querySelector('[role="img"]') &&
+  /^(?:\?|\d{1,2})$/.test(c.textContent?.trim() ?? "");
+/** A candidate's row of chips (v0.27.3, 2026-10-29): Production, Responsibility, Luck, then his wage chip. */
 const statGroup = (root) =>
   [...root.querySelectorAll("div")].find(
     (e) =>
-      e.children.length === 3 &&
-      [...e.children].every(
-        (c) =>
-          c.getAttribute("aria-haspopup") === "dialog" &&
-          c.querySelector("svg") &&
-          !c.querySelector('[role="img"]') &&
-          /^(?:\?|[1-4])$/.test(c.textContent?.trim() ?? ""),
+      e.children.length === 4 &&
+      [...e.children].slice(0, 3).every(statChip) &&
+      /^(?:[+−-]?\d+(?:\.\d+)?%|Market rate)$/i.test(
+        e.children[3].textContent?.trim() ?? "",
       ),
   );
+/** The innermost "… / day": a span around the name, age and wage ends with it too. */
 const wageLine = (root) =>
   [...root.querySelectorAll("span")].find(
-    (e) => native(e) && /\/\s*day\s*$/i.test(e.textContent ?? ""),
+    (e) =>
+      native(e) &&
+      /\/\s*day\s*$/i.test(e.textContent ?? "") &&
+      ![...e.querySelectorAll("span")].some((s) =>
+        /\/\s*day\s*$/i.test(s.textContent ?? ""),
+      ),
   );
+/** The candidates: the rows of the dialog's list, with no Hire button of their own (one "Pick a candidate" below). */
+const candidateRows = (dialog) => {
+  const lists = new Set(
+    [...dialog.querySelectorAll("li")]
+      .filter((li) => native(li) && statGroup(li) && wageLine(li))
+      .map((li) => li.parentElement),
+  );
+  return [...lists].flatMap((list) =>
+    [...list.children].filter((li) => li.tagName === "LI" && native(li)),
+  );
+};
+/** A wage chip as a share ("+14.9%" is 0.149, "Market rate" 0); null without one. @param {Element | undefined} chip */
+const shownChip = (chip) => {
+  const t = chip?.textContent?.trim().replace("−", "-") ?? "";
+  if (/^market rate$/i.test(t)) return 0;
+  const m = /^([+-]?\d+(?:\.\d+)?)%$/.exec(t);
+  return m ? Number(m[1]) / 100 : null;
+};
+/** An element's own text, its children's left out: the name is bare text beside the flag. */
+const ownText = (el) =>
+  [...(el?.childNodes ?? [])]
+    .filter((n) => n.nodeType === 3)
+    .map((n) => n.textContent?.trim() ?? "")
+    .filter(Boolean)
+    .join(" ");
+
+/** Read the flag filename even when its country name is absent or translated. */
+const flagOf = (root) => {
+  const flag = root?.querySelector('img[src*="/flags/"], img[alt$=" flag" i]');
+  const code =
+    /\/flags\/([a-z]{2})\.svg(?:[?#]|$)/i
+      .exec(flag?.getAttribute("src") ?? "")?.[1]
+      ?.toLowerCase() ?? null;
+  const name =
+    /^(.+?)\s+flag$/i.exec(flag?.getAttribute("alt")?.trim() ?? "")?.[1] ??
+    null;
+  return { code, name };
+};
+
+const countryName = (name) =>
+  String(name ?? "")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .trim()
+    .toLowerCase();
+
+/** Map a visible flag to the same country id the employee API uses, code first. */
+export function countryId(code, name, countries) {
+  return (
+    (code
+      ? countries?.find((country) => country.code === code.toLowerCase())?.id
+      : null) ??
+    (name
+      ? countries?.find(
+          (country) => countryName(country.name) === countryName(name),
+        )?.id
+      : null) ??
+    null
+  );
+}
 
 /**
- * Read a Recruit dialog by its Hire cards, each with a wage a day and exactly
- * three ordered stat chips (Production, Responsibility, Luck). A missing
- * trait badge means no trait; hidden stats remain null, never zero. Return
- * null if any candidate's structure is unreadable, so we never rank a subset.
+ * Read the Recruit dialog (v0.27.3) by its candidate rows, each with a wage a
+ * day and a row of chips: Production, Responsibility, Luck and his wage chip.
+ * A missing trait badge means no trait; hidden stats remain null, never zero.
+ * Return null if any row is unreadable, so we never rank a subset.
  */
 export function readRecruitDialog(root = document) {
   for (const dialog of root.querySelectorAll('[role="dialog"]')) {
-    const buttons = hireButtons(dialog);
-    if (!buttons.length) continue;
+    const rows = candidateRows(dialog);
+    if (!rows.length) continue;
     const candidates = [];
-    for (const button of buttons) {
-      let card = button.parentElement;
-      let stats = null;
-      let wage = null;
-      for (
-        let i = 0;
-        card && card !== dialog && i < 12;
-        i++, card = card.parentElement
-      ) {
-        stats = statGroup(card);
-        wage = wageLine(card);
-        if (stats && wage) break;
-      }
-      if (
-        !card ||
-        card === dialog ||
-        !stats ||
-        !wage ||
-        hireButtons(card).length !== 1
-      )
-        continue;
+    for (const card of rows) {
+      const stats = statGroup(card);
+      const wage = wageLine(card);
+      if (!stats || !wage) continue;
       const header = wage.parentElement?.firstElementChild;
       const spans = [...(header?.querySelectorAll("span") ?? [])];
-      const name =
-        spans
-          .find(
-            (e) =>
-              !e.children.length && !/^\d+$/.test(e.textContent?.trim() ?? ""),
-          )
-          ?.textContent?.trim() ?? "Candidate";
-      const ageText = spans.find(
+      const name = ownText(header) || "Candidate";
+      const ageSpan = spans.find(
         (e) =>
           e.querySelector("svg") &&
           /^\d{1,3}$/.test(e.textContent?.trim() ?? ""),
-      )?.textContent;
-      const age = ageText == null ? null : Number(ageText.trim());
-      const flag = /^(.+) flag$/.exec(
-        header?.querySelector('img[alt$=" flag"]')?.getAttribute("alt") ?? "",
       );
+      const ageText = ageSpan?.textContent;
+      const age = ageText == null ? null : Number(ageText.trim());
+      const flag = flagOf(header);
       const traits = [];
       let hiddenTraits = 0;
       let unknownTraits = 0;
@@ -113,7 +154,27 @@ export function readRecruitDialog(root = document) {
         ? Number(stats.children[0].textContent.trim())
         : null;
       const responsibilityText = stats.children[1].textContent?.trim() ?? "";
+      const responsibility = /^\d+$/.test(responsibilityText)
+        ? Number(responsibilityText)
+        : null;
+      const wageDay = parsePrice(
+        wage.textContent.replace(/\s*\/\s*day\s*$/i, "").trim(),
+      );
+      if (
+        !Number.isFinite(wageDay) ||
+        (production == null && stats.children[0].textContent?.trim() !== "?") ||
+        (responsibility == null && responsibilityText !== "?")
+      )
+        continue;
+      // Live v0.27.3 uses unlabelled mdiGenderMale / mdiGenderFemale age icons.
+      const genderPath =
+        ageSpan?.querySelector("svg path")?.getAttribute("d") ?? "";
       const gender =
+        (genderPath.startsWith("M9,9C10.29,9")
+          ? "male"
+          : genderPath.startsWith("M12,4A6,6 0 0,1 18,10C18,12.97")
+            ? "female"
+            : null) ??
         [
           ...(header?.querySelectorAll(
             "[aria-label], [title], [data-gender], svg",
@@ -136,29 +197,28 @@ export function readRecruitDialog(root = document) {
                 ? "male"
                 : null,
           )
-          .find(Boolean) ?? null;
+          .find(Boolean) ??
+        null;
       candidates.push({
         card,
-        button,
         statsGroup: stats,
         name,
-        wageDay: parsePrice(
-          wage.textContent.replace(/\s*\/\s*day\s*$/i, "").trim(),
-        ),
+        wageDay,
         production,
-        responsibility: /^\d+$/.test(responsibilityText)
-          ? Number(responsibilityText)
-          : null,
+        responsibility,
         gender,
         traits,
         hiddenTraits,
         unknownTraits,
         potential: potential ? Number(potential[1]) : null,
         age,
-        nationality: flag ? flag[1] : null,
+        nationality: flag.name,
+        countryCode: flag.code,
+        // v0.27.3 prints his wage chip after the stats: his whole wage against the market rate, as a share
+        wageChipShown: shownChip(stats.children[3]),
       });
     }
-    if (candidates.length !== buttons.length) continue;
+    if (candidates.length !== rows.length) continue;
     const rosterNode = [...dialog.querySelectorAll("span")].find(
       (e) =>
         native(e) &&
@@ -184,7 +244,7 @@ export function readRecruitDialog(root = document) {
 /**
  * The company a Recruit button belongs to, from its card on the Companies
  * page: the product (the card's image is named by its item code), the
- * production bonus (the first "N%" chip) and the country of its region (the
+ * income tax (the first "N%" chip) and the country of its region (the
  * card's flag). null when the button sits in no company card.
  * @param {Element | null} button
  */
@@ -201,7 +261,7 @@ export function companyFromButton(button) {
       .map((e) => e.getAttribute("alt") ?? "")
       .find((alt) => RECIPES[alt]);
     if (!product) continue;
-    // the bonus chip: the first "N%" ahead of the button (its digits may sit
+    // the income-tax chip (kept as `bonus` in the card reading): the first "N%" ahead of the button (its digits may sit
     // in their own span: "<span><span>4</span>%</span>")
     let bonus = null;
     for (const el of card.querySelectorAll("span, div")) {
@@ -214,9 +274,7 @@ export function companyFromButton(button) {
         break;
       }
     }
-    const flag = /^(.+) flag$/.exec(
-      card.querySelector('img[alt$=" flag"]')?.getAttribute("alt") ?? "",
-    );
+    const flag = flagOf(card);
     const companyId =
       [...card.querySelectorAll("a[href]")]
         .map(
@@ -231,7 +289,13 @@ export function companyFromButton(button) {
         button.ownerDocument.defaultView?.location.pathname ?? "",
       )?.[1] ??
       null;
-    return { product, bonus, country: flag ? flag[1] : null, companyId };
+    return {
+      product,
+      bonus,
+      country: flag.name,
+      countryCode: flag.code,
+      companyId,
+    };
   }
   return null;
 }
@@ -245,8 +309,10 @@ const gold = (n, digits = 2) =>
   `<span class="${n >= 0 ? "lens-pos" : "lens-neg"}">${signed(n, digits)}</span>`;
 
 /**
- * One candidate's advice on one line ("★ P2 · −2% · +6.3 g"), the rest in
- * the "?" tooltip: no controls or handlers.
+ * One candidate's advice on one line ("★ +6.3 g · team +0.5 g"), the rest in
+ * the "?" tooltip: no controls or handlers. His card already shows his stats
+ * and wage chip, so the line repeats neither; a Production it does not show
+ * is read from his wage and leads the line.
  */
 export function candidateHtml(candidate, value, best, teamLines = []) {
   if (!value) return '<span class="lens-muted">reading…</span>';
@@ -258,17 +324,24 @@ export function candidateHtml(candidate, value, best, teamLines = []) {
   const certain =
     value.likeliest != null && value.shares[value.likeliest] >= 0.95;
   const short =
-    candidate.production != null || certain
-      ? `P${candidate.production ?? value.likeliest}`
-      : `P${shares[0]}-${shares.at(-1)}`;
+    candidate.production != null
+      ? ""
+      : certain
+        ? `P${value.likeliest}`
+        : `P${shares[0]}-${shares.at(-1)}`;
   const production =
     candidate.production != null
-      ? `Production ${candidate.production} (shown on his card)`
+      ? ""
       : certain
         ? `Production ${value.likeliest}, read from his wage`
         : `Production ${shares[0]}-${shares.at(-1)} from his wage (${shares.map((p) => `${p}: ${Math.round(value.shares[p] * 100)}%`).join(", ")})`;
   const lo = wageChip(value.expectation.min);
   const hi = wageChip(value.expectation.max);
+  // the card's own chip when it prints one: his whole wage, a hidden Greedy's or Modest's part in it
+  const shown =
+    candidate.wageChipShown != null
+      ? wageChip(1 + candidate.wageChipShown)
+      : null;
   const days =
     value.daysLeft == null
       ? `${value.horizon}-day estimate`
@@ -279,7 +352,11 @@ export function candidateHtml(candidate, value, best, teamLines = []) {
   const unread = (candidate.hiddenTraits ?? 0) + (candidate.unknownTraits ?? 0);
   const details = [
     production,
-    `Wage chip once hired: ${lo === hi ? lo : `${lo} to ${hi}`}`,
+    shown != null
+      ? lo === hi
+        ? ""
+        : `His chip without a hidden Greedy's or Modest's part: ${lo} to ${hi}`
+      : `Wage chip once hired: ${lo === hi ? lo : `${lo} to ${hi}`}`,
     `Gold a day: ${signed(value.perDayNow, 2)} now, ${signed(value.perDaySettled, 2)} after 20 days on the product`,
     `${days}: ≈ ${signed(value.total, 1)} g in all`,
     unread ? "His ? trait is priced as an average hire's trait" : "",
@@ -288,29 +365,39 @@ export function candidateHtml(candidate, value, best, teamLines = []) {
       : "",
     flighty ? "Flight Risk: may quit from 50 happiness" : "",
     value.total < 0 ? "Loses gold over his working life" : "",
+    ...(value.assumed ?? []),
     ...teamLines,
-  ].filter(Boolean);
+  ]
+    .filter(Boolean)
+    .map((line) =>
+      candidate.nationalityMissing
+        ? line.replace(
+            "unknown nationality; rule skipped",
+            `unknown nationality (${candidate.nationalityMissing}); rule skipped`,
+          )
+        : line,
+    );
   const warn = value.drifted || flighty ? ' <b class="lens-neg">!</b>' : "";
   const team =
     Math.abs(value.team ?? 0) >= 0.05 ? ` · team ${gold(value.team, 1)} g` : "";
-  return `<span class="ss-recruit-line">${best ? '<b class="lens-pos">★</b> ' : ""}<b>${esc(short)}</b> · ${esc(lo === hi ? lo : `${lo}…${hi}`)} · ${gold(value.total, 1)} g${team}${warn}</span>${helpMark(details.join("\n"))}`;
+  return `<span class="ss-recruit-line">${best ? '<b class="lens-pos">★</b> ' : ""}${short ? `<b>${esc(short)}</b> · ` : ""}${gold(value.total, 1)} g${team}${warn}</span>${helpMark(details.join("\n"))}`;
 }
 
 /**
  * What the advisor knows of the company whose Recruit window is open: its
- * kind of product, the gold a point of it fetches at the bids, its bonus.
+ * kind of product, the gold a point of it fetches at the bids, its income tax.
  * @param {ReturnType<typeof companyFromButton> & { at: number } | null} company
  * @param {Record<string, { bid?: number | null }> | null | undefined} books
  * @param {boolean} booksFresh
  */
 export function companyContext(company, books, booksFresh) {
-  if (!company) return { kind: null, valuePerPoint: null, bonus: 0 };
+  if (!company) return { kind: null, valuePerPoint: null, incomeTax: null };
   const bidOf = (code) => books?.[code]?.bid ?? null;
   return {
     kind: productKind(company.product),
     valuePerPoint:
       booksFresh && books ? valuePerPoint(company.product, bidOf) : null,
-    bonus: company.bonus ?? 0,
+    incomeTax: company.bonus,
   };
 }
 
@@ -347,6 +434,7 @@ export function createRecruit({ clock = () => Date.now() } = {}) {
   };
   function render({
     pointValue = null,
+    countries = null,
     error = null,
     books = null,
     booksAt = null,
@@ -384,27 +472,56 @@ export function createRecruit({ clock = () => Date.now() } = {}) {
     const roster = !teamMissing
       ? rosterOf(employees.rows, here.companyId, Date.parse(employees.at))
       : null;
+    // Management is player-wide; a roster from another company is valid.
+    const management = !unreadTeam({
+      employees,
+      error: employeesError,
+      hasKey,
+      pageUserId,
+      now,
+    })
+      ? (employees.rows
+          .flatMap((employee) => employee.productionBonus?.contributions ?? [])
+          .find((part) => part.source === "management")?.percent ?? null)
+      : null;
+    const companyCountryId = countryId(
+      here?.countryCode,
+      here?.country,
+      countries?.rows,
+    );
+    const candidates = read.candidates.map((c) => {
+      const nationality = countryId(
+        c.countryCode,
+        c.nationality,
+        countries?.rows,
+      );
+      return {
+        ...c,
+        nationality,
+        nationalityMissing: nationality
+          ? null
+          : countries
+            ? "flag not recognised"
+            : "country list not read yet",
+        home:
+          nationality && companyCountryId
+            ? nationality === companyCountryId
+            : here?.country && c.nationality
+              ? c.nationality === here.country
+              : null,
+      };
+    });
     const ranked = usable
-      ? rankCandidates(
-          read.candidates.map((c) => ({
-            ...c,
-            // A flag is a country name; the API uses an id. No mapping exists.
-            nationality: null,
-            home:
-              here?.country && c.nationality
-                ? c.nationality === here.country
-                : null,
-          })),
-          {
-            pointValue: pointValue.value,
-            alone: read.alone,
-            bonus: ctx.bonus,
-            kind: ctx.kind,
-            valuePerPoint: ctx.valuePerPoint,
-            roster,
-            now,
-          },
-        )
+      ? rankCandidates(candidates, {
+          pointValue: pointValue.value,
+          alone: read.alone,
+          incomeTax: ctx.incomeTax,
+          management: management == null ? null : management / 100,
+          kind: ctx.kind,
+          valuePerPoint: ctx.valuePerPoint,
+          roster,
+          now,
+        })
       : null;
     const current = new Set();
     let head = read.root.querySelector(".ss-recruit-head[data-lens]");
@@ -431,9 +548,7 @@ export function createRecruit({ clock = () => Date.now() } = {}) {
     const details = [
       `Point value ${pv?.toFixed(4)} (wages rest on it)`,
       basis,
-      here?.bonus != null
-        ? `Company bonus ${here.bonus >= 0 ? "+" : ""}${Math.round(here.bonus * 100)}%`
-        : "",
+      here?.bonus != null ? `Income tax ${Math.round(here.bonus * 100)}%` : "",
       `${read.alone ? "Works alone" : "Team estimate"} (${rosterLabel})`,
       "Specialization: +1% a day on the same product, up to +20%",
       "A hire costs 10 energy, which your own work turns into 3-6 g",
@@ -463,14 +578,13 @@ export function createRecruit({ clock = () => Date.now() } = {}) {
         card.removeAttribute(BEST_ATTR);
         marked.delete(card);
       }
-    for (const [i, candidate] of read.candidates.entries()) {
+    for (const [i, candidate] of candidates.entries()) {
       let block = candidate.card.querySelector(".ss-recruit-value[data-lens]");
       if (!block) {
         block = document.createElement("div");
         block.className = "ss-recruit-value";
         block.dataset.lens = "";
-        // Insert after the complete stats/traits group, before the native
-        // Hire wrapper. The button and every ancestor keep their identity.
+        // Insert after the complete stats/traits group inside the candidate row.
         candidate.statsGroup.parentElement.insertAdjacentElement(
           "afterend",
           block,

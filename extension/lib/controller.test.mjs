@@ -183,6 +183,49 @@ describe("employees resource", () => {
   });
 });
 
+describe("countries resource", () => {
+  const rows = [{ _id: "6873d0ea1758b40e712b5ee9", code: "ml", name: "Mali" }];
+
+  it.each([{}, { apiKey: "test-only-key" }])(
+    "caches keyless reads for a day with settings %j",
+    async (settings) => {
+      const pending = deferred();
+      const f = vi.fn(() => pending.promise);
+      const { controller, storage, advance } = setup(f, { settings });
+      const first = controller.handle({ type: "countries" });
+      const second = controller.handle({ type: "countries", force: true });
+      await vi.waitFor(() => expect(f).toHaveBeenCalledOnce());
+      pending.resolve(response(rows, { limit: 100 }));
+      const [a, b] = await Promise.all([first, second]);
+      expect(a).toEqual(b);
+      expect(a.countries.rows).toEqual([
+        { id: rows[0]._id, code: "ml", name: "Mali" },
+      ]);
+      expect(storage.data.countries).toEqual(a.countries);
+      expect(f.mock.calls[0][1].headers).toEqual({});
+      expect(TTL.countries).toBe(86_400_000);
+      advance(86_399_999);
+      expect(await controller.handle({ type: "countries" })).toEqual(a);
+      expect(f).toHaveBeenCalledOnce();
+      advance(1);
+      await controller.handle({ type: "countries" });
+      expect(f).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("can read countries even when the saved key was rejected", async () => {
+    const f = vi.fn(async () => response(rows, { limit: 100 }));
+    const { controller } = setup(f, {
+      settings: { apiKey: "test-only-key", authRevision: 1 },
+      rejectedAuthRevision: 1,
+    });
+    expect(
+      (await controller.handle({ type: "countries" })).error,
+    ).toBeUndefined();
+    expect(f.mock.calls[0][1].headers).toEqual({});
+  });
+});
+
 describe("pointValue resource", () => {
   it("shares in-flight reads, caches keyless values for ten minutes, then refreshes", async () => {
     const pending = deferred();

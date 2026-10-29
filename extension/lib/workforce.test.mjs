@@ -39,6 +39,14 @@ describe("workforce training priority", () => {
     const e = employee("Rene Hermann", { trainingsToday: 0, potentialMax: 5 });
     const trainee = {
       production: e.breakdown.production.total,
+      gender: e.gender,
+      happiness: e.happinessBreakdown.value,
+      incomeTax:
+        -(
+          e.happinessBreakdown.contributions.find(
+            (part) => part.reason === "incomeTax",
+          )?.delta ?? 0
+        ) / 100,
       responsibility: e.breakdown.responsibility.total,
       luck: e.breakdown.luck.total,
       age: e.age,
@@ -114,14 +122,14 @@ describe("workforce placement", () => {
       placementFlags([alyssa, equal], {}, ctx).some((r) => r.code === "rival"),
     ).toBe(true);
   });
-  it("prices a Bully's cost to actual coworkers, including happiness shields", () => {
+  it("prices a Bully's cost to actual coworkers, with full happiness losses", () => {
     const bully = employee("Walter Fritsch");
     const peer = employee("Lionel Leannon", { company: bully.company });
     const flag = placementFlags([bully, peer], {}, ctx).find(
       (r) => r.code === "bully",
     );
-    // a cost: Lionel loses 9 points of bonus (Bully −10, shield 0.1) on his 3 Production
-    expect(flag.goldDay).toBeCloseTo(-6 * 3 * 0.1 * 0.09);
+    // a cost: Lionel loses 10 points of bonus (Bully -10) on his 3 Production
+    expect(flag.goldDay).toBeCloseTo(-6 * 3 * 0.1 * 0.1);
     expect(flag.note).toContain("costs coworkers");
   });
   it("flags product mismatches with +4 P priced at company bids", () => {

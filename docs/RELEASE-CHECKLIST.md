@@ -2,6 +2,15 @@
 
 Go through the newest release's section and the manual gate on the live game, with your own account, before publishing. Then [CHROME-WEB-STORE.md](CHROME-WEB-STORE.md).
 
+## 3.14.0 on the live page (v0.27.3)
+
+Reload the extension itself (its card must read 3.14.0), then the game. The user opens the windows; never press Pick a candidate, Reroll all, Train or a training card.
+
+- **Recruit's line.** Open Recruit from a company's card: each candidate row gets one line, `★ +X g · team ±Y g` (the ★ on the best only), with no `P` and no wage chip, since the card shows both. Its "?" gives gold a day now and after 20 days, the days to 65 and, while his trait is hidden, his chip without a Greedy's or Modest's part. The head's "?" names the income tax (the card's N% chip), not a company bonus.
+- **Management and tax.** With your key, a candidate's "?" carries no "Management bonus not counted" note; without a key it does, and the gold is lower by about the Management share of his output.
+- **Train's Management.** Open an employee's pending hand: the "?" names "Management N" (the window's own label), and a Responsibility drill's reason reads "+3 happiness and output bonus points, capped at happiness 100; wage unchanged".
+- **Rehab.** An employee with a negative trait may be dealt Rehab (always rare); one with only mixed traits never is.
+
 ## 3.13.0 on the live page (v0.27)
 
 Reload the extension itself (its card must read 3.13.0), then the game. Opening My workforce is safe: it only shows the workforce. Never press Train, Hire, Fire or Move for these checks.

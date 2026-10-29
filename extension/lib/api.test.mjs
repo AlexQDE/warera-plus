@@ -8,6 +8,7 @@ import {
   POINT_VALUE_URL,
   fetchSales,
   fetchMyEmployees,
+  fetchCountries,
   fetchHistoryPage,
   fetchInputAverages,
   salesUrl,
@@ -59,6 +60,73 @@ const fake = ({
   };
   return { fetchImpl, calls };
 };
+
+describe("fetchCountries", () => {
+  it("reads the public list keyless and keeps only id, code and name", async () => {
+    const { fetchImpl, calls } = fake({
+      limit: KEYLESS_LIMIT,
+      body: {
+        result: {
+          data: [
+            {
+              _id: "6873d0ea1758b40e712b5ee9",
+              code: "ml",
+              name: "Mali",
+              population: 123,
+              government: { ignored: true },
+            },
+          ],
+        },
+      },
+    });
+    expect(await fetchCountries(fetchImpl)).toEqual([
+      { id: "6873d0ea1758b40e712b5ee9", code: "ml", name: "Mali" },
+    ]);
+    const url = new URL(calls[0].url);
+    expect(url.origin).toBe("https://api2.warera.io");
+    expect(url.pathname).toBe("/trpc/country.getAllCountries");
+    expect(url.searchParams.get("input")).toBe("{}");
+    expect(calls[0].opts.headers).toEqual({});
+    expect(calls[0].opts.credentials).toBe("omit");
+  });
+
+  it.each(
+    [
+      null,
+      {},
+      [{ _id: "invalid", code: "ml", name: "Mali" }],
+      [{ _id: "6873d0ea1758b40e712b5ee9", name: "Mali" }],
+      [{ _id: "6873d0ea1758b40e712b5ee9", code: "ml", name: "" }],
+      [{ _id: ["6873d0ea1758b40e712b5ee9"], code: "ml", name: "Mali" }],
+      [{ _id: "6873d0ea1758b40e712b5ee9", code: ["ml"], name: "Mali" }],
+      [{ _id: "6873d0ea1758b40e712b5ee9", code: "ml", name: ["Mali"] }],
+    ].map((data) => [data]),
+  )("rejects a country list with nothing usable: %j", async (data) => {
+    const { fetchImpl } = fake({ body: { result: { data } } });
+    await expect(fetchCountries(fetchImpl)).rejects.toMatchObject({
+      code: "schema",
+    });
+  });
+
+  it("leaves out a malformed country and keeps the rest", async () => {
+    const { fetchImpl } = fake({
+      body: {
+        result: {
+          data: [
+            { _id: "6873d0ea1758b40e712b5ee9", code: "ml", name: "Mali" },
+            { _id: "6873d0ea1758b40e712b5ee8", code: "XKX", name: "Kosovo" },
+            { _id: ["111111111111111111111111"], code: "co", name: "Colombia" },
+            { _id: "222222222222222222222222", code: ["bw"], name: "Botswana" },
+            { _id: "333333333333333333333333", code: "st", name: ["São Tomé"] },
+          ],
+        },
+      },
+    });
+    expect(await fetchCountries(fetchImpl)).toEqual([
+      { id: "6873d0ea1758b40e712b5ee9", code: "ml", name: "Mali" },
+    ]);
+  });
+});
 
 describe("fetchMyEmployees", () => {
   it("reads the array without input, with the player's key", async () => {

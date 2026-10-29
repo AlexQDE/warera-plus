@@ -27,6 +27,16 @@ const live = (name) => {
   );
 };
 
+it("v0.27.3 reads Your Management 7 through the existing cache field", () => {
+  live("claudia");
+  const label = [...document.querySelectorAll("span, p, div")].find(
+    (e) => e.textContent === "Your Leadership",
+  );
+  label.textContent = "Your Management";
+  label.nextElementSibling.textContent = "7";
+  expect(train.readTrainDialog().trainee.leadership).toBe(7);
+});
+
 it("reads the trainee name and shows a real coworker's change on a taught team trait", () => {
   live("claudia");
   const read = train.readTrainDialog();
@@ -184,6 +194,11 @@ it.each([
 // habits" (client module 3906: traitTo2 ? "Two new habits" : "New habit"), its caption in three text nodes.
 it("reads the live legendary hand: Intensive drill +4, Second wind +4 and Two new habits, one cell above each card", () => {
   live("legendary");
+  // Historical fixture; the replacement trait is taught by v0.27.3.
+  document.body.innerHTML = document.body.innerHTML.replaceAll(
+    "Sprinter",
+    "Early Bloomer",
+  );
   const read = train.readTrainDialog();
   expect(read.trainee).toEqual({
     production: 7,
@@ -207,22 +222,22 @@ it("reads the live legendary hand: Intensive drill +4, Second wind +4 and Two ne
     ["legendary", "Two new habits", "habit", null, null],
   ]);
   expect(read.cards[2]).toMatchObject({
-    traitTo: ["quickStudy", "sprinter"],
+    traitTo: ["quickStudy", "earlyBloomer"],
     trait: null,
   });
   expect(read.boxes).toHaveLength(3);
   const advisor = train.createTrain();
   advisor.render(fresh());
   // 23 days to 65 and 8 trainings already left: four more come on days 9 to 12, each a hand whose best card is what
-  // a hand at her odds averages, weighted by the days left, for 10 energy (4.5 g) each: about 0.5 g in all
+  // a hand at her odds averages, weighted by the days left, for 10 energy (4.5 g) each: about 1.8 g in all
   expect(
     [...document.querySelectorAll(".ss-train-value .ss-train-cell")].map(
       (c) => c.textContent,
     ),
   ).toEqual([
-    "+0.21 g/day4.7 g in 23 d",
-    "+0.46 g+4 trainings",
-    "★ +0.21 g/day4.9 g in 23 d",
+    "+0.51 g/day11.7 g in 23 d",
+    "+1.79 g+4 trainings",
+    "★ +1.74 g/day40.1 g in 23 d",
   ]);
   expect(read.boxes[2].hasAttribute("data-ss-best")).toBe(true);
   // the later hands do not hold this hand's cards: Second wind is worth the same whatever it is dealt with
@@ -253,7 +268,7 @@ it("uses only the matching Employee dialog's daily wage for Claudia's paid Produ
   });
   expect(result.values[1].gold).toBeCloseTo(2.79312, 6);
   expect(result.values[1].perDay).toBeCloseTo(0.12144, 6);
-  expect(result.best).toBe(1);
+  expect(result.best).toBe(2);
   train.createTrain().render(fresh());
   expect(document.querySelector(".lens-help").title).toContain(
     "paid on Production 4, 7 with traits",
@@ -422,15 +437,15 @@ it("marks Negotiation as the pick for an expensive worker, one line above the ca
   // The 1/3 includes this hand, leaving two future trainings, weighted by time.
   expect(cells).toEqual([
     ["★ +0.30 g/day", "7.6 g in 25 d"],
-    ["+0.29 g", "2 trainings"],
-    ["+0.11 g/day", "2.9 g in 25 d"],
+    ["+0.32 g", "2 trainings"],
+    ["+0.19 g/day", "4.7 g in 25 d"],
   ]);
   const tip = line.querySelector(".lens-help").getAttribute("title");
   expect(tip).toContain(
     "★ Negotiation (-10%): +7.59 g, +0.30 g/day - wage chip +13.8% → +3.8%: saves 0.30 g a day",
   );
-  expect(tip).toContain("Intensive drill (+2): +0.29 g - +2 Luck");
-  expect(tip).toContain("Leadership was not read; odds use 0");
+  expect(tip).toContain("Intensive drill (+2): +0.32 g - +2 Luck");
+  expect(tip).toContain("Management was not read; odds use 0");
   expect(tip).toContain("25 days counted");
   // the best card's own box is outlined, and only it
   expect(read.boxes[0].hasAttribute("data-ss-best")).toBe(true);
